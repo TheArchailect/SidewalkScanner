@@ -1,8 +1,9 @@
 /*/target
+/target
 Cargo.lock
 .vscode/
 
-assets/data/
+assets/*
 *.dds
 *.las
 *.laz
