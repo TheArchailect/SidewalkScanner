@@ -1,0 +1,6 @@
+[package]
+name = "point-cloud-pre-processing"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]

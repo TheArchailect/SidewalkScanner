@@ -1,0 +1,2 @@
+[workspace]
+members = ["point-cloud-pre-processing", "point-cloud-render-engine"]
