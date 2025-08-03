@@ -15,8 +15,7 @@ use tools::polygon::{
     PolygonCounter, PolygonTool, polygon_tool_system, update_polygon_preview, update_polygon_render,
 };
 
-const ABSOLUTE_ASSET_PATH: &'static str =
-    "/home/archailect/Git/SidewalkScanner/point-cloud-render-engine/assets/encoded_textures/warsaw";
+const ABSOLUTE_ASSET_PATH: &'static str = "/home/archailect/Git/SidewalkScanner/point-cloud-render-engine/assets/encoded_textures/bologna";
 
 fn main() {
     let bounds_path = format!("{}_bounds.json", ABSOLUTE_ASSET_PATH);
