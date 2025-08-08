@@ -16,8 +16,8 @@ impl HeightmapGenerator {
         road_points: &[(f32, f32, f32)], // (x, z, y) normalized coordinates
         average_elevation: f32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        const HEIGHTMAP_SIZE: usize = 2048;
-        const BLEND_RADIUS: f32 = 8.0;
+        const HEIGHTMAP_SIZE: usize = 1024;
+        const BLEND_RADIUS: f32 = 16.0;
 
         println!(
             "Creating {}x{} road heightmap from {} road points",

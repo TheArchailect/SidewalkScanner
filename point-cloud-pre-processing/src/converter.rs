@@ -84,7 +84,7 @@ impl PointCloudConverter {
 
         let total_points = reader.header().number_of_points() as usize;
 
-        const TEXTURE_SIZE: usize = 8192;
+        const TEXTURE_SIZE: usize = 2048;
         const MAX_POINTS: usize = TEXTURE_SIZE * TEXTURE_SIZE;
 
         println!("File has {} points", total_points);

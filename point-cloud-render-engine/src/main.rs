@@ -15,10 +15,13 @@ use tools::polygon::{
     PolygonCounter, PolygonTool, polygon_tool_system, update_polygon_preview, update_polygon_render,
 };
 
-const ABSOLUTE_ASSET_PATH: &'static str = "/home/archailect/Git/SidewalkScanner/point-cloud-render-engine/assets/encoded_textures/bologna";
+const ABSOLUTE_ASSET_PATH: &'static str =
+    "/home/archailect/Git/SidewalkScanner/point-cloud-render-engine/assets/encoded_textures/warsaw";
+const RELATIVE_ASSET_PATH: &'static str = "encoded_textures/warsaw";
+const TEXTURE_RESOLUTION: &'static str = "1k";
 
 fn main() {
-    let bounds_path = format!("{}_bounds.json", ABSOLUTE_ASSET_PATH);
+    let bounds_path = format!("{}_bounds_{}.json", ABSOLUTE_ASSET_PATH, TEXTURE_RESOLUTION);
 
     let bounds = match engine::point_cloud::load_bounds(&bounds_path) {
         Ok(b) => {
@@ -64,6 +67,10 @@ fn main() {
         .init_resource::<PolygonTool>()
         .init_resource::<GridCreated>()
         .run();
+
+    // wasm_bindgen_futures::spawn_local(async {
+
+    // });
 }
 
 fn setup(
@@ -75,9 +82,18 @@ fn setup(
 ) {
     println!("=== GPU-ACCELERATED POINT CLOUD RENDERER (DDS) ===");
 
-    let position_texture_path = format!("{}_positions.dds", ABSOLUTE_ASSET_PATH);
-    let metadata_texture_path = format!("{}_metadata.dds", ABSOLUTE_ASSET_PATH);
-    let heightmap_texture_path = format!("{}_road_heightmap.dds", ABSOLUTE_ASSET_PATH);
+    let position_texture_path = format!(
+        "{}_positions_{}.dds",
+        ABSOLUTE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+    let metadata_texture_path = format!(
+        "{}_metadata_{}.dds",
+        ABSOLUTE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+    let heightmap_texture_path = format!(
+        "{}_road_heightmap_{}.dds",
+        ABSOLUTE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
 
     println!("Loading DDS textures for fast GPU processing:");
     println!(
