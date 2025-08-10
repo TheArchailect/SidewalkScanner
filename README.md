@@ -1,6 +1,6 @@
 # Point Cloud Render Engine
 
-A high-performance 3D point cloud visualization tool built with Bevy and Rust.
+A high-performance web-based 3D point cloud editor built with Bevy and Rust.
 
 ## Prerequisites
 
