@@ -20,7 +20,6 @@ class DdsHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 if __name__ == "__main__":
-    # Change to dist directory if it exists
     if os.path.exists('dist'):
         os.chdir('dist')
 

@@ -1,4 +1,3 @@
 [workspace]
-members = ["point-cloud-render-engine"]
-exclude = ["point-cloud-pre-processing"]
+members = ["point-cloud-render-engine", "point-cloud-pre-processing"]
 resolver = "2"
