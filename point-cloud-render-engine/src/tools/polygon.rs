@@ -1,8 +1,11 @@
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
+use bevy::render::primitives;
 use bevy::window::PrimaryWindow;
 
-use crate::engine::camera::MapsCamera;
+use crate::engine::camera::ViewportCamera;
+use crate::engine::grid::GroundGrid;
 use crate::engine::point_cloud::PointCloudAssets;
 
 #[derive(Component)]
@@ -56,10 +59,10 @@ pub fn polygon_tool_system(
     mut commands: Commands,
     mut polygon_tool: ResMut<PolygonTool>,
     mut polygon_counter: ResMut<PolygonCounter>,
-    mouse_button: Res<Input<MouseButton>>,
-    keyboard: Res<Input<KeyCode>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    maps_camera: Res<MapsCamera>,
+    viewport_camera: Res<ViewportCamera>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -67,7 +70,7 @@ pub fn polygon_tool_system(
     images: Res<Assets<Image>>,
 ) {
     // Toggle polygon tool with 'P' key
-    if keyboard.just_pressed(KeyCode::P) {
+    if keyboard.just_pressed(KeyCode::KeyP) {
         polygon_tool.is_active = !polygon_tool.is_active;
         if polygon_tool.is_active {
             println!(
@@ -86,7 +89,7 @@ pub fn polygon_tool_system(
     }
 
     // Clear current polygon with 'C' key
-    if keyboard.just_pressed(KeyCode::C) {
+    if keyboard.just_pressed(KeyCode::KeyC) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;
@@ -94,7 +97,7 @@ pub fn polygon_tool_system(
     }
 
     // Clear all polygons with 'X' key
-    if keyboard.just_pressed(KeyCode::X) {
+    if keyboard.just_pressed(KeyCode::KeyX) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;
@@ -104,10 +107,10 @@ pub fn polygon_tool_system(
     // Update preview point only if not completed
     if !polygon_tool.is_completed {
         if let (Ok((camera_global_transform, camera)), Ok(window)) =
-            (camera_query.get_single(), windows.get_single())
+            (camera_query.single(), windows.single())
         {
             if let Some(cursor_pos) = window.cursor_position() {
-                polygon_tool.preview_point = maps_camera.mouse_to_ground_plane(
+                polygon_tool.preview_point = viewport_camera.mouse_to_ground_plane(
                     cursor_pos,
                     camera,
                     camera_global_transform,
@@ -148,7 +151,7 @@ pub fn polygon_tool_system(
                 &mut commands,
                 &polygon_tool.current_polygon,
                 polygon_id,
-                maps_camera.ground_height,
+                viewport_camera.ground_height,
                 &mut meshes,
                 &mut materials,
             );
@@ -180,22 +183,14 @@ fn create_completed_polygon(
 
     // Create points for completed polygon
     for (i, point) in points.iter().enumerate() {
-        let color = if i == 0 { Color::ORANGE } else { Color::YELLOW };
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.25,
-                    sectors: 8,
-                    stacks: 4,
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: color,
-                    emissive: color * 0.3,
-                    ..default()
-                }),
-                transform: Transform::from_translation(*point),
+            Mesh3d(meshes.add(Sphere::new(0.25))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::hsv(0., 1., 1.),
+                emissive: LinearRgba::new(1., 1., 1., 1.),
                 ..default()
-            },
+            })),
+            Transform::from_translation(*point),
             CompletedPolygon { id: polygon_id },
         ));
     }
@@ -213,16 +208,13 @@ fn create_completed_polygon(
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
             commands.spawn((
-                PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Box::new(distance, 0.25, 0.25))),
-                    material: materials.add(StandardMaterial {
-                        base_color: Color::ORANGE,
-                        emissive: Color::ORANGE * 0.3,
-                        ..default()
-                    }),
-                    transform: Transform::from_translation(midpoint).with_rotation(rotation),
+                Mesh3d(meshes.add(Cuboid::new(distance, 0.25, 0.25))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::hsv(0., 1., 1.),
+                    emissive: LinearRgba::new(1., 1., 1., 1.),
                     ..default()
-                },
+                })),
+                Transform::from_translation(midpoint).with_rotation(rotation),
                 CompletedPolygon { id: polygon_id },
             ));
         }
@@ -230,17 +222,14 @@ fn create_completed_polygon(
 
     // Create fill for completed polygon
     let polygon_mesh = create_polygon_mesh(points, ground_height);
+
     commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(polygon_mesh),
-            material: materials.add(StandardMaterial {
-                base_color: Color::rgba(1.0, 0.5, 0.0, 0.3),
-                alpha_mode: AlphaMode::Blend,
-                cull_mode: None,
-                ..default()
-            }),
+        Mesh3d(meshes.add(Sphere::new(0.25))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::hsv(0., 1., 1.),
+            emissive: LinearRgba::new(1., 1., 1., 1.),
             ..default()
-        },
+        })),
         CompletedPolygon { id: polygon_id },
     ));
 }
@@ -264,21 +253,13 @@ pub fn update_polygon_preview(
     // Create preview point if we have one
     if let Some(preview_point) = polygon_tool.preview_point {
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.25,
-                    sectors: 8,
-                    stacks: 4,
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::rgba(0.0, 1.0, 0.0, 0.8),
-                    emissive: Color::GREEN * 0.3,
-                    alpha_mode: AlphaMode::Blend,
-                    ..default()
-                }),
-                transform: Transform::from_translation(preview_point),
+            Mesh3d(meshes.add(Sphere::new(0.25))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::hsv(0., 1., 1.),
+                emissive: LinearRgba::new(1., 1., 1., 1.),
                 ..default()
-            },
+            })),
+            Transform::from_translation(preview_point),
             PolygonPreview,
         ));
 
@@ -292,17 +273,13 @@ pub fn update_polygon_preview(
                 let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
                 commands.spawn((
-                    PbrBundle {
-                        mesh: meshes.add(Mesh::from(shape::Box::new(distance, 0.15, 0.15))), // Thinner lines
-                        material: materials.add(StandardMaterial {
-                            base_color: Color::rgba(0.0, 1.0, 0.0, 0.6),
-                            emissive: Color::GREEN * 0.2,
-                            alpha_mode: AlphaMode::Blend,
-                            ..default()
-                        }),
-                        transform: Transform::from_translation(midpoint).with_rotation(rotation),
+                    Mesh3d(meshes.add(Cuboid::new(distance, 0.15, 0.15))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::hsv(0., 1., 1.),
+                        emissive: LinearRgba::new(1., 1., 1., 1.),
                         ..default()
-                    },
+                    })),
+                    Transform::from_translation(midpoint).with_rotation(rotation),
                     PolygonPreview,
                 ));
             }
@@ -315,15 +292,14 @@ pub fn update_polygon_render(
     polygon_tool: Res<PolygonTool>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    maps_camera: Res<MapsCamera>,
-    keyboard: Res<Input<KeyCode>>,
-    existing_points: Query<Entity, (With<PolygonPoints>, Without<PolygonPreview>)>,
-    existing_lines: Query<Entity, (With<PolygonLines>, Without<PolygonPreview>)>,
-    existing_fill: Query<Entity, (With<PolygonFill>, Without<PolygonPreview>)>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    existing_points: Query<Entity, (With<PolygonPoints>, Without<GroundGrid>)>,
+    existing_lines: Query<Entity, (With<PolygonLines>, Without<GroundGrid>)>,
+    existing_fill: Query<Entity, (With<PolygonFill>, Without<GroundGrid>)>,
     completed_polygons: Query<Entity, With<CompletedPolygon>>,
 ) {
     // Clear all polygons if 'X' was pressed
-    if keyboard.just_pressed(KeyCode::X) {
+    if keyboard.just_pressed(KeyCode::KeyX) {
         for entity in completed_polygons.iter() {
             commands.entity(entity).despawn();
         }
@@ -357,25 +333,19 @@ pub fn update_polygon_render(
     // Render current polygon points
     for (i, point) in polygon_tool.current_polygon.iter().enumerate() {
         let color = if i == 0 {
-            Color::LIME_GREEN
+            Color::srgb(1., 0., 0.);
         } else {
-            Color::GREEN
+            Color::srgb(0.5, 0., 0.);
         };
+
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::UVSphere {
-                    radius: 0.25,
-                    sectors: 8,
-                    stacks: 4,
-                })),
-                material: materials.add(StandardMaterial {
-                    base_color: color,
-                    emissive: color * 0.4,
-                    ..default()
-                }),
-                transform: Transform::from_translation(*point),
+            Mesh3d(meshes.add(Sphere::new(0.1))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::hsv(0., 1., 1.),
+                emissive: LinearRgba::new(1., 1., 1., 1.),
                 ..default()
-            },
+            })),
+            Transform::from_translation(*point),
             PolygonPoints,
         ));
     }
@@ -391,18 +361,14 @@ pub fn update_polygon_render(
 
         if distance > 0.1 {
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
-
             commands.spawn((
-                PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Box::new(distance, 0.2, 0.2))),
-                    material: materials.add(StandardMaterial {
-                        base_color: Color::CYAN,
-                        emissive: Color::CYAN * 0.3,
-                        ..default()
-                    }),
-                    transform: Transform::from_translation(midpoint).with_rotation(rotation),
+                Mesh3d(meshes.add(Cuboid::new(distance, 0.2, 0.2))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::hsv(0., 1., 1.),
+                    emissive: LinearRgba::new(1., 1., 1., 1.),
                     ..default()
-                },
+                })),
+                Transform::from_translation(midpoint).with_rotation(rotation),
                 PolygonLines,
             ));
         }
@@ -411,7 +377,10 @@ pub fn update_polygon_render(
 
 fn create_polygon_mesh(points: &[Vec3], ground_height: f32) -> Mesh {
     if points.len() < 3 {
-        return Mesh::new(PrimitiveTopology::TriangleList);
+        return Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD,
+        );
     }
 
     let mut vertices = Vec::new();
@@ -427,9 +396,12 @@ fn create_polygon_mesh(points: &[Vec3], ground_height: f32) -> Mesh {
         indices.extend_from_slice(&[0, i as u32, (i + 1) as u32]);
     }
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD,
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    mesh.set_indices(Some(bevy::render::mesh::Indices::U32(indices)));
+    mesh.insert_indices(bevy::render::mesh::Indices::U32(indices));
 
     // Generate normals pointing up
     let normals: Vec<[f32; 3]> = (0..points.len()).map(|_| [0.0, 1.0, 0.0]).collect();

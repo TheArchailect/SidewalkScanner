@@ -4,11 +4,11 @@ struct PointCloudMaterial {
     params: array<vec4<f32>, 2>,
 }
 
-@group(1) @binding(0) var position_texture: texture_2d<f32>;
-@group(1) @binding(1) var position_sampler: sampler;
-@group(1) @binding(2) var metadata_texture: texture_2d<f32>;
-@group(1) @binding(3) var metadata_sampler: sampler;
-@group(1) @binding(4) var<uniform> material: PointCloudMaterial;
+@group(2) @binding(0) var position_texture: texture_2d<f32>;
+@group(2) @binding(1) var position_sampler: sampler;
+@group(2) @binding(2) var metadata_texture: texture_2d<f32>;
+@group(2) @binding(3) var metadata_sampler: sampler;
+@group(2) @binding(4) var<uniform> material: PointCloudMaterial;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,

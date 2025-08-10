@@ -1,20 +1,17 @@
+use bevy::prelude::*;
 use bevy::{
     asset::LoadState,
-    prelude::*,
-    render::{
-        texture::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
-        view::NoFrustumCulling,
-    },
+    image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
+    render::view::NoFrustumCulling,
 };
-
-use serde_json::Value;
-use std::fs;
+use bevy::{render::mesh::PrimitiveTopology, render::render_asset::RenderAssetUsages};
 
 use super::{
     grid::{GridCreated, create_ground_grid},
-    materials::PointCloudMaterial,
-    mesh::create_point_index_mesh,
+    shaders::PointCloudShader,
 };
+
+const HEIGHT_MAP_SIZE: usize = 1024;
 
 #[derive(Component)]
 pub struct PointCloud;
@@ -28,7 +25,9 @@ pub struct PointCloudAssets {
     pub is_loaded: bool,
 }
 
-#[derive(Resource, Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Resource, Debug, Clone, Serialize, Deserialize, bevy::asset::Asset, TypePath)]
 pub struct PointCloudBounds {
     pub min_x: f64,
     pub max_x: f64,
@@ -39,6 +38,10 @@ pub struct PointCloudBounds {
     pub total_points: usize,
     pub loaded_points: usize,
     pub texture_size: u32,
+    #[serde(default)]
+    pub sampling_ratio: f64,
+    #[serde(default)]
+    pub utilization_percent: f64,
 }
 
 impl PointCloudBounds {
@@ -66,7 +69,7 @@ impl PointCloudBounds {
 pub fn check_textures_loaded(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<PointCloudMaterial>>,
+    mut materials: ResMut<Assets<PointCloudShader>>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut assets: ResMut<PointCloudAssets>,
     asset_server: Res<AssetServer>,
@@ -115,7 +118,7 @@ pub fn check_textures_loaded(
 
         let mesh = create_point_index_mesh(bounds.loaded_points);
 
-        let material = PointCloudMaterial {
+        let material = PointCloudShader {
             position_texture: assets.position_texture.clone(),
             metadata_texture: assets.metadata_texture.clone(),
             params: [
@@ -135,16 +138,26 @@ pub fn check_textures_loaded(
         };
 
         commands.spawn((
-            MaterialMeshBundle {
-                mesh: meshes.add(mesh),
-                material: materials.add(material),
-                transform: Transform::from_translation(Vec3::ZERO),
-                visibility: Visibility::Visible,
-                ..default()
-            },
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(materials.add(material)),
+            Transform::from_translation(Vec3::ZERO),
+            Visibility::Visible,
+            InheritedVisibility::VISIBLE,
+            ViewVisibility::default(),
+            GlobalTransform::default(),
             PointCloud,
             NoFrustumCulling,
         ));
+
+        println!(
+            "Point cloud entity spawned with {} vertices",
+            bounds.loaded_points
+        );
+        println!(
+            "Material bounds: min=({:.2}, {:.2}, {:.2}), max=({:.2}, {:.2}, {:.2})",
+            bounds.min_x, bounds.min_y, bounds.min_z, bounds.max_x, bounds.max_y, bounds.max_z
+        );
+        println!("Texture size: {}", bounds.texture_size);
 
         println!(
             "GPU point cloud created! {} points ready for rendering (DDS format)",
@@ -180,21 +193,14 @@ pub fn check_textures_loaded(
     }
 }
 
-pub fn load_bounds(path: &str) -> Result<PointCloudBounds, Box<dyn std::error::Error>> {
-    let content = fs::read_to_string(path)?;
-    let json: Value = serde_json::from_str(&content)?;
-
-    Ok(PointCloudBounds {
-        min_x: json["min_x"].as_f64().unwrap(),
-        max_x: json["max_x"].as_f64().unwrap(),
-        min_y: json["min_y"].as_f64().unwrap(),
-        max_y: json["max_y"].as_f64().unwrap(),
-        min_z: json["min_z"].as_f64().unwrap(),
-        max_z: json["max_z"].as_f64().unwrap(),
-        total_points: json["total_points"].as_u64().unwrap() as usize,
-        loaded_points: json["loaded_points"].as_u64().unwrap() as usize,
-        texture_size: json["texture_size"].as_u64().unwrap() as u32,
-    })
+pub fn create_point_index_mesh(point_count: usize) -> Mesh {
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::PointList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    let indices: Vec<[f32; 3]> = (0..point_count).map(|i| [i as f32, 0.0, 0.0]).collect();
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, indices);
+    mesh
 }
 
 pub fn sample_heightmap(
@@ -203,21 +209,29 @@ pub fn sample_heightmap(
     norm_z: f32,
     bounds: &PointCloudBounds,
 ) -> f32 {
-    let width = 2048; // Your heightmap size
-    let height = 2048;
+    let pixel_x = ((norm_x * (HEIGHT_MAP_SIZE - 1) as f32) as usize).min(HEIGHT_MAP_SIZE - 1);
+    let pixel_y = ((norm_z * (HEIGHT_MAP_SIZE - 1) as f32) as usize).min(HEIGHT_MAP_SIZE - 1);
 
-    let pixel_x = ((norm_x * (width - 1) as f32) as usize).min(width - 1);
-    let pixel_y = ((norm_z * (height - 1) as f32) as usize).min(height - 1);
+    // Handle the Option<Vec<u8>> for image data
+    let data = heightmap_image
+        .data
+        .as_ref()
+        .expect("Image data not available");
 
     // Sample R32_Float texture data
-    let pixel_index = (pixel_y * width + pixel_x) * 4; // 4 bytes per f32
-    let height_bytes = &heightmap_image.data[pixel_index..pixel_index + 4];
+    let pixel_index = (pixel_y * HEIGHT_MAP_SIZE + pixel_x) * 4; // 4 bytes per f32
+    let height_bytes = &data[pixel_index..pixel_index + 4];
     let normalized_height = f32::from_le_bytes([
         height_bytes[0],
         height_bytes[1],
         height_bytes[2],
         height_bytes[3],
     ]);
+
+    // println!(
+    //     "Sampled Height: {}",
+    //     bounds.min_y as f32 + normalized_height * (bounds.max_y - bounds.min_y) as f32
+    // );
 
     // Denormalize height
     bounds.min_y as f32 + normalized_height * (bounds.max_y - bounds.min_y) as f32

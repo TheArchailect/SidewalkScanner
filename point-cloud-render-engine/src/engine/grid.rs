@@ -1,5 +1,7 @@
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
+use bevy::render::view::NoFrustumCulling;
 
 use super::point_cloud::PointCloudBounds;
 use super::point_cloud::sample_heightmap;
@@ -20,21 +22,14 @@ pub fn create_ground_grid(
     heightmap_image: Option<&Image>,
 ) {
     let grid_material = materials.add(StandardMaterial {
-        base_color: Color::rgba(0.5, 0.5, 0.5, 0.3),
+        base_color: Color::srgba(0.5, 0.5, 0.5, 1.0),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
     });
 
     if let Some(heightmap) = heightmap_image {
-        create_heightfield_grid(
-            commands,
-            bounds,
-            meshes,
-            materials,
-            heightmap,
-            grid_material,
-        );
+        create_heightfield_grid(commands, bounds, meshes, heightmap, grid_material);
     } else {
         eprintln!("Error: Heightmap expected but not provided!");
     }
@@ -44,7 +39,6 @@ fn create_heightfield_grid(
     commands: &mut Commands,
     bounds: &PointCloudBounds,
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
     heightmap_image: &Image,
     grid_material: Handle<StandardMaterial>,
 ) {
@@ -63,27 +57,9 @@ fn create_heightfield_grid(
     let line_count_x = line_count_x.max(10);
     let line_count_z = line_count_z.max(10);
 
-    // Calculate actual cell sizes (will be close to target)
-    let actual_cell_size_x = grid_size_x / line_count_x as f32;
-    let actual_cell_size_z = grid_size_z / line_count_z as f32;
-
     // Segments per line based on cell size for consistent detail
     let segments_per_line = (target_cell_size * 20.0) as usize; // 20 segments per meter
     let segments_per_line = segments_per_line.clamp(50, 1000); // Reasonable bounds
-
-    println!("Grid info:");
-    println!("  Data size: {:.1}m x {:.1}m", grid_size_x, grid_size_z);
-    println!("  Target cell size: {:.1}m", target_cell_size);
-    println!("  Grid resolution: {}x{} lines", line_count_x, line_count_z);
-    println!(
-        "  Actual cell size: {:.2}m x {:.2}m",
-        actual_cell_size_x, actual_cell_size_z
-    );
-    println!("  Segments per line: {}", segments_per_line);
-    println!(
-        "  Total entities: {} lines",
-        (line_count_x + 1) + (line_count_z + 1)
-    );
 
     // Create X-direction lines (running along Z axis, fixed X positions)
     let line_spacing_x = grid_size_x / line_count_x as f32;
@@ -101,12 +77,11 @@ fn create_heightfield_grid(
         );
 
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(line_mesh),
-                material: grid_material.clone(),
-                transform: Transform::IDENTITY,
-                ..default()
-            },
+            Mesh3d(meshes.add(line_mesh)),
+            MeshMaterial3d(grid_material.clone()),
+            Visibility::Visible,
+            NoFrustumCulling,
+            Transform::IDENTITY,
             GroundGrid,
         ));
     }
@@ -127,12 +102,9 @@ fn create_heightfield_grid(
         );
 
         commands.spawn((
-            PbrBundle {
-                mesh: meshes.add(line_mesh),
-                material: grid_material.clone(),
-                transform: Transform::IDENTITY,
-                ..default()
-            },
+            Mesh3d(meshes.add(line_mesh)),
+            MeshMaterial3d(grid_material.clone()),
+            Transform::IDENTITY,
             GroundGrid,
         ));
     }
@@ -182,9 +154,9 @@ fn create_heightfield_line_mesh(
         indices.extend_from_slice(&[i as u32, (i + 1) as u32]);
     }
 
-    let mut mesh = Mesh::new(PrimitiveTopology::LineList);
+    let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::RENDER_WORLD);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    mesh.set_indices(Some(bevy::render::mesh::Indices::U32(indices)));
+    mesh.insert_indices(bevy::render::mesh::Indices::U32(indices));
 
     mesh
 }

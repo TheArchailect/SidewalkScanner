@@ -10,7 +10,7 @@ use super::{
 };
 
 #[derive(Resource)]
-pub struct MapsCamera {
+pub struct ViewportCamera {
     pub focus_point: Vec3,
     pub height: f32,
     pub rotation: Quat,
@@ -22,7 +22,7 @@ pub struct MapsCamera {
     pub pan_start_world_point: Option<Vec3>,
 }
 
-impl MapsCamera {
+impl ViewportCamera {
     pub fn new(center: Vec3, ground_height: f32) -> Self {
         let size = Vec3::new(100.0, 50.0, 100.0);
         Self {
@@ -75,7 +75,9 @@ impl MapsCamera {
         heightmap_image: Option<&Image>,
         bounds: Option<&PointCloudBounds>,
     ) -> Option<Vec3> {
-        let ray = camera.viewport_to_world(camera_transform, cursor_pos)?;
+        let ray = camera
+            .viewport_to_world(camera_transform, cursor_pos)
+            .ok()?;
 
         // If heightmap is available, use it
         if let (Some(heightmap), Some(bounds)) = (heightmap_image, bounds) {
@@ -122,27 +124,25 @@ impl MapsCamera {
         camera_transform: &GlobalTransform,
     ) {
         if let Some(target_world_point) = self.pan_start_world_point {
-            if let Some(current_screen_pos) =
+            // Changed from Option to Result pattern matching
+            if let Ok(current_screen_pos) =
                 camera.world_to_viewport(camera_transform, target_world_point)
             {
                 let screen_delta = mouse_pos - current_screen_pos;
                 let camera_right = camera_transform.right();
                 let camera_up = camera_transform.up();
-
                 let distance_to_ground =
                     (camera_transform.translation().y - self.ground_height).abs();
                 let scale = distance_to_ground * 0.001;
-
                 let world_movement =
                     camera_right * -screen_delta.x * scale + camera_up * screen_delta.y * scale;
-
                 self.focus_point += world_movement;
             }
         }
     }
 }
 
-impl Default for MapsCamera {
+impl Default for ViewportCamera {
     fn default() -> Self {
         Self {
             focus_point: Vec3::ZERO,
@@ -158,20 +158,20 @@ impl Default for MapsCamera {
     }
 }
 
-pub fn maps_camera_controller(
+pub fn camera_controller(
     mut camera_query: Query<(&mut Transform, &GlobalTransform, &Camera), With<Camera3d>>,
-    mut maps_camera: ResMut<MapsCamera>,
-    mouse_button: Res<Input<MouseButton>>,
+    mut maps_camera: ResMut<ViewportCamera>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut scroll_events: EventReader<MouseWheel>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut cursor_moved: EventReader<CursorMoved>,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
 ) {
-    if let Ok((mut camera_transform, global_transform, camera)) = camera_query.get_single_mut() {
+    if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
         // Update cursor position
         for cursor in cursor_moved.read() {
             maps_camera.last_mouse_pos = cursor.position;
@@ -203,16 +203,16 @@ pub fn maps_camera_controller(
 
         // Handle keyboard rotation (works always)
         let mut rotation_input = 0.0;
-        if keyboard.pressed(KeyCode::A) {
+        if keyboard.pressed(KeyCode::KeyA) {
             rotation_input -= 1.0;
         }
-        if keyboard.pressed(KeyCode::D) {
+        if keyboard.pressed(KeyCode::KeyD) {
             rotation_input += 1.0;
         }
 
         // Apply rotation if keys are pressed
         if rotation_input != 0.0 {
-            let rotation_speed = 1.0 * time.delta_seconds();
+            let rotation_speed = 1.0 * time.delta_secs();
             maps_camera.yaw += rotation_input * rotation_speed;
         }
 
@@ -225,7 +225,7 @@ pub fn maps_camera_controller(
                 images.get(&assets.heightmap_texture),
                 assets.bounds.as_ref(),
             ) {
-                let movement_speed = 2.0 * time.delta_seconds();
+                let movement_speed = 2.0 * time.delta_secs();
                 maps_camera.focus_point = maps_camera.focus_point.lerp(pivot_point, movement_speed);
             }
         }
@@ -240,7 +240,7 @@ pub fn maps_camera_controller(
             Transform::from_translation(target_pos).looking_at(maps_camera.focus_point, Vec3::Y);
 
         // Smooth interpolation
-        let lerp_speed = 12.0 * time.delta_seconds();
+        let lerp_speed = 12.0 * time.delta_secs();
         camera_transform.translation = camera_transform
             .translation
             .lerp(target_transform.translation, lerp_speed.min(1.0));
