@@ -88,10 +88,10 @@ impl ViewportCamera {
             while t < max_distance {
                 let test_point = ray.origin + ray.direction * t;
 
-                let norm_x =
-                    (test_point.x - bounds.min_x as f32) / (bounds.max_x - bounds.min_x) as f32;
-                let norm_z =
-                    (test_point.z - bounds.min_z as f32) / (bounds.max_z - bounds.min_z) as f32;
+                let norm_x = (test_point.x - bounds.bounds.min_x as f32)
+                    / (bounds.bounds.max_x - bounds.bounds.min_x) as f32;
+                let norm_z = (test_point.z - bounds.bounds.min_z as f32)
+                    / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
 
                 if norm_x >= 0.0 && norm_x <= 1.0 && norm_z >= 0.0 && norm_z <= 1.0 {
                     let terrain_height = sample_heightmap(heightmap, norm_x, norm_z, bounds);

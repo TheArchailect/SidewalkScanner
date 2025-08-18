@@ -1,12 +1,37 @@
+use crate::PointCloudShader;
+use crate::engine::camera::ViewportCamera;
+use crate::engine::grid::GroundGrid;
+use crate::engine::point_cloud::{PointCloud, PointCloudAssets};
+use crate::engine::render_mode::RenderModeState;
+use crate::engine::shaders::PolygonClassificationUniform;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
-use bevy::render::primitives;
 use bevy::window::PrimaryWindow;
+use serde::{Deserialize, Serialize};
 
-use crate::engine::camera::ViewportCamera;
-use crate::engine::grid::GroundGrid;
-use crate::engine::point_cloud::PointCloudAssets;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassificationPolygon {
+    pub id: u32,
+    pub points: Vec<Vec3>, // XZ plane points (Y ignored for intersection)
+    pub new_class: u32,    // Classification ID to apply to intersecting points
+    pub created_at: std::time::SystemTime, // For future operation ordering
+}
+
+#[derive(Resource)]
+pub struct PolygonClassificationData {
+    pub polygons: Vec<ClassificationPolygon>,
+    pub max_polygons: usize, // Shader uniform array size limit
+}
+
+impl Default for PolygonClassificationData {
+    fn default() -> Self {
+        Self {
+            polygons: Vec::new(),
+            max_polygons: 64, // Conservative GPU uniform limit
+        }
+    }
+}
 
 #[derive(Component)]
 pub struct PolygonPoints;
@@ -31,6 +56,7 @@ pub struct PolygonTool {
     pub current_polygon: Vec<Vec3>,
     pub preview_point: Option<Vec3>,
     pub is_completed: bool,
+    pub current_class: u32,
 }
 
 impl Default for PolygonTool {
@@ -40,6 +66,7 @@ impl Default for PolygonTool {
             current_polygon: Vec::new(),
             preview_point: None,
             is_completed: false,
+            current_class: 1, // TODO
         }
     }
 }
@@ -59,6 +86,7 @@ pub fn polygon_tool_system(
     mut commands: Commands,
     mut polygon_tool: ResMut<PolygonTool>,
     mut polygon_counter: ResMut<PolygonCounter>,
+    mut classification_data: ResMut<PolygonClassificationData>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
@@ -74,13 +102,35 @@ pub fn polygon_tool_system(
         polygon_tool.is_active = !polygon_tool.is_active;
         if polygon_tool.is_active {
             println!(
-                "Polygon tool activated. Left click to add points, Right click to complete, 'C' to clear current, 'X' to clear all."
+                "Polygon classification tool activated. Current class: {}",
+                polygon_tool.current_class
+            );
+            println!(
+                "Left click to add points, Right click to complete, 'C' to clear current, 'X' to clear all."
             );
         } else {
             println!("Polygon tool deactivated.");
             polygon_tool.current_polygon.clear();
             polygon_tool.preview_point = None;
             polygon_tool.is_completed = false;
+        }
+    }
+
+    // Change classification class with number keys
+    for (key, class_id) in [
+        (KeyCode::Digit1, 1),
+        (KeyCode::Digit2, 2),
+        (KeyCode::Digit3, 3),
+        (KeyCode::Digit4, 4),
+        (KeyCode::Digit5, 5),
+        (KeyCode::Digit6, 6),
+        (KeyCode::Digit7, 7),
+        (KeyCode::Digit8, 8),
+        (KeyCode::Digit9, 9),
+    ] {
+        if keyboard.just_pressed(key) {
+            polygon_tool.current_class = class_id;
+            println!("Classification class set to: {}", class_id);
         }
     }
 
@@ -147,6 +197,28 @@ pub fn polygon_tool_system(
             let polygon_id = polygon_counter.next_id;
             polygon_counter.next_id += 1;
 
+            // Create classification polygon
+            let class_polygon = ClassificationPolygon {
+                id: polygon_id,
+                points: polygon_tool.current_polygon.clone(),
+                new_class: polygon_tool.current_class,
+                created_at: std::time::SystemTime::now(),
+            };
+
+            // Add to classification data if within limits
+            if classification_data.polygons.len() < classification_data.max_polygons {
+                classification_data.polygons.push(class_polygon);
+                println!(
+                    "Added classification polygon {} with class {}",
+                    polygon_id, polygon_tool.current_class
+                );
+            } else {
+                println!(
+                    "Warning: Maximum polygon limit reached ({})",
+                    classification_data.max_polygons
+                );
+            }
+
             create_completed_polygon(
                 &mut commands,
                 &polygon_tool.current_polygon,
@@ -169,6 +241,99 @@ pub fn polygon_tool_system(
     }
 }
 
+// pub fn update_polygon_classification_shader(
+//     classification_data: Res<PolygonClassificationData>,
+//     mut materials: ResMut<Assets<PointCloudShader>>,
+//     material_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
+// ) {
+//     if !classification_data.is_changed() {
+//         return;
+//     }
+
+//     let mut uniform = PolygonClassificationUniform::default();
+//     uniform.polygon_count = classification_data.polygons.len().min(64) as u32;
+
+//     for (i, polygon) in classification_data.polygons.iter().take(64).enumerate() {
+//         let point_count = polygon.points.len().min(4);
+//         let mut points_data = [0.0f32; 8];
+
+//         for (j, point) in polygon.points.iter().take(4).enumerate() {
+//             points_data[j * 2] = point.x;
+//             points_data[j * 2 + 1] = point.z;
+//         }
+
+//         if point_count < 4 {
+//             let last_point = polygon.points[point_count - 1];
+//             for j in point_count..4 {
+//                 points_data[j * 2] = last_point.x;
+//                 points_data[j * 2 + 1] = last_point.z;
+//             }
+//         }
+
+//         uniform.polygons[i] = PolygonData {
+//             coords1: Vec4::new(
+//                 points_data[0],
+//                 points_data[1],
+//                 points_data[2],
+//                 points_data[3],
+//             ),
+//             coords2: Vec4::new(
+//                 points_data[4],
+//                 points_data[5],
+//                 points_data[6],
+//                 points_data[7],
+//             ),
+//             metadata: Vec4::new(polygon.new_class as f32, point_count as f32, 0.0, 0.0),
+//         };
+//     }
+
+//     for material_handle in material_query.iter() {
+//         if let Some(material) = materials.get_mut(&material_handle.0) {
+//             material.polygon_data = uniform;
+//         }
+//     }
+// }
+
+pub fn update_polygon_classification_shader(
+    classification_data: Res<PolygonClassificationData>,
+    render_state: Res<RenderModeState>,
+    mut materials: ResMut<Assets<PointCloudShader>>,
+    material_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
+) {
+    if !classification_data.is_changed() {
+        return;
+    }
+
+    let mut uniform = PolygonClassificationUniform::default();
+    uniform.polygon_count = classification_data.polygons.len().min(64) as u32;
+    uniform.render_mode = render_state.current_mode as u32;
+
+    let mut point_offset = 0;
+    for (i, polygon) in classification_data.polygons.iter().take(64).enumerate() {
+        uniform.polygon_info[i] = Vec4::new(
+            point_offset as f32,
+            polygon.points.len() as f32,
+            polygon.new_class as f32,
+            0.0,
+        );
+
+        for point in &polygon.points {
+            if point_offset < 512 {
+                uniform.point_data[point_offset] = Vec4::new(point.x, point.z, 0.0, 0.0);
+                point_offset += 1;
+            }
+        }
+    }
+
+    uniform.total_points = point_offset as u32;
+
+    for material_handle in material_query.iter() {
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            material.polygon_data = uniform;
+        }
+    }
+}
+
 fn create_completed_polygon(
     commands: &mut Commands,
     points: &[Vec3],
@@ -184,7 +349,7 @@ fn create_completed_polygon(
     // Create points for completed polygon
     for (i, point) in points.iter().enumerate() {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.25))),
+            Mesh3d(meshes.add(Sphere::new(0.05))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -208,7 +373,7 @@ fn create_completed_polygon(
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.25, 0.25))),
+                Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -224,7 +389,7 @@ fn create_completed_polygon(
     let polygon_mesh = create_polygon_mesh(points, ground_height);
 
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.25))),
+        Mesh3d(meshes.add(Sphere::new(0.05))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::hsv(0., 1., 1.),
             emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -253,7 +418,7 @@ pub fn update_polygon_preview(
     // Create preview point if we have one
     if let Some(preview_point) = polygon_tool.preview_point {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.25))),
+            Mesh3d(meshes.add(Sphere::new(0.05))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -273,7 +438,7 @@ pub fn update_polygon_preview(
                 let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
                 commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(distance, 0.15, 0.15))),
+                    Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::hsv(0., 1., 1.),
                         emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -339,7 +504,7 @@ pub fn update_polygon_render(
         };
 
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.1))),
+            Mesh3d(meshes.add(Sphere::new(0.05))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -362,7 +527,7 @@ pub fn update_polygon_render(
         if distance > 0.1 {
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.2, 0.2))),
+                Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),

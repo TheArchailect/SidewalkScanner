@@ -1,3 +1,5 @@
+/// Point cloud coordinate bounds tracking and normalisation
+
 #[derive(Debug)]
 pub struct PointCloudBounds {
     pub min_x: f64,
@@ -9,6 +11,7 @@ pub struct PointCloudBounds {
 }
 
 impl PointCloudBounds {
+    /// Create new bounds initialised to infinity values
     pub fn new() -> Self {
         Self {
             min_x: f64::INFINITY,
@@ -20,6 +23,7 @@ impl PointCloudBounds {
         }
     }
 
+    /// Update bounds with a new point
     pub fn update(&mut self, x: f64, y: f64, z: f64) {
         self.min_x = self.min_x.min(x);
         self.max_x = self.max_x.max(x);
@@ -29,14 +33,17 @@ impl PointCloudBounds {
         self.max_z = self.max_z.max(z);
     }
 
+    /// Normalise X coordinate to 0-1 range
     pub fn normalize_x(&self, x: f64) -> f32 {
         ((x - self.min_x) / (self.max_x - self.min_x)) as f32
     }
 
+    /// Normalise Y coordinate to 0-1 range
     pub fn normalize_y(&self, y: f64) -> f32 {
         ((y - self.min_y) / (self.max_y - self.min_y)) as f32
     }
 
+    /// Normalise Z coordinate to 0-1 range
     pub fn normalize_z(&self, z: f64) -> f32 {
         ((z - self.min_z) / (self.max_z - self.min_z)) as f32
     }
