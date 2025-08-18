@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use super::camera::ViewportCamera;
-use super::point_cloud::{PointCloudAssets, PointCloudBounds};
+use super::point_cloud::PointCloudAssets;
 
 #[derive(Component)]
 pub struct MouseIntersectionGizmo;
@@ -32,7 +32,7 @@ pub fn create_direction_gizmo(
 pub fn update_direction_gizmo(
     mut gizmo_query: Query<&mut Transform, (With<DirectionGizmo>, Without<Camera3d>)>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    maps_camera: Res<ViewportCamera>,
+    mut maps_camera: ResMut<ViewportCamera>,
     windows: Query<&Window, With<PrimaryWindow>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
@@ -69,7 +69,7 @@ pub fn update_direction_gizmo(
 pub fn update_mouse_intersection_gizmo(
     mut gizmo_query: Query<(&mut Transform, &mut Visibility), With<MouseIntersectionGizmo>>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    maps_camera: Res<ViewportCamera>,
+    mut maps_camera: ResMut<ViewportCamera>,
     windows: Query<&Window, With<PrimaryWindow>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,

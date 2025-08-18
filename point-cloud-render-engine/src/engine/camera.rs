@@ -5,7 +5,7 @@ use bevy::{
 };
 
 use super::{
-    point_cloud::sample_heightmap,
+    heightmap::sample_heightmap_bilinear,
     point_cloud::{PointCloudAssets, PointCloudBounds},
 };
 
@@ -20,6 +20,9 @@ pub struct ViewportCamera {
     pub pitch: f32,
     pub yaw: f32,
     pub pan_start_world_point: Option<Vec3>,
+    // Add smoothing for intersection
+    pub last_intersection: Option<Vec3>,
+    pub intersection_smooth_factor: f32,
 }
 
 impl ViewportCamera {
@@ -35,6 +38,8 @@ impl ViewportCamera {
             pitch: -0.6,
             yaw: 0.0,
             pan_start_world_point: None,
+            last_intersection: None,
+            intersection_smooth_factor: 0.1, // Adjust for smoothness vs responsiveness
         }
     }
 
@@ -53,22 +58,13 @@ impl ViewportCamera {
             pitch: -0.6,
             yaw: 0.0,
             pan_start_world_point: None,
+            last_intersection: None,
+            intersection_smooth_factor: 0.15,
         }
     }
 
-    pub fn update_rotation(&mut self) {
-        self.pitch = self.pitch.clamp(-1.5, -0.1);
-        self.rotation = Quat::from_rotation_y(self.yaw) * Quat::from_rotation_x(self.pitch);
-    }
-
-    pub fn update_transform(&self) -> Transform {
-        let offset = self.rotation * Vec3::new(0.0, 0.0, self.height);
-        let position = self.focus_point + offset;
-        Transform::from_translation(position).looking_at(self.focus_point, Vec3::Y)
-    }
-
     pub fn mouse_to_ground_plane(
-        &self,
+        &mut self,
         cursor_pos: Vec2,
         camera: &Camera,
         camera_transform: &GlobalTransform,
@@ -79,32 +75,136 @@ impl ViewportCamera {
             .viewport_to_world(camera_transform, cursor_pos)
             .ok()?;
 
-        // If heightmap is available, use it
-        if let (Some(heightmap), Some(bounds)) = (heightmap_image, bounds) {
-            let mut t = 0.0;
-            let step_size = 1.0;
-            let max_distance = 1000.0;
+        let intersection = if let (Some(heightmap), Some(bounds)) = (heightmap_image, bounds) {
+            self.precise_heightmap_intersection(&ray, heightmap, bounds)
+        } else {
+            self.flat_plane_intersection(&ray)
+        };
 
-            while t < max_distance {
-                let test_point = ray.origin + ray.direction * t;
+        // Apply temporal smoothing to reduce jitter
+        match (intersection, self.last_intersection) {
+            (Some(new_pos), Some(last_pos)) => {
+                let smoothed = last_pos.lerp(new_pos, self.intersection_smooth_factor);
+                self.last_intersection = Some(smoothed);
+                Some(smoothed)
+            }
+            (Some(new_pos), None) => {
+                self.last_intersection = Some(new_pos);
+                Some(new_pos)
+            }
+            _ => None,
+        }
+    }
 
-                let norm_x = (test_point.x - bounds.bounds.min_x as f32)
-                    / (bounds.bounds.max_x - bounds.bounds.min_x) as f32;
-                let norm_z = (test_point.z - bounds.bounds.min_z as f32)
-                    / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
+    fn precise_heightmap_intersection(
+        &self,
+        ray: &Ray3d,
+        heightmap_image: &Image,
+        bounds: &PointCloudBounds,
+    ) -> Option<Vec3> {
+        // Adaptive step size based on camera height for better precision
+        let base_step = (self.height * 0.01).clamp(0.1, 2.0);
+        let mut t = 0.0;
+        let max_distance = self.height * 3.0;
+        let mut last_height_diff = f32::INFINITY;
 
-                if norm_x >= 0.0 && norm_x <= 1.0 && norm_z >= 0.0 && norm_z <= 1.0 {
-                    let terrain_height = sample_heightmap(heightmap, norm_x, norm_z, bounds);
+        while t < max_distance {
+            let test_point = ray.origin + ray.direction * t;
 
-                    if test_point.y <= terrain_height {
+            // Check if point is within bounds
+            let norm_x = (test_point.x - bounds.bounds.min_x as f32)
+                / (bounds.bounds.max_x - bounds.bounds.min_x) as f32;
+            let norm_z = (test_point.z - bounds.bounds.min_z as f32)
+                / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
+
+            if norm_x >= 0.0 && norm_x <= 1.0 && norm_z >= 0.0 && norm_z <= 1.0 {
+                let terrain_height =
+                    sample_heightmap_bilinear(heightmap_image, norm_x, norm_z, bounds);
+                let height_diff = test_point.y - terrain_height;
+
+                // Check for intersection (ray crosses terrain)
+                if height_diff <= 0.0 {
+                    // Refine intersection with binary search for sub-pixel accuracy
+                    if last_height_diff != f32::INFINITY && last_height_diff > 0.0 {
+                        let refined_t = self.binary_search_intersection(
+                            ray,
+                            t - base_step,
+                            t,
+                            heightmap_image,
+                            bounds,
+                            5, // iterations
+                        );
+                        let final_point = ray.origin + ray.direction * refined_t;
+                        let final_norm_x = (final_point.x - bounds.bounds.min_x as f32)
+                            / (bounds.bounds.max_x - bounds.bounds.min_x) as f32;
+                        let final_norm_z = (final_point.z - bounds.bounds.min_z as f32)
+                            / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
+                        let final_height = sample_heightmap_bilinear(
+                            heightmap_image,
+                            final_norm_x,
+                            final_norm_z,
+                            bounds,
+                        );
+
+                        return Some(Vec3::new(final_point.x, final_height, final_point.z));
+                    } else {
                         return Some(Vec3::new(test_point.x, terrain_height, test_point.z));
                     }
                 }
-                t += step_size;
+                last_height_diff = height_diff;
+            }
+
+            // Adaptive step size - smaller steps when close to intersection
+            let step_size =
+                if last_height_diff != f32::INFINITY && last_height_diff < base_step * 2.0 {
+                    base_step * 0.1 // Fine steps near intersection
+                } else {
+                    base_step
+                };
+
+            t += step_size;
+        }
+
+        None
+    }
+
+    fn binary_search_intersection(
+        &self,
+        ray: &Ray3d,
+        t_start: f32,
+        t_end: f32,
+        heightmap_image: &Image,
+        bounds: &PointCloudBounds,
+        iterations: usize,
+    ) -> f32 {
+        let mut low = t_start;
+        let mut high = t_end;
+
+        for _ in 0..iterations {
+            let mid = (low + high) * 0.5;
+            let test_point = ray.origin + ray.direction * mid;
+
+            let norm_x = (test_point.x - bounds.bounds.min_x as f32)
+                / (bounds.bounds.max_x - bounds.bounds.min_x) as f32;
+            let norm_z = (test_point.z - bounds.bounds.min_z as f32)
+                / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
+
+            if norm_x >= 0.0 && norm_x <= 1.0 && norm_z >= 0.0 && norm_z <= 1.0 {
+                let terrain_height =
+                    sample_heightmap_bilinear(heightmap_image, norm_x, norm_z, bounds);
+
+                if test_point.y > terrain_height {
+                    low = mid;
+                } else {
+                    high = mid;
+                }
             }
         }
 
-        // Fallback to flat ground plane
+        (low + high) * 0.5
+    }
+
+    fn flat_plane_intersection(&self, ray: &Ray3d) -> Option<Vec3> {
         let plane_y = self.ground_height;
         if ray.direction.y.abs() < 0.001 {
             return None;
@@ -114,30 +214,6 @@ impl ViewportCamera {
             Some(ray.origin + ray.direction * t)
         } else {
             None
-        }
-    }
-
-    pub fn pan_to_keep_world_point_under_mouse(
-        &mut self,
-        mouse_pos: Vec2,
-        camera: &Camera,
-        camera_transform: &GlobalTransform,
-    ) {
-        if let Some(target_world_point) = self.pan_start_world_point {
-            // Changed from Option to Result pattern matching
-            if let Ok(current_screen_pos) =
-                camera.world_to_viewport(camera_transform, target_world_point)
-            {
-                let screen_delta = mouse_pos - current_screen_pos;
-                let camera_right = camera_transform.right();
-                let camera_up = camera_transform.up();
-                let distance_to_ground =
-                    (camera_transform.translation().y - self.ground_height).abs();
-                let scale = distance_to_ground * 0.001;
-                let world_movement =
-                    camera_right * -screen_delta.x * scale + camera_up * screen_delta.y * scale;
-                self.focus_point += world_movement;
-            }
         }
     }
 }
@@ -154,6 +230,8 @@ impl Default for ViewportCamera {
             pitch: -0.6,
             yaw: 0.0,
             pan_start_world_point: None,
+            last_intersection: None,
+            intersection_smooth_factor: 0.15,
         }
     }
 }
@@ -188,7 +266,7 @@ pub fn camera_controller(
         let total_motion: Vec2 = mouse_motion.read().map(|motion| motion.delta).sum();
 
         let is_panning = mouse_button.pressed(MouseButton::Middle);
-        let is_rotating = mouse_button.pressed(MouseButton::Right);
+        let is_following_mouse = keyboard.pressed(KeyCode::Space);
 
         // Handle panning - fixed directions
         if is_panning && total_motion != Vec2::ZERO {
@@ -216,10 +294,11 @@ pub fn camera_controller(
             maps_camera.yaw += rotation_input * rotation_speed;
         }
 
-        // Follow mouse with right click
-        if is_rotating {
+        // Follow mouse with spacebar
+        if is_following_mouse {
+            let last_pos = maps_camera.last_mouse_pos;
             if let Some(pivot_point) = maps_camera.mouse_to_ground_plane(
-                maps_camera.last_mouse_pos,
+                last_pos,
                 camera,
                 global_transform,
                 images.get(&assets.heightmap_texture),

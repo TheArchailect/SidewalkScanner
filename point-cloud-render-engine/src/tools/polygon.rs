@@ -15,7 +15,6 @@ pub struct ClassificationPolygon {
     pub id: u32,
     pub points: Vec<Vec3>, // XZ plane points (Y ignored for intersection)
     pub new_class: u32,    // Classification ID to apply to intersecting points
-    pub created_at: std::time::SystemTime, // For future operation ordering
 }
 
 #[derive(Resource)]
@@ -90,7 +89,7 @@ pub fn polygon_tool_system(
     mouse_button: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    viewport_camera: Res<ViewportCamera>,
+    mut viewport_camera: ResMut<ViewportCamera>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -202,7 +201,6 @@ pub fn polygon_tool_system(
                 id: polygon_id,
                 points: polygon_tool.current_polygon.clone(),
                 new_class: polygon_tool.current_class,
-                created_at: std::time::SystemTime::now(),
             };
 
             // Add to classification data if within limits
@@ -240,59 +238,6 @@ pub fn polygon_tool_system(
         }
     }
 }
-
-// pub fn update_polygon_classification_shader(
-//     classification_data: Res<PolygonClassificationData>,
-//     mut materials: ResMut<Assets<PointCloudShader>>,
-//     material_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
-// ) {
-//     if !classification_data.is_changed() {
-//         return;
-//     }
-
-//     let mut uniform = PolygonClassificationUniform::default();
-//     uniform.polygon_count = classification_data.polygons.len().min(64) as u32;
-
-//     for (i, polygon) in classification_data.polygons.iter().take(64).enumerate() {
-//         let point_count = polygon.points.len().min(4);
-//         let mut points_data = [0.0f32; 8];
-
-//         for (j, point) in polygon.points.iter().take(4).enumerate() {
-//             points_data[j * 2] = point.x;
-//             points_data[j * 2 + 1] = point.z;
-//         }
-
-//         if point_count < 4 {
-//             let last_point = polygon.points[point_count - 1];
-//             for j in point_count..4 {
-//                 points_data[j * 2] = last_point.x;
-//                 points_data[j * 2 + 1] = last_point.z;
-//             }
-//         }
-
-//         uniform.polygons[i] = PolygonData {
-//             coords1: Vec4::new(
-//                 points_data[0],
-//                 points_data[1],
-//                 points_data[2],
-//                 points_data[3],
-//             ),
-//             coords2: Vec4::new(
-//                 points_data[4],
-//                 points_data[5],
-//                 points_data[6],
-//                 points_data[7],
-//             ),
-//             metadata: Vec4::new(polygon.new_class as f32, point_count as f32, 0.0, 0.0),
-//         };
-//     }
-
-//     for material_handle in material_query.iter() {
-//         if let Some(material) = materials.get_mut(&material_handle.0) {
-//             material.polygon_data = uniform;
-//         }
-//     }
-// }
 
 pub fn update_polygon_classification_shader(
     classification_data: Res<PolygonClassificationData>,
@@ -386,7 +331,7 @@ fn create_completed_polygon(
     }
 
     // Create fill for completed polygon
-    let polygon_mesh = create_polygon_mesh(points, ground_height);
+    let _ = create_polygon_mesh(points, ground_height);
 
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(0.05))),
@@ -497,12 +442,6 @@ pub fn update_polygon_render(
 
     // Render current polygon points
     for (i, point) in polygon_tool.current_polygon.iter().enumerate() {
-        let color = if i == 0 {
-            Color::srgb(1., 0., 0.);
-        } else {
-            Color::srgb(0.5, 0., 0.);
-        };
-
         commands.spawn((
             Mesh3d(meshes.add(Sphere::new(0.05))),
             MeshMaterial3d(materials.add(StandardMaterial {

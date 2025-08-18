@@ -46,8 +46,6 @@ pub fn render_mode_system(
 
     if mode_changed {
         render_state.current_mode = new_mode;
-
-        // Update shader uniform
         for material_handle in material_query.iter() {
             if let Some(material) = materials.get_mut(&material_handle.0) {
                 material.polygon_data.render_mode = new_mode as u32;
