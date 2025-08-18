@@ -186,8 +186,7 @@ pub fn polygon_tool_system(
             }
         }
 
-        if mouse_button.just_pressed(MouseButton::Right) && polygon_tool.current_polygon.len() >= 3
-        {
+        if keyboard.just_pressed(KeyCode::ShiftLeft) && polygon_tool.current_polygon.len() >= 3 {
             // Complete the polygon
             polygon_tool.is_completed = true;
             polygon_tool.preview_point = None;

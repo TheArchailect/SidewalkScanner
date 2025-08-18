@@ -68,20 +68,17 @@ python3 serve.py
 ## Controls
 
 - **Mouse Wheel**: Zoom
-- **Middle Mouse**: Pan
-- **Right Mouse**: Follow terrain
-- **A/D**: Rotate
+- **Middle Mouse**: Drag/Pan
+- **Space**: Follow towards mouse ray-cast
+- **A/D**: Orient around focus point
 - **P**: Toggle polygon tool
-- **1-9**: Set classification
+- **1-9**: Set current classification class
 - **Left Click**: Add polygon point
-- **Right Click**: Complete polygon
+- **Left Shift**: Complete polygon
+- **X**: Clear polygon drawing
+- **C**: Cancel current draw operation
 
 ## Technical Specifications
-
-### Coordinate Transform
-
-- Input LAZ coordinates transformed via -90° X rotation
-- Matrix: Z→Y (elevation), -Y→Z (depth), X→X
 
 ### File Support
 
