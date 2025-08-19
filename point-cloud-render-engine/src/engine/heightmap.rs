@@ -45,27 +45,6 @@ pub fn sample_heightmap_bilinear(
     bounds.min_y() as f32 + normalized_height * (bounds.max_y() - bounds.min_y()) as f32
 }
 
-// /// Sample heightmap at normalised coordinates (nearest neighbor)
-// pub fn sample_heightmap(
-//     heightmap_image: &Image,
-//     norm_x: f32,
-//     norm_z: f32,
-//     bounds: &PointCloudBounds,
-// ) -> f32 {
-//     let pixel_x = ((norm_x * (TEXTURE_SIZE - 1) as f32) as usize).min(TEXTURE_SIZE - 1);
-//     let pixel_y = ((norm_z * (TEXTURE_SIZE - 1) as f32) as usize).min(TEXTURE_SIZE - 1);
-
-//     let data = heightmap_image
-//         .data
-//         .as_ref()
-//         .expect("Heightmap image data not available");
-
-//     let normalized_height = sample_height_at_pixel(data, pixel_x, pixel_y);
-
-//     // Denormalise height to world coordinates
-//     bounds.min_y() as f32 + normalized_height * (bounds.max_y() - bounds.min_y()) as f32
-// }
-
 /// Sample height at specific pixel coordinates
 fn sample_height_at_pixel(data: &[u8], x: usize, z: usize) -> f32 {
     let pixel_index = (z * TEXTURE_SIZE + x) * 4; // 4 bytes per f32

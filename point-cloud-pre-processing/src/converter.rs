@@ -237,9 +237,8 @@ impl PointCloudConverter {
         self.save_textures(&position_data, &colour_class_data)?;
 
         // Generate heightmap
-        // let avg_elevation = (stats.total_elevation / stats.loaded_points as f64) as f32;
-        // self.generate_heightmap(&road_points, avg_elevation)?;
-        self.generate_heightmap(&road_points)?;
+        let avg_elevation = (stats.total_elevation / stats.loaded_points as f64) as f32;
+        self.generate_heightmap(&road_points, avg_elevation)?;
 
         // Save metadata
         self.save_metadata(bounds, &stats, total_points, sampling_ratio, has_colour)?;
@@ -285,26 +284,11 @@ impl PointCloudConverter {
         Ok(())
     }
 
-    // /// Generate road surface heightmap
-    // fn generate_heightmap(
-    //     &self,
-    //     road_points: &[(f32, f32, f32)],
-    //     avg_elevation: f32,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     println!(
-    //         "Generating road heightmap from {} road points...",
-    //         road_points.len()
-    //     );
-
-    //     let heightmap_gen = HeightmapGenerator::new(&self.output_stem);
-    //     heightmap_gen.generate_unified(road_points, avg_elevation)?;
-
-    //     Ok(())
-    // }
-
+    /// Generate road surface heightmap
     fn generate_heightmap(
         &self,
         road_points: &[(f32, f32, f32)],
+        avg_elevation: f32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Generating road heightmap from {} road points...",
@@ -312,7 +296,7 @@ impl PointCloudConverter {
         );
 
         let heightmap_gen = HeightmapGenerator::new(&self.output_stem);
-        heightmap_gen.generate_unified(road_points)?;
+        heightmap_gen.generate_unified(road_points, avg_elevation)?;
 
         Ok(())
     }
