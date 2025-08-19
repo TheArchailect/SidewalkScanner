@@ -10,7 +10,7 @@ pub const MAX_POINTS: usize = TEXTURE_SIZE * TEXTURE_SIZE;
 pub const ROAD_CLASSIFICATIONS: &[u8] = &[2, 10, 11, 12];
 
 /// Heightmap blend radius for road surface smoothing (pixels)
-pub const HEIGHTMAP_BLEND_RADIUS: f32 = 16.0;
+pub const HEIGHTMAP_BLEND_RADIUS: f32 = 64.0;
 
 /// Sample size for colour detection
 pub const COLOUR_DETECTION_SAMPLE_SIZE: usize = 100;

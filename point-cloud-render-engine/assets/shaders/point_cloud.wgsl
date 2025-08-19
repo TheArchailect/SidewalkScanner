@@ -28,11 +28,13 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) should_discard: f32,
 }
 
 @vertex
 fn vertex(vertex: VertexInput) -> VertexOutput {
     var out: VertexOutput;
+    out.should_discard = 0.0;
 
     let point_index = u32(vertex.position.x);
 
@@ -92,9 +94,12 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
 
     // Check for polygon classification override
     var modified_classification = original_classification;
+    var should_hide = false;
+
     for (var i = 0u; i < polygon_classification.polygon_count; i = i + 1u) {
         if point_in_polygon(world_pos.x, world_pos.z, i) {
             modified_classification = u32(polygon_classification.polygon_info[i].z);
+            should_hide = true;
             break;
         }
     }
@@ -105,6 +110,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
             out.color = classification_to_color(original_classification);
         }
         case 1u: { // Modified classification
+            out.should_discard = select(0.0, 1.0, should_hide);
             out.color = classification_to_color(modified_classification);
         }
         case 2u: { // RGB colour
@@ -119,12 +125,14 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
             out.color = vec4<f32>(rgb_colour, 1.0);
         }
     }
-
     return out;
 }
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    if in.should_discard > 0.5 {
+        discard;
+    }
     return in.color;
 }
 

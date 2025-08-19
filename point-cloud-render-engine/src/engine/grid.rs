@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::view::NoFrustumCulling;
 
-use super::heightmap::sample_heightmap;
+use super::heightmap::sample_heightmap_bilinear;
 use super::point_cloud::PointCloudBounds;
 
 #[derive(Component)]
@@ -179,9 +179,9 @@ fn create_heightfield_line_mesh(
             / (bounds.bounds.max_z - bounds.bounds.min_z) as f32;
 
         let height = if norm_x >= 0.0 && norm_x <= 1.0 && norm_z >= 0.0 && norm_z <= 1.0 {
-            sample_heightmap(heightmap_image, norm_x, norm_z, bounds) + 0.5 // Slightly above terrain
+            sample_heightmap_bilinear(heightmap_image, norm_x, norm_z, bounds)
         } else {
-            bounds.bounds.min_y as f32 + 0.5 // Default height outside bounds
+            bounds.bounds.min_y as f32
         };
 
         vertices.push([world_x, height, world_z]);

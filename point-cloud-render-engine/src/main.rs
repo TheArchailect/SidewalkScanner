@@ -26,7 +26,7 @@ use engine::render_mode::{RenderModeState, render_mode_system};
 
 use crate::engine::shaders::PointCloudShader;
 
-const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/warsaw";
+const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 #[derive(Resource, Default)]

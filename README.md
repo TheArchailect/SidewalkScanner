@@ -1,4 +1,4 @@
-# Point Cloud Render Engine
+# S-CIT
 
 A high-performance web-based 3D point cloud editor built with Bevy and Rust.
 
