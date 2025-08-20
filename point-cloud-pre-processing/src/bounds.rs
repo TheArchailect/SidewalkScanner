@@ -1,6 +1,6 @@
 /// Point cloud coordinate bounds tracking and normalisation
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PointCloudBounds {
     pub min_x: f64,
     pub max_x: f64,
@@ -31,6 +31,15 @@ impl PointCloudBounds {
         self.max_y = self.max_y.max(y);
         self.min_z = self.min_z.min(z);
         self.max_z = self.max_z.max(z);
+    }
+
+    /// Get world space dimensions - ADD THIS
+    pub fn dimensions(&self) -> (f64, f64, f64) {
+        (
+            self.max_x - self.min_x,
+            self.max_y - self.min_y,
+            self.max_z - self.min_z,
+        )
     }
 
     /// Normalise X coordinate to 0-1 range

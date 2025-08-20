@@ -6,6 +6,7 @@ use crate::constants::{
 };
 use crate::dds_writer::{write_r32f_texture, write_rgba32f_texture};
 use crate::heightmap::HeightmapGenerator;
+use crate::spatial_layout::SpatialTextureGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
 use rayon::prelude::*;
@@ -138,7 +139,122 @@ impl PointCloudConverter {
         Ok(bounds)
     }
 
-    /// Generate all texture outputs
+    // /// Generate all texture outputs
+    // fn generate_textures(
+    //     &self,
+    //     bounds: &PointCloudBounds,
+    //     has_colour: bool,
+    // ) -> Result<(), Box<dyn std::error::Error>> {
+    //     let mut reader = self.create_reader()?;
+    //     let total_points = reader.header().number_of_points() as usize;
+    //     let sampling_ratio = if total_points > MAX_POINTS {
+    //         MAX_POINTS as f64 / total_points as f64
+    //     } else {
+    //         1.0
+    //     };
+
+    //     // Create spatial generator with 512x512 grid
+    //     let mut spatial_gen = SpatialTextureGenerator::new(bounds.clone(), 512);
+
+    //     println!(
+    //         "Sampling ratio: {:.3} ({:.1}% of points)",
+    //         sampling_ratio,
+    //         sampling_ratio * 100.0
+    //     );
+
+    //     // Progress bar for texture generation
+    //     let pb = ProgressBar::new(total_points as u64);
+    //     pb.set_style(
+    //         ProgressStyle::default_bar()
+    //             .template("[{bar:40.green/blue}] {pos}/{len} points ({percent}%) {msg}")
+    //             .unwrap()
+    //             .progress_chars("█▉▊▋▌▍▎▏ "),
+    //     );
+    //     pb.set_message("Generating textures");
+
+    //     // Initialise texture data arrays
+    //     let mut position_data = vec![0.0f32; MAX_POINTS * 4];
+    //     let mut colour_class_data = vec![0.0f32; MAX_POINTS * 4];
+    //     let mut road_points = Vec::new();
+
+    //     let mut stats = ProcessingStats::new();
+    //     let mut expected_loaded = 0.0;
+
+    //     // Process points with uniform sampling
+    //     for (point_idx, point_result) in reader.points().enumerate() {
+    //         expected_loaded += sampling_ratio;
+
+    //         // Update progress every 10k points
+    //         if point_idx % 10_000 == 0 {
+    //             pb.set_position(point_idx as u64);
+    //         }
+
+    //         if stats.loaded_points as f64 >= expected_loaded || stats.loaded_points >= MAX_POINTS {
+    //             continue;
+    //         }
+
+    //         let point = point_result?;
+    //         let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
+
+    //         // Normalise coordinates
+    //         let norm_x = bounds.normalize_x(x);
+    //         let norm_y = bounds.normalize_y(y);
+    //         let norm_z = bounds.normalize_z(z);
+
+    //         let offset = stats.loaded_points * 4;
+
+    //         // Position texture: RGBA32F (X, Y, Z, validity)
+    //         position_data[offset] = norm_x;
+    //         position_data[offset + 1] = norm_y;
+    //         position_data[offset + 2] = norm_z;
+    //         position_data[offset + 3] = 1.0; // Valid point marker
+
+    //         // Colour + Classification texture: RGBA32F (R, G, B, classification)
+    //         if let Some(color) = point.color {
+    //             colour_class_data[offset] = color.red as f32 / 65535.0;
+    //             colour_class_data[offset + 1] = color.green as f32 / 65535.0;
+    //             colour_class_data[offset + 2] = color.blue as f32 / 65535.0;
+    //             stats.colour_points += 1;
+    //         } else {
+    //             // Default white for points without colour
+    //             colour_class_data[offset] = 1.0;
+    //             colour_class_data[offset + 1] = 1.0;
+    //             colour_class_data[offset + 2] = 1.0;
+    //         }
+    //         colour_class_data[offset + 3] = u8::from(point.classification) as f32 / 255.0;
+
+    //         // Track road points for heightmap
+    //         let classification = u8::from(point.classification);
+    //         if ROAD_CLASSIFICATIONS.contains(&classification) {
+    //             road_points.push((norm_x, norm_z, norm_y));
+    //         }
+
+    //         stats.total_elevation += norm_y as f64;
+    //         stats.loaded_points += 1;
+    //     }
+
+    //     // Sort spatially and generate textures
+    //     spatial_gen.sort_spatially();
+    //     let position_data = spatial_gen.generate_position_texture();
+    //     let colour_class_data = spatial_gen.generate_colour_class_texture();
+    //     let spatial_index_data = spatial_gen.generate_spatial_index_texture();
+
+    //     pb.finish_with_message("Textures generated");
+    //     self.print_processing_stats(&stats, total_points, has_colour);
+
+    //     // Save textures
+    //     self.save_textures(&position_data, &colour_class_data, &spatial_index_data)?;
+
+    //     // Generate heightmap
+    //     let avg_elevation = (stats.total_elevation / stats.loaded_points as f64) as f32;
+    //     self.generate_heightmap(&road_points, avg_elevation)?;
+
+    //     // Save metadata
+    //     self.save_metadata(bounds, &stats, total_points, sampling_ratio, has_colour)?;
+
+    //     Ok(())
+    // }
+
     fn generate_textures(
         &self,
         bounds: &PointCloudBounds,
@@ -146,12 +262,17 @@ impl PointCloudConverter {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut reader = self.create_reader()?;
         let total_points = reader.header().number_of_points() as usize;
-
         let sampling_ratio = if total_points > MAX_POINTS {
             MAX_POINTS as f64 / total_points as f64
         } else {
             1.0
         };
+
+        // Create spatial generator with 512x512 grid
+        let mut spatial_gen = SpatialTextureGenerator::new(bounds.clone(), 512);
+        let mut road_points = Vec::new();
+        let mut stats = ProcessingStats::new();
+        let mut expected_loaded = 0.0;
 
         println!(
             "Sampling ratio: {:.3} ({:.1}% of points)",
@@ -159,7 +280,7 @@ impl PointCloudConverter {
             sampling_ratio * 100.0
         );
 
-        // Progress bar for texture generation
+        // Progress bar
         let pb = ProgressBar::new(total_points as u64);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -167,21 +288,12 @@ impl PointCloudConverter {
                 .unwrap()
                 .progress_chars("█▉▊▋▌▍▎▏ "),
         );
-        pb.set_message("Generating textures");
+        pb.set_message("Processing points spatially");
 
-        // Initialise texture data arrays
-        let mut position_data = vec![0.0f32; MAX_POINTS * 4];
-        let mut colour_class_data = vec![0.0f32; MAX_POINTS * 4];
-        let mut road_points = Vec::new();
-
-        let mut stats = ProcessingStats::new();
-        let mut expected_loaded = 0.0;
-
-        // Process points with uniform sampling
+        // Process points with spatial encoding - THIS IS THE KEY CHANGE
         for (point_idx, point_result) in reader.points().enumerate() {
             expected_loaded += sampling_ratio;
 
-            // Update progress every 10k points
             if point_idx % 10_000 == 0 {
                 pb.set_position(point_idx as u64);
             }
@@ -192,55 +304,45 @@ impl PointCloudConverter {
 
             let point = point_result?;
             let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
+            let classification = u8::from(point.classification); // Use u16!
+            let color = point.color.map(|c| (c.red, c.green, c.blue));
 
-            // Normalise coordinates
-            let norm_x = bounds.normalize_x(x);
-            let norm_y = bounds.normalize_y(y);
-            let norm_z = bounds.normalize_z(z);
-
-            let offset = stats.loaded_points * 4;
-
-            // Position texture: RGBA32F (X, Y, Z, validity)
-            position_data[offset] = norm_x;
-            position_data[offset + 1] = norm_y;
-            position_data[offset + 2] = norm_z;
-            position_data[offset + 3] = 1.0; // Valid point marker
-
-            // Colour + Classification texture: RGBA32F (R, G, B, classification)
-            if let Some(color) = point.color {
-                colour_class_data[offset] = color.red as f32 / 65535.0;
-                colour_class_data[offset + 1] = color.green as f32 / 65535.0;
-                colour_class_data[offset + 2] = color.blue as f32 / 65535.0;
-                stats.colour_points += 1;
-            } else {
-                // Default white for points without colour
-                colour_class_data[offset] = 1.0;
-                colour_class_data[offset + 1] = 1.0;
-                colour_class_data[offset + 2] = 1.0;
-            }
-            colour_class_data[offset + 3] = u8::from(point.classification) as f32 / 255.0;
+            // THIS is the crucial part - use spatial_gen.add_point()
+            spatial_gen.add_point((x, y, z), classification, color);
 
             // Track road points for heightmap
-            let classification = u8::from(point.classification);
-            if ROAD_CLASSIFICATIONS.contains(&classification) {
+            if ROAD_CLASSIFICATIONS.contains(&(classification as u8)) {
+                let norm_x = bounds.normalize_x(x);
+                let norm_z = bounds.normalize_z(z);
+                let norm_y = bounds.normalize_y(y);
                 road_points.push((norm_x, norm_z, norm_y));
             }
 
-            stats.total_elevation += norm_y as f64;
+            if color.is_some() {
+                stats.colour_points += 1;
+            }
+            stats.total_elevation += y;
             stats.loaded_points += 1;
         }
 
-        pb.finish_with_message("Textures generated");
+        pb.finish_with_message("Points processed");
+
+        // Sort spatially and generate textures
+        println!("Applying Z-order spatial sorting...");
+        spatial_gen.sort_spatially();
+
+        let position_data = spatial_gen.generate_position_texture();
+        let colour_class_data = spatial_gen.generate_colour_class_texture();
+        let spatial_index_data = spatial_gen.generate_spatial_index_texture();
+
         self.print_processing_stats(&stats, total_points, has_colour);
 
         // Save textures
-        self.save_textures(&position_data, &colour_class_data)?;
+        self.save_textures(&position_data, &colour_class_data, &spatial_index_data)?;
 
-        // Generate heightmap
+        // Generate heightmap and metadata as before...
         let avg_elevation = (stats.total_elevation / stats.loaded_points as f64) as f32;
         self.generate_heightmap(&road_points, avg_elevation)?;
-
-        // Save metadata
         self.save_metadata(bounds, &stats, total_points, sampling_ratio, has_colour)?;
 
         Ok(())
@@ -265,6 +367,7 @@ impl PointCloudConverter {
         &self,
         position_data: &[f32],
         colour_class_data: &[f32],
+        spatial_index_data: &[f32],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let pos_path = format!(
             "{}_position_{}x{}.dds",
@@ -274,12 +377,18 @@ impl PointCloudConverter {
             "{}_colour_class_{}x{}.dds",
             self.output_stem, TEXTURE_SIZE, TEXTURE_SIZE
         );
+        let spatial_path = format!(
+            "{}_spatial_index_{}x{}.dds",
+            self.output_stem, TEXTURE_SIZE, TEXTURE_SIZE
+        );
 
         write_rgba32f_texture(&pos_path, TEXTURE_SIZE, position_data)?;
         write_rgba32f_texture(&colour_path, TEXTURE_SIZE, colour_class_data)?;
+        write_rgba32f_texture(&spatial_path, TEXTURE_SIZE, spatial_index_data)?;
 
         println!("Saved {} (Position RGBA32F)", pos_path);
         println!("Saved {} (Colour+Class RGBA32F)", colour_path);
+        println!("Saved {} (Spatial Index RG32Uint)", spatial_path);
 
         Ok(())
     }
@@ -296,7 +405,8 @@ impl PointCloudConverter {
         );
 
         let heightmap_gen = HeightmapGenerator::new(&self.output_stem);
-        heightmap_gen.generate_unified(road_points, avg_elevation)?;
+        // heightmap_gen.generate_unified(road_points, avg_elevation)?;
+        heightmap_gen.generate_fast_approximate(&road_points, avg_elevation)?;
 
         Ok(())
     }

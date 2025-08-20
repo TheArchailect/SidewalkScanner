@@ -169,6 +169,7 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
     PointCloudAssets {
         position_texture: Handle::default(),
         colour_class_texture: Handle::default(),
+        spatial_index_texture: Handle::default(),
         heightmap_texture: Handle::default(),
         bounds,
         is_loaded: false,
@@ -209,6 +210,10 @@ fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAsse
         "{}_heightmap_{}.dds",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
     );
+    let spatial_index_texture_path = format!(
+        "{}_spatial_index_{}.dds",
+        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
 
     println!("Loading unified DDS textures:");
     println!(
@@ -219,10 +224,15 @@ fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAsse
         "  Colour+Class: {} (RGBA32F RGB + classification)",
         colour_class_texture_path
     );
+    println!(
+        "  Spatial Index: {} (RG32Uint cell_id + point_index)",
+        spatial_index_texture_path
+    );
     println!("  Heightmap: {} (R32F elevation)", heightmap_texture_path);
 
     assets.position_texture = asset_server.load(&position_texture_path);
     assets.colour_class_texture = asset_server.load(&colour_class_texture_path);
+    assets.spatial_index_texture = asset_server.load(&spatial_index_texture_path);
     assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
 }
 

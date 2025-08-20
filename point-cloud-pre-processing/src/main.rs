@@ -4,6 +4,7 @@ mod constants;
 mod converter;
 mod dds_writer;
 mod heightmap;
+mod spatial_layout;
 
 use converter::PointCloudConverter;
 use std::env;

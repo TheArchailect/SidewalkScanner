@@ -44,6 +44,12 @@ pub fn render_mode_system(
         println!("Render mode: Modified Classification");
     }
 
+    if keyboard.just_pressed(KeyCode::KeyC) {
+        new_mode = RenderMode::MortonCode;
+        mode_changed = true;
+        println!("Render mode: Morton Code");
+    }
+
     if mode_changed {
         render_state.current_mode = new_mode;
         for material_handle in material_query.iter() {

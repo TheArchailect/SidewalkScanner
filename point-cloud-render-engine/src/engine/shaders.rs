@@ -11,6 +11,7 @@ pub enum RenderMode {
     OriginalClassification = 0,
     ModifiedClassification = 1,
     RgbColour = 2,
+    MortonCode = 3,
 }
 
 #[derive(Debug, Clone, Copy, ShaderType)]
@@ -42,16 +43,20 @@ impl Default for PolygonClassificationUniform {
 pub struct PointCloudShader {
     #[texture(0)]
     #[sampler(1)]
-    pub position_texture: Handle<Image>, // RGBA32F: XYZ + validity
+    pub position_texture: Handle<Image>,
 
     #[texture(2)]
     #[sampler(3)]
-    pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification
+    pub colour_class_texture: Handle<Image>,
 
-    #[uniform(4)]
-    pub params: [Vec4; 2], // Bounds and texture size
+    #[texture(4)]
+    #[sampler(5)]
+    pub spatial_index_texture: Handle<Image>,
 
-    #[uniform(5)]
+    #[uniform(6)]
+    pub params: [Vec4; 2],
+
+    #[uniform(7)]
     pub polygon_data: PolygonClassificationUniform,
 }
 

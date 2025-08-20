@@ -14,12 +14,22 @@ struct PolygonClassificationData {
    polygon_info: array<vec4<f32>, 64>,
 }
 
+// @group(2) @binding(0) var position_texture: texture_2d<f32>;      // RGBA32F: XYZ + validity
+// @group(2) @binding(1) var position_sampler: sampler;
+// @group(2) @binding(2) var colour_class_texture: texture_2d<f32>;  // RGBA32F: RGB + classification
+// @group(2) @binding(3) var colour_class_sampler: sampler;
+// @group(2) @binding(4) var<uniform> material: PointCloudMaterial;
+// @group(2) @binding(5) var<uniform> polygon_classification: PolygonClassificationData;
+
 @group(2) @binding(0) var position_texture: texture_2d<f32>;      // RGBA32F: XYZ + validity
 @group(2) @binding(1) var position_sampler: sampler;
 @group(2) @binding(2) var colour_class_texture: texture_2d<f32>;  // RGBA32F: RGB + classification
 @group(2) @binding(3) var colour_class_sampler: sampler;
-@group(2) @binding(4) var<uniform> material: PointCloudMaterial;
-@group(2) @binding(5) var<uniform> polygon_classification: PolygonClassificationData;
+@group(2) @binding(4) var spatial_index_texture: texture_2d<f32>;
+@group(2) @binding(5) var spatial_index_sampler: sampler;
+@group(2) @binding(6) var<uniform> material: PointCloudMaterial;
+@group(2) @binding(7) var<uniform> polygon_classification: PolygonClassificationData;
+
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -105,6 +115,27 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     }
 
     // Render based on mode
+    // switch polygon_classification.render_mode {
+    //     case 0u: { // Original classification
+    //         out.color = classification_to_color(original_classification);
+    //     }
+    //     case 1u: { // Modified classification
+    //         out.should_discard = select(0.0, 1.0, should_hide);
+    //         out.color = classification_to_color(modified_classification);
+    //     }
+    //     case 2u: { // RGB colour
+    //         if length(rgb_colour) > 0.1 {
+    //             let brightness = classification_brightness(modified_classification);
+    //             out.color = vec4<f32>(rgb_colour * brightness, 1.0);
+    //         } else {
+    //             out.color = classification_to_color(modified_classification);
+    //         }
+    //     }
+    //     default: {
+    //         out.color = vec4<f32>(rgb_colour, 1.0);
+    //     }
+    // }
+
     switch polygon_classification.render_mode {
         case 0u: { // Original classification
             out.color = classification_to_color(original_classification);
@@ -121,10 +152,15 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
                 out.color = classification_to_color(modified_classification);
             }
         }
+        case 3u: { // Morton code visualization
+            let morton_code = debug_morton_code(point_index);
+            out.color = morton_to_debug_color(morton_code);
+        }
         default: {
             out.color = vec4<f32>(rgb_colour, 1.0);
         }
     }
+
     return out;
 }
 
@@ -186,4 +222,33 @@ fn point_in_polygon(point_x: f32, point_z: f32, polygon_idx: u32) -> bool {
         j = i;
     }
     return inside;
+}
+
+/// Debug: Reconstruct Morton code from spatial index texture
+fn debug_morton_code(point_index: u32) -> u32 {
+    let texture_size = material.params[0].w;
+    let x_coord = point_index % u32(texture_size);
+    let y_coord = point_index / u32(texture_size);
+
+    let uv = vec2<f32>(
+        (f32(x_coord) + 0.5) / texture_size,
+        (f32(y_coord) + 0.5) / texture_size
+    );
+
+    let spatial_sample = textureSampleLevel(spatial_index_texture, spatial_index_sampler, uv, 0.0);
+
+    // Reconstruct 64-bit Morton from RG channels
+    let morton_high = bitcast<u32>(spatial_sample.r);
+    let morton_low = bitcast<u32>(spatial_sample.g);
+
+    // For now just return the low 32 bits for visualization
+    return morton_low;
+}
+
+/// Debug: Color points by their Morton code
+fn morton_to_debug_color(morton_code: u32) -> vec4<f32> {
+    let r = f32((morton_code >> 16) & 0xFF) / 255.0;
+    let g = f32((morton_code >> 8) & 0xFF) / 255.0;
+    let b = f32(morton_code & 0xFF) / 255.0;
+    return vec4<f32>(r, g, b, 1.0);
 }

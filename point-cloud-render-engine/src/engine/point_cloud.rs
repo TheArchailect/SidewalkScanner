@@ -23,6 +23,7 @@ pub struct PointCloud;
 pub struct PointCloudAssets {
     pub position_texture: Handle<Image>, // RGBA32F: XYZ + validity
     pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification
+    pub spatial_index_texture: Handle<Image>,
     pub heightmap_texture: Handle<Image>, // R32F: elevation
     pub bounds: Option<PointCloudBounds>,
     pub is_loaded: bool,
@@ -135,8 +136,12 @@ pub fn check_textures_loaded(
         asset_server.get_load_state(&assets.heightmap_texture),
         Some(LoadState::Loaded)
     );
+    let spatial_loaded = matches!(
+        asset_server.get_load_state(&assets.spatial_index_texture),
+        Some(LoadState::Loaded)
+    );
 
-    if !pos_loaded || !colour_class_loaded {
+    if !pos_loaded || !colour_class_loaded || !spatial_loaded {
         return;
     }
 
@@ -194,7 +199,11 @@ fn configure_texture_sampling(images: &mut ResMut<Assets<Image>>, assets: &Point
     }
 
     if let Some(colour_class_image) = images.get_mut(&assets.colour_class_texture) {
-        colour_class_image.sampler = sampler_config;
+        colour_class_image.sampler = sampler_config.clone();
+    }
+
+    if let Some(spatial_index_image) = images.get_mut(&assets.spatial_index_texture) {
+        spatial_index_image.sampler = sampler_config;
     }
 }
 
@@ -206,6 +215,7 @@ fn create_point_cloud_material(
     PointCloudShader {
         position_texture: assets.position_texture.clone(),
         colour_class_texture: assets.colour_class_texture.clone(),
+        spatial_index_texture: assets.spatial_index_texture.clone(),
         params: [
             Vec4::new(
                 bounds.min_x() as f32,
