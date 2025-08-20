@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="400" viewBox="0 0 900 400">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <!-- Orange dot ring -->
+  <g>
+      <circle cx="170.00" cy="80.00" r="12" fill="#f9a11b"/>
+      <circle cx="211.04" cy="87.24" r="12" fill="#f9a11b"/>
+      <circle cx="247.13" cy="108.07" r="12" fill="#f9a11b"/>
+      <circle cx="273.92" cy="140.00" r="12" fill="#f9a11b"/>
+      <circle cx="288.18" cy="179.16" r="12" fill="#f9a11b"/>
+      <circle cx="288.18" cy="220.84" r="12" fill="#f9a11b"/>
+      <circle cx="273.92" cy="260.00" r="12" fill="#f9a11b"/>
+      <circle cx="247.13" cy="291.93" r="12" fill="#f9a11b"/>
+      <circle cx="211.04" cy="312.76" r="12" fill="#f9a11b"/>
+      <circle cx="170.00" cy="320.00" r="12" fill="#f9a11b"/>
+      <circle cx="128.96" cy="312.76" r="12" fill="#f9a11b"/>
+      <circle cx="92.87" cy="291.93" r="12" fill="#f9a11b"/>
+      <circle cx="66.08" cy="260.00" r="12" fill="#f9a11b"/>
+      <circle cx="51.82" cy="220.84" r="12" fill="#f9a11b"/>
+      <circle cx="51.82" cy="179.16" r="12" fill="#f9a11b"/>
+      <circle cx="66.08" cy="140.00" r="12" fill="#f9a11b"/>
+      <circle cx="92.87" cy="108.07" r="12" fill="#f9a11b"/>
+      <circle cx="128.96" cy="87.24" r="12" fill="#f9a11b"/>
+  </g>
+  <!-- Stick figure -->
+  <g>
+      <circle cx="170" cy="160" r="18" fill="#000000"/>
+      <path d="M 170 178 L 170 255 " stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none"/>
+      <path d="M 105 195 L 230 205" stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none"/>
+      <path d="M 170 255 L 115 320" stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none"/>
+      <path d="M 170 255 L 245 290" stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none"/>
+  </g>
+  <!-- Text -->
+  
+    <g transform="translate(320, 150)">
+      <text x="0" y="0" font-family="Arial, Helvetica, sans-serif" font-size="40" font-style="italic" fill="#000000" letter-spacing="2">
+        INTERNATIONAL
+      </text>
+      <text x="0" y="48" font-family="Arial, Helvetica, sans-serif" font-size="40" font-style="italic" fill="#000000" letter-spacing="2">
+        FEDERATION OF
+      </text>
+      <text x="0" y="110" font-family="Arial, Helvetica, sans-serif" font-size="64" font-style="italic" fill="#000000" letter-spacing="2">
+        PEDESTRIANS
+      </text>
+    </g>
+
+</svg>
