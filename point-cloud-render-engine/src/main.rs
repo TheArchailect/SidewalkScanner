@@ -4,6 +4,7 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PresentMode;
 use bevy_common_assets::json::JsonAssetPlugin;
+use tools::class_selection::{ClassSelectionState, handle_class_selection};
 
 mod constants;
 mod engine;
@@ -61,7 +62,9 @@ fn create_app() -> App {
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
         .add_plugins(ComputeClassificationPlugin)
         .init_resource::<BoundsLoader>()
+        .init_resource::<ClassSelectionState>()
         .insert_resource(create_point_cloud_assets(None))
+        .add_systems(Update, handle_class_selection)
         .add_systems(Startup, setup)
         .add_systems(Update, (load_bounds_system, check_textures_loaded))
         .add_systems(Update, (fps_text_update_system, camera_controller))

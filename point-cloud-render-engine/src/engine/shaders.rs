@@ -1,17 +1,9 @@
+use crate::engine::render_mode::RenderMode;
 use bevy::{
     prelude::*,
     reflect::TypePath,
     render::render_resource::{AsBindGroup, ShaderRef},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RenderMode {
-    OriginalClassification = 0,
-    ModifiedClassification = 1,
-    RgbColour = 2,
-    MortonCode = 3,
-    PerformanceDebug = 4,
-}
 
 /// Simplified point cloud shader material - only textures needed for rendering
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]

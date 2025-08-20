@@ -1,5 +1,5 @@
 use crate::engine::point_cloud::PointCloud;
-use crate::engine::shaders::{PointCloudShader, RenderMode};
+use crate::engine::shaders::PointCloudShader;
 /// Rendering mode control system
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
@@ -14,6 +14,16 @@ impl Default for RenderModeState {
             current_mode: RenderMode::RgbColour,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RenderMode {
+    OriginalClassification = 0,
+    ModifiedClassification = 1,
+    RgbColour = 2,
+    MortonCode = 3,
+    PerformanceDebug = 4,
+    ClassSelection = 5,
 }
 
 /// Handle render mode switching via keyboard
@@ -54,6 +64,12 @@ pub fn render_mode_system(
         new_mode = RenderMode::PerformanceDebug;
         mode_changed = true;
         println!("Render mode: Performance Debug");
+    }
+
+    if keyboard.just_pressed(KeyCode::KeyS) {
+        new_mode = RenderMode::ClassSelection;
+        mode_changed = true;
+        println!("Render mode: Class Selection");
     }
 
     if mode_changed {

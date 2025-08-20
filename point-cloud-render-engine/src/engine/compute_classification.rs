@@ -1,7 +1,8 @@
 use crate::RenderModeState;
 /// GPU-accelerated polygon classification compute pipeline (MVP)
 use crate::engine::point_cloud::{PointCloudAssets, PointCloudBounds};
-use crate::engine::shaders::RenderMode;
+use crate::engine::render_mode::RenderMode;
+use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
@@ -16,6 +17,7 @@ use bevy::render::{
     renderer::{RenderDevice, RenderQueue},
     texture::GpuImage,
 };
+
 pub struct ComputeClassificationPlugin;
 
 impl Plugin for ComputeClassificationPlugin {
@@ -30,11 +32,13 @@ impl Plugin for ComputeClassificationPlugin {
                 .init_resource::<PolygonClassificationData>()
                 .init_resource::<PointCloudAssets>()
                 .init_resource::<RenderModeState>()
+                .init_resource::<ClassSelectionState>()
                 .add_systems(bevy::render::Render, run_classification_compute);
         }
         app.add_plugins(ExtractResourcePlugin::<ComputeClassificationState>::default())
             .add_plugins(ExtractResourcePlugin::<PolygonClassificationData>::default())
             .add_plugins(ExtractResourcePlugin::<PointCloudAssets>::default())
+            .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default())
             .add_plugins(ExtractResourcePlugin::<RenderModeState>::default());
     }
 }
@@ -59,6 +63,7 @@ pub fn trigger_classification_compute(
 pub fn run_classification_compute(
     mut state: ResMut<ComputeClassificationState>,
     classification_data: Res<PolygonClassificationData>,
+    selection_state: Res<ClassSelectionState>,
     render_mode: Res<RenderModeState>,
     render_device: Res<RenderDevice>,
     mut render_queue: ResMut<RenderQueue>,
@@ -67,8 +72,10 @@ pub fn run_classification_compute(
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
 ) {
-    let should_update =
-        classification_data.is_changed() || render_mode.is_changed() || state.should_recompute;
+    let should_update = classification_data.is_changed()
+        || render_mode.is_changed()
+        || state.should_recompute
+        || selection_state.is_changed();
 
     if !should_update {
         return;
@@ -110,8 +117,9 @@ pub fn run_classification_compute(
         original_gpu,
         position_gpu,
         spatial_gpu,
-        final_gpu, // Pass existing texture
+        final_gpu,
         &classification_data.polygons,
+        &selection_state,
         &assets.bounds,
         render_mode.current_mode,
     );
@@ -221,10 +229,12 @@ fn execute_compute_shader(
     spatial_gpu: &GpuImage,
     final_gpu: &GpuImage, // Use existing texture instead of creating new
     polygons: &[ClassificationPolygon],
+    selection_state: &ClassSelectionState,
     bounds: &Option<PointCloudBounds>,
     current_mode: RenderMode,
 ) {
-    let polygon_buffer = create_polygon_buffer(render_device, polygons, current_mode);
+    let compute_buffer =
+        create_compute_buffer(render_device, polygons, selection_state, current_mode);
     let bounds_buffer = create_bounds_buffer(render_device, bounds);
 
     let bind_group = render_device.create_bind_group(
@@ -249,7 +259,7 @@ fn execute_compute_shader(
             },
             BindGroupEntry {
                 binding: 4,
-                resource: polygon_buffer.as_entire_binding(),
+                resource: compute_buffer.as_entire_binding(),
             },
             BindGroupEntry {
                 binding: 5,
@@ -271,9 +281,10 @@ fn execute_compute_shader(
     render_queue.submit([encoder.finish()]);
 }
 
-fn create_polygon_buffer(
+fn create_compute_buffer(
     render_device: &RenderDevice,
     polygons: &[ClassificationPolygon],
+    selection_state: &ClassSelectionState,
     current_mode: RenderMode,
 ) -> bevy::render::render_resource::Buffer {
     use bytemuck::{Pod, Zeroable};
@@ -284,6 +295,9 @@ fn create_polygon_buffer(
         polygon_count: u32,
         total_points: u32,
         render_mode: u32,
+        enable_spatial_opt: u32,
+        selection_point: [f32; 2],
+        is_selecting: u32,
         _padding: u32,
         point_data: [[f32; 4]; 512],
         polygon_info: [[f32; 4]; 64],
@@ -292,6 +306,13 @@ fn create_polygon_buffer(
     let mut uniform = PolygonUniform::zeroed();
     uniform.polygon_count = polygons.len().min(64) as u32;
     uniform.render_mode = current_mode as u32;
+    uniform.enable_spatial_opt = 1;
+
+    uniform.selection_point = selection_state
+        .selection_point
+        .map(|p| [p.x, p.y])
+        .unwrap_or([0.0, 0.0]);
+    uniform.is_selecting = if selection_state.is_selecting { 1 } else { 0 };
 
     let mut point_offset = 0;
     for (i, polygon) in polygons.iter().take(64).enumerate() {
