@@ -1,13 +1,9 @@
-/// Point cloud rendering with unified texture pipeline
-use crate::engine::shaders::PolygonClassificationUniform;
-
 use super::{
     grid::{GridCreated, create_ground_grid},
     shaders::PointCloudShader,
 };
-
-use crate::constants::texture::TEXTURE_SIZE;
 use bevy::prelude::*;
+use bevy::render::extract_resource::ExtractResource;
 use bevy::{
     asset::LoadState,
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
@@ -19,11 +15,12 @@ use bevy::{render::mesh::PrimitiveTopology, render::render_asset::RenderAssetUsa
 pub struct PointCloud;
 
 /// Point cloud assets using unified texture format
-#[derive(Resource)]
+#[derive(Resource, FromWorld, ExtractResource, Clone)]
 pub struct PointCloudAssets {
     pub position_texture: Handle<Image>, // RGBA32F: XYZ + validity
-    pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification
-    pub spatial_index_texture: Handle<Image>,
+    pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification (original)
+    pub final_texture: Handle<Image>,    // RGBA32F: Computed output for rendering
+    pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data
     pub heightmap_texture: Handle<Image>, // R32F: elevation
     pub bounds: Option<PointCloudBounds>,
     pub is_loaded: bool,
@@ -145,10 +142,18 @@ pub fn check_textures_loaded(
         return;
     }
 
-    if let Some(bounds) = &assets.bounds {
+    if let Some(bounds) = &assets.bounds.clone() {
         println!("Unified DDS textures loaded! Creating GPU point cloud...");
 
         configure_texture_sampling(&mut images, &assets);
+        if let Some(original_image) = images.get(&assets.colour_class_texture) {
+            let mut final_image = original_image.clone();
+            final_image.texture_descriptor.usage |=
+                bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
+            let final_handle = images.add(final_image);
+            assets.final_texture = final_handle;
+            println!("Created final_texture for compute shader output");
+        }
 
         let mesh = create_point_index_mesh(bounds.loaded_points);
         let material = create_point_cloud_material(bounds, &assets);
@@ -214,8 +219,7 @@ fn create_point_cloud_material(
 ) -> PointCloudShader {
     PointCloudShader {
         position_texture: assets.position_texture.clone(),
-        colour_class_texture: assets.colour_class_texture.clone(),
-        spatial_index_texture: assets.spatial_index_texture.clone(),
+        final_texture: assets.final_texture.clone(),
         params: [
             Vec4::new(
                 bounds.min_x() as f32,
@@ -230,11 +234,9 @@ fn create_point_cloud_material(
                 0.0,
             ),
         ],
-        polygon_data: PolygonClassificationUniform::default(),
     }
 }
 
-/// Spawn point cloud entity with unified texture rendering
 fn spawn_point_cloud_entity(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

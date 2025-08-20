@@ -6,10 +6,10 @@ use crate::engine::render_mode::RenderModeState;
 use crate::engine::shaders::PolygonClassificationUniform;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassificationPolygon {
     pub id: u32,
@@ -17,10 +17,10 @@ pub struct ClassificationPolygon {
     pub new_class: u32,    // Classification ID to apply to intersecting points
 }
 
-#[derive(Resource)]
+#[derive(Resource, ExtractResource, Clone)]
 pub struct PolygonClassificationData {
     pub polygons: Vec<ClassificationPolygon>,
-    pub max_polygons: usize, // Shader uniform array size limit
+    pub max_polygons: usize,
 }
 
 impl Default for PolygonClassificationData {
@@ -270,12 +270,6 @@ pub fn update_polygon_classification_shader(
     }
 
     uniform.total_points = point_offset as u32;
-
-    for material_handle in material_query.iter() {
-        if let Some(material) = materials.get_mut(&material_handle.0) {
-            material.polygon_data = uniform;
-        }
-    }
 }
 
 fn create_completed_polygon(

@@ -71,21 +71,6 @@ impl SpatialTextureGenerator {
             .sort_by(|a, b| a.morton_index.cmp(&b.morton_index));
     }
 
-    // /// Generate spatial index texture data (RG32Uint)
-    // pub fn generate_spatial_index_texture(&self) -> Vec<u32> {
-    //     let mut spatial_data = vec![0u32; TEXTURE_SIZE * TEXTURE_SIZE * 2];
-
-    //     for (i, point) in self.points.iter().enumerate() {
-    //         let texture_idx = i * 2;
-    //         if texture_idx + 1 < spatial_data.len() {
-    //             spatial_data[texture_idx] = point.spatial_cell_id;
-    //             spatial_data[texture_idx + 1] = i as u32;
-    //         }
-    //     }
-
-    //     spatial_data
-    // }
-
     /// Generate spatial index texture with split Morton codes
     pub fn generate_spatial_index_texture(&self) -> Vec<f32> {
         let mut spatial_data = vec![0.0f32; TEXTURE_SIZE * TEXTURE_SIZE * 4]; // RGBA format

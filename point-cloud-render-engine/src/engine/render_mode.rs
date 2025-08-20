@@ -2,8 +2,8 @@ use crate::engine::point_cloud::PointCloud;
 use crate::engine::shaders::{PointCloudShader, RenderMode};
 /// Rendering mode control system
 use bevy::prelude::*;
-
-#[derive(Resource)]
+use bevy::render::extract_resource::ExtractResource;
+#[derive(Resource, Clone, ExtractResource)]
 pub struct RenderModeState {
     pub current_mode: RenderMode,
 }
@@ -50,12 +50,14 @@ pub fn render_mode_system(
         println!("Render mode: Morton Code");
     }
 
+    if keyboard.just_pressed(KeyCode::KeyV) {
+        new_mode = RenderMode::PerformanceDebug;
+        mode_changed = true;
+        println!("Render mode: Performance Debug");
+    }
+
     if mode_changed {
         render_state.current_mode = new_mode;
-        for material_handle in material_query.iter() {
-            if let Some(material) = materials.get_mut(&material_handle.0) {
-                material.polygon_data.render_mode = new_mode as u32;
-            }
-        }
+        // Compute shader will detect RenderModeState.is_changed() and recompute
     }
 }

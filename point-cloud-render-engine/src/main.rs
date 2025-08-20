@@ -22,9 +22,9 @@ use tools::polygon::{
     update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
 };
 
-use engine::render_mode::{RenderModeState, render_mode_system};
-
 use crate::engine::shaders::PointCloudShader;
+use engine::compute_classification::ComputeClassificationPlugin;
+use engine::render_mode::{RenderModeState, render_mode_system};
 
 const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
@@ -59,6 +59,7 @@ fn create_app() -> App {
         .add_plugins(MaterialPlugin::<PointCloudShader>::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
+        .add_plugins(ComputeClassificationPlugin)
         .init_resource::<BoundsLoader>()
         .insert_resource(create_point_cloud_assets(None))
         .add_systems(Startup, setup)
@@ -170,6 +171,7 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
         position_texture: Handle::default(),
         colour_class_texture: Handle::default(),
         spatial_index_texture: Handle::default(),
+        final_texture: Handle::default(),
         heightmap_texture: Handle::default(),
         bounds,
         is_loaded: false,
