@@ -131,7 +131,7 @@ impl SpatialTextureGenerator {
                     colour_data[base_idx + 1] = 1.0;
                     colour_data[base_idx + 2] = 1.0;
                 }
-                colour_data[base_idx + 3] = point.classification as f32 / 65535.0;
+                colour_data[base_idx + 3] = point.classification as f32 / 255.0;
             }
         }
 
