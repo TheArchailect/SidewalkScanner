@@ -291,7 +291,7 @@ fn create_compute_buffer(
 
     #[repr(C)]
     #[derive(Pod, Zeroable, Copy, Clone)]
-    struct PolygonUniform {
+    struct ComputeUniformData {
         polygon_count: u32,
         total_points: u32,
         render_mode: u32,
@@ -303,7 +303,7 @@ fn create_compute_buffer(
         polygon_info: [[f32; 4]; 64],
     }
 
-    let mut uniform = PolygonUniform::zeroed();
+    let mut uniform = ComputeUniformData::zeroed();
     uniform.polygon_count = polygons.len().min(64) as u32;
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;

@@ -3,7 +3,7 @@
 @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>;
 @group(0) @binding(3) var output_texture: texture_storage_2d<rgba32float, write>;
 
-struct ComputeShaderData {
+struct ComputeUniformData {
    polygon_count: u32,
    total_points: u32,
    render_mode: u32,
@@ -15,7 +15,7 @@ struct ComputeShaderData {
    polygon_info: array<vec4<f32>, 64>,
 }
 
-@group(0) @binding(4) var<uniform> compute_data: ComputeShaderData;
+@group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
 
 struct BoundsData {
     min_bounds: vec3<f32>,
