@@ -138,7 +138,7 @@ pub fn polygon_tool_system(
     }
 
     // Clear current polygon with 'C' key
-    if keyboard.just_pressed(KeyCode::KeyC) {
+    if keyboard.just_pressed(KeyCode::KeyO) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;
@@ -146,7 +146,7 @@ pub fn polygon_tool_system(
     }
 
     // Clear all polygons with 'X' key
-    if keyboard.just_pressed(KeyCode::KeyX) {
+    if keyboard.just_pressed(KeyCode::KeyI) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;

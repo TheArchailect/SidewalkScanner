@@ -36,37 +36,37 @@ pub fn render_mode_system(
     let mut mode_changed = false;
     let mut new_mode = render_state.current_mode;
 
-    if keyboard.just_pressed(KeyCode::KeyR) {
+    if keyboard.just_pressed(KeyCode::KeyZ) {
         new_mode = RenderMode::RgbColour;
         mode_changed = true;
         println!("Render mode: RGB Colour");
     }
 
-    if keyboard.just_pressed(KeyCode::KeyO) {
+    if keyboard.just_pressed(KeyCode::KeyX) {
         new_mode = RenderMode::OriginalClassification;
         mode_changed = true;
         println!("Render mode: Original Classification");
     }
 
-    if keyboard.just_pressed(KeyCode::KeyM) {
+    if keyboard.just_pressed(KeyCode::KeyC) {
         new_mode = RenderMode::ModifiedClassification;
         mode_changed = true;
         println!("Render mode: Modified Classification");
     }
 
-    if keyboard.just_pressed(KeyCode::KeyC) {
+    if keyboard.just_pressed(KeyCode::KeyV) {
         new_mode = RenderMode::MortonCode;
         mode_changed = true;
         println!("Render mode: Morton Code");
     }
 
-    if keyboard.just_pressed(KeyCode::KeyV) {
+    if keyboard.just_pressed(KeyCode::KeyB) {
         new_mode = RenderMode::PerformanceDebug;
         mode_changed = true;
         println!("Render mode: Performance Debug");
     }
 
-    if keyboard.just_pressed(KeyCode::KeyS) {
+    if keyboard.just_pressed(KeyCode::KeyN) {
         new_mode = RenderMode::ClassSelection;
         mode_changed = true;
         println!("Render mode: Class Selection");

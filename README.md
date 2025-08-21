@@ -67,16 +67,30 @@ python3 serve.py
 
 ## Controls
 
+### Camera & Navigation
+
 - **Mouse Wheel**: Zoom
 - **Middle Mouse**: Drag/Pan
 - **Space**: Follow towards mouse ray-cast
 - **A/D**: Orient around focus point
-- **P**: Toggle polygon tool
-- **1-9**: Set current classification class
+
+### Render Modes
+
+- **Z**: RGB Colour
+- **X**: Original Classification
+- **C**: Modified Classification
+- **V**: Morton Code
+- **B**: Performance Debug
+- **N**: Class Selection
+
+### Polygon Classification Tool
+
+- **P**: Toggle polygon tool on/off
+- **1-9**: Set current classification class (1-9)
 - **Left Click**: Add polygon point
-- **Left Shift**: Complete polygon
-- **X**: Clear polygon drawing
-- **C**: Cancel current draw operation
+- **Left Shift**: Complete current polygon
+- **O**: Clear current polygon being drawn
+- **I**: Clear all completed polygons
 
 ## Technical Specifications
 

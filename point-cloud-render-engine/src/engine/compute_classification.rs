@@ -227,7 +227,7 @@ fn execute_compute_shader(
     original_gpu: &GpuImage,
     position_gpu: &GpuImage,
     spatial_gpu: &GpuImage,
-    final_gpu: &GpuImage, // Use existing texture instead of creating new
+    final_gpu: &GpuImage,
     polygons: &[ClassificationPolygon],
     selection_state: &ClassSelectionState,
     bounds: &Option<PointCloudBounds>,
@@ -255,7 +255,7 @@ fn execute_compute_shader(
             },
             BindGroupEntry {
                 binding: 3,
-                resource: BindingResource::TextureView(&final_gpu.texture_view), // Write to existing
+                resource: BindingResource::TextureView(&final_gpu.texture_view),
             },
             BindGroupEntry {
                 binding: 4,

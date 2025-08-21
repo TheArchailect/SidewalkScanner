@@ -30,12 +30,131 @@ impl PointCloudConverter {
         })
     }
 
+    /// Log coordinate system and file information
+    fn log_file_info(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let reader = self.create_reader()?;
+        let header = reader.header();
+
+        println!("LAS/LAZ File Information:");
+        println!("  File: {}", self.input_path);
+        println!(
+            "  Version: {}.{}",
+            header.version().major,
+            header.version().minor
+        );
+        println!("  Points: {}", header.number_of_points());
+        println!("  Point format: {:?}", header.point_format().to_u8());
+
+        // Coordinate system info
+        println!("  Coordinate System:");
+
+        // Scale factors indicate likely units
+        let x_scale = header.transforms().x.scale;
+        let y_scale = header.transforms().y.scale;
+        let z_scale = header.transforms().z.scale;
+
+        println!(
+            "    Scale factors: X={}, Y={}, Z={}",
+            x_scale, y_scale, z_scale
+        );
+
+        // Offset values
+        let x_offset = header.transforms().x.offset;
+        let y_offset = header.transforms().y.offset;
+        let z_offset = header.transforms().z.offset;
+
+        println!(
+            "    Offsets: X={}, Y={}, Z={}",
+            x_offset, y_offset, z_offset
+        );
+
+        // Bounds from header
+        println!("  Header bounds (before transform):");
+        println!(
+            "    X: {} to {}",
+            header.bounds().min.x,
+            header.bounds().max.x
+        );
+        println!(
+            "    Y: {} to {}",
+            header.bounds().min.y,
+            header.bounds().max.y
+        );
+        println!(
+            "    Z: {} to {}",
+            header.bounds().min.z,
+            header.bounds().max.z
+        );
+
+        // Check for coordinate reference system information
+        println!("    Has WKT CRS: {}", header.has_wkt_crs());
+
+        // Examine all VLRs for coordinate system data
+        let mut found_crs_info = false;
+        let vlrs = header.vlrs();
+        for vlr in vlrs {
+            match vlr.user_id.as_str() {
+                "LASF_Projection" => {
+                    found_crs_info = true;
+                    println!("    LASF_Projection VLR found: {} bytes", vlr.data.len());
+
+                    if vlr.data.len() >= 4 {
+                        let possible_epsg = u16::from_le_bytes([vlr.data[0], vlr.data[1]]);
+                        if possible_epsg > 1000 && possible_epsg < 10000 {
+                            println!("      Possible EPSG: {}", possible_epsg);
+                        }
+                    }
+
+                    // Check for WKT string data
+                    if vlr.data.len() > 10 {
+                        if let Ok(wkt_str) =
+                            std::str::from_utf8(&vlr.data[..std::cmp::min(100, vlr.data.len())])
+                        {
+                            if wkt_str.contains("PROJCS") || wkt_str.contains("GEOGCS") {
+                                println!(
+                                    "      WKT string detected: {}...",
+                                    &wkt_str[..std::cmp::min(50, wkt_str.len())]
+                                );
+                            }
+                        }
+                    }
+                }
+                "OSGEO" => {
+                    found_crs_info = true;
+                    println!("    OSGEO CRS VLR found: {} bytes", vlr.data.len());
+                }
+                _ => {
+                    if vlr.user_id.contains("CRS")
+                        || vlr.user_id.contains("SRS")
+                        || vlr.user_id.contains("PROJ")
+                    {
+                        found_crs_info = true;
+                        println!(
+                            "    {} CRS VLR found: {} bytes",
+                            vlr.user_id,
+                            vlr.data.len()
+                        );
+                    }
+                }
+            }
+        }
+
+        if !found_crs_info {
+            println!("    No coordinate system VLRs found - units cannot be determined");
+        }
+
+        println!();
+        Ok(())
+    }
+
     /// Convert LAZ/LAS file to unified texture set
     pub fn convert(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "Converting {} to unified texture set ({}x{})...",
             self.input_path, TEXTURE_SIZE, TEXTURE_SIZE
         );
+
+        self.log_file_info()?;
 
         let has_colour = self.detect_colour_data()?;
         let bounds = self.calculate_bounds()?;
