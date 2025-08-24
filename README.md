@@ -73,6 +73,7 @@ python3 serve.py
 - **Middle Mouse**: Drag/Pan
 - **Space**: Follow towards mouse ray-cast
 - **A/D**: Orient around focus point
+- **W/S**: Pitch up and down 
 
 ### Render Modes
 
