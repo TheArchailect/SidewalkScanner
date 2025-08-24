@@ -3,6 +3,8 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PresentMode;
 use bevy_common_assets::json::JsonAssetPlugin;
+// import Manifest
+use engine::point_cloud::AssetManifest;
 
 mod engine;
 mod tools;
@@ -21,12 +23,20 @@ use tools::polygon::{
 
 use crate::engine::shaders::PointCloudShader;
 
-const RELATIVE_ASSET_PATH: &'static str = "encoded_textures/warsaw";
-const TEXTURE_RESOLUTION: &'static str = "2k";
+/// Commented out as handled by manifest
+//const RELATIVE_ASSET_PATH: &'static str = "./encoded_textures/warsaw";
+//const TEXTURE_RESOLUTION: &'static str = "1k";
 
 #[derive(Resource, Default)]
 struct BoundsLoader {
     handle: Option<Handle<PointCloudBounds>>,
+    loaded: bool,
+}
+
+// Added ManifestLoader resource
+#[derive(Resource, Default)]
+struct ManifestLoader {
+    handle: Option<Handle<AssetManifest>>,
     loaded: bool,
 }
 
@@ -53,10 +63,12 @@ fn create_app() -> App {
         .add_plugins(MaterialPlugin::<PointCloudShader>::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["bounds.json"]))
+        .add_plugins(bevy_common_assets::json::JsonAssetPlugin::<AssetManifest>::new(&["manifest.json"])) // Add plugin
+        .init_resource::<ManifestLoader>() // Add loader
         .init_resource::<BoundsLoader>()
         .insert_resource(create_point_cloud_assets(None))
         .add_systems(Startup, setup)
-        .add_systems(Update, (load_bounds_system, check_textures_loaded))
+        .add_systems(Update, (load_manifest_system, load_bounds_system, check_textures_loaded)) // Add "load_manifest_system" first
         .add_systems(Update, (fps_text_update_system, camera_controller))
         .add_systems(
             Update,
@@ -77,18 +89,57 @@ fn create_app() -> App {
     app
 }
 
+fn load_manifest_system(
+    mut loader: ResMut<ManifestLoader>,
+    asset_server: Res<AssetServer>,
+    manifests: Res<Assets<AssetManifest>>,
+    mut pc_assets: ResMut<PointCloudAssets>,
+    mut bounds_loader: ResMut<BoundsLoader>,
+) {
+    // Kick off
+    if loader.handle.is_none() {
+        let path = "encoded_textures/warsaw_manifest_1k.json";
+        println!("Loading manifest: {path}");
+        loader.handle = Some(asset_server.load(path));
+        return;
+    }
+
+    // As manifest JSON becomes ready, queue the textures assets
+    if !loader.loaded {
+        if let Some(h) = &loader.handle {
+            if let Some(m) = manifests.get(h) {
+                println!("Manifest loaded ⇒ dataset={} res={}", m.id, m.resolution);
+                println!("   positions: {}", m.textures.positions);
+                println!("   metadata : {}", m.textures.metadata);
+                println!("   heightmap: {}", m.textures.heightmap);
+                //println!("   bounds   : {}", m.textures.bounds);
+
+                pc_assets.position_texture = asset_server.load(&m.textures.positions);
+                pc_assets.metadata_texture = asset_server.load(&m.textures.metadata);
+                pc_assets.heightmap_texture = asset_server.load(&m.textures.heightmap);
+
+                bounds_loader.handle = Some(asset_server.load(&m.bounds));
+
+                loader.loaded = true;
+            }
+        }
+    }
+}
+
+// Note: kickoff is being handled by 'load_manifest_system'
 fn load_bounds_system(
     mut bounds_loader: ResMut<BoundsLoader>,
     mut assets: ResMut<PointCloudAssets>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    // asset_server: Res<AssetServer>,      // <-- Commented out as handled by manifest
     bounds_assets: Res<Assets<PointCloudBounds>>,
 ) {
     // Start loading if not already started
     if bounds_loader.handle.is_none() {
-        let bounds_path = get_bounds_path();
-        println!("Loading bounds from: {}", bounds_path);
-        bounds_loader.handle = Some(asset_server.load(&bounds_path));
+        //let bounds_path = get_bounds_path();
+        //println!("Loading bounds from: {}", bounds_path);
+        //bounds_loader.handle = Some(asset_server.load(&bounds_path));
+            // Commented out as handled by manifest
         return;
     }
 
@@ -110,9 +161,10 @@ fn load_bounds_system(
     }
 }
 
-fn get_bounds_path() -> String {
-    format!("{}_bounds_{}.json", RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION)
-}
+/// Commented out as handled by manifest
+//fn get_bounds_path() -> String {
+//    format!("{}_bounds_{}.json", RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION)
+//}
 
 fn create_default_plugins() -> impl PluginGroup {
     let window_config = WindowPlugin {
@@ -164,22 +216,23 @@ struct FpsText;
 
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    asset_server: Res<AssetServer>,          
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut assets: ResMut<PointCloudAssets>,
+    //mut assets: ResMut<PointCloudAssets>,     // <-- Commented out as handled by manifest
 ) {
     println!("=== GPU-ACCELERATED POINT CLOUD RENDERER (DDS) ===");
 
-    load_textures(&asset_server, &mut assets);
-    // spawn_demo_objects(&mut commands, &mut meshes, &mut materials);
+   //load_textures(&asset_server, &mut assets);
+    // spawn_demo_objects(&mut commands, &mut meshes, &mut materials);   // <-- Commented out as handled by manifest
     spawn_lighting(&mut commands);
     spawn_camera_fallback(&mut commands);
     spawn_ui(&mut commands);
     spawn_gimos(commands, meshes, materials, asset_server);
 }
 
-fn load_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
+/// Commented out as handled by manifest
+/*fn load_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
     let position_texture_path = format!(
         "{}_positions_{}.dds",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
@@ -203,7 +256,7 @@ fn load_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
     assets.position_texture = asset_server.load(&position_texture_path);
     assets.metadata_texture = asset_server.load(&metadata_texture_path);
     assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
-}
+}*/
 
 fn spawn_gimos(
     mut commands: Commands,

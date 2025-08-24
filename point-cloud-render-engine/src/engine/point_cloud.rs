@@ -26,6 +26,21 @@ pub struct PointCloudAssets {
 }
 
 use serde::{Deserialize, Serialize};
+/// Warsaw Manifests: JsonAssetPlugin loads this in main.rs
+#[derive(Deserialize, Clone, bevy::asset::Asset, TypePath)]
+pub struct AssetManifest {
+    pub id: String,
+    pub resolution: String,
+    pub textures: Textures,
+    pub bounds: String,
+}
+/// Warsaw Manifests
+#[derive(Deserialize, Clone)]
+pub struct Textures {
+    pub positions: String,
+    pub metadata: String,
+    pub heightmap: String,
+}
 
 #[derive(Resource, Debug, Clone, Serialize, Deserialize, bevy::asset::Asset, TypePath)]
 pub struct PointCloudBounds {

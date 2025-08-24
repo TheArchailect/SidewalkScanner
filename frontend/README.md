@@ -12,6 +12,9 @@ npm install
 
 # Launch Vite dev server HMR
 npm run dev
+
+# OPTIONAL
+npm install -g react-devtoolfs
 ```
 
 ## Scripts
