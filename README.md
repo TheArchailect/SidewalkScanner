@@ -74,6 +74,7 @@ python3 serve.py
 - **Space**: Follow towards mouse ray-cast
 - **A/D**: Orient around focus point
 - **W/S**: Pitch up and down 
+- **Shift + WASD**: Move camera 
 
 ### Render Modes
 
