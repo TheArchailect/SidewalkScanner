@@ -279,6 +279,29 @@ pub fn camera_controller(
             maps_camera.focus_point += forward * -total_motion.y * sensitivity;
         }
 
+        // Keyboard movement WASD + Shift
+        let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+        if shift {
+            let speed = 1.0 * maps_camera.height.max(1.0) * time.delta_secs();
+
+            let mut move_x = 0.0;
+            let mut move_z = 0.0;
+            if keyboard.pressed(KeyCode::KeyW) {move_z -= 1.0;} // Forward
+            if keyboard.pressed(KeyCode::KeyA) {move_x -= 1.0;} // Left
+            if keyboard.pressed(KeyCode::KeyS) {move_z += 1.0;} // Back
+            if keyboard.pressed(KeyCode::KeyD) {move_x += 1.0;} // Right
+            
+            if move_x != 0.0 || move_z != 0.0 {
+                let dir = Vec2::new(move_x, move_z).normalize_or_zero();
+                let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
+                let right = yaw_rot * Vec3::X;
+                let forward = yaw_rot * Vec3::Z;
+
+                let movement = (right * dir.x + forward * dir.y) * speed;
+                maps_camera.focus_point += movement;
+            }
+        } else {
+
         // Handle keyboard rotation (works always)
         let mut rotation_input = 0.0;
         if keyboard.pressed(KeyCode::KeyA) {
@@ -311,6 +334,7 @@ pub fn camera_controller(
 
         // Prevents flipping
         maps_camera.pitch = maps_camera.pitch.clamp(-1.55, -0.05);
+    }
 
         // Follow mouse with spacebar
         if is_following_mouse {
