@@ -27,7 +27,7 @@ use crate::engine::shaders::PointCloudShader;
 use engine::compute_classification::ComputeClassificationPlugin;
 use engine::render_mode::{RenderModeState, render_mode_system};
 
-const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga";
+const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/warsaw";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 #[derive(Resource, Default)]

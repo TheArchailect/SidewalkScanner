@@ -288,11 +288,29 @@ pub fn camera_controller(
             rotation_input += 1.0;
         }
 
+        // Handle keyboard pitch (W/S)
+        let mut pitch_input = 0.0;
+        if keyboard.pressed(KeyCode::KeyW) {
+            pitch_input -= 1.0;
+        }
+        if keyboard.pressed(KeyCode::KeyS) {
+            pitch_input += 1.0;
+        }
+
         // Apply rotation if keys are pressed
         if rotation_input != 0.0 {
-            let rotation_speed = 1.0 * time.delta_secs();
+            let rotation_speed = 2.5 * time.delta_secs();
             maps_camera.yaw += rotation_input * rotation_speed;
         }
+
+        // Apply pitch if keys are pressed
+        if pitch_input != 0.0 {
+            let pitch_speed = 2.5 * time.delta_secs();
+            maps_camera.pitch += pitch_input * pitch_speed;
+        }
+
+        // Prevents flipping
+        maps_camera.pitch = maps_camera.pitch.clamp(-1.55, -0.05);
 
         // Follow mouse with spacebar
         if is_following_mouse {
@@ -310,10 +328,10 @@ pub fn camera_controller(
         }
 
         // Simple camera positioning
-        let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
-        let horizontal_offset = yaw_rot * Vec3::new(0.0, 0.0, maps_camera.height * 0.5);
-        let target_pos = maps_camera.focus_point
-            + Vec3::new(horizontal_offset.x, maps_camera.height, horizontal_offset.z);
+        let orbit_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+        let forward = orbit_rot * -Vec3::Z;
+        let distance = maps_camera.height;
+        let target_pos = maps_camera.focus_point - forward * distance;
 
         let target_transform =
             Transform::from_translation(target_pos).looking_at(maps_camera.focus_point, Vec3::Y);
