@@ -19,7 +19,8 @@ pub fn create_direction_gizmo(
     commands.spawn((
         Mesh3d(meshes.add(Rectangle::new(1.0, 1.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(asset_server.load("./textures/arrow.png")),
+            //base_color_texture: Some(asset_server.load("./textures/arrow.png")), <-- Commented out to debug textures loading in frontend
+            base_color_texture: Some(asset_server.load("textures/arrow.png")),
             unlit: true,
             cull_mode: None,
             alpha_mode: AlphaMode::Blend,

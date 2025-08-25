@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>SidewalkScanner</title>
+        <style>
+            html,
+            body {
+                height: 100%;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                background: #000;
+            }
+            #bevy {
+                width: 100%;
+                height: 100%;
+                display: block;
+            }
+        </style>
+    <link rel="modulepreload" href="/renderer/point-cloud-wasm.js" crossorigin="anonymous" integrity="sha384-vM9k0syYX5dB1iScc4qKvwcKVUGNzYrUCL8CTgb+GbLyfMAeOOdfPXHufbIfSfAI"><link rel="preload" href="/renderer/point-cloud-wasm-bg.wasm" crossorigin="anonymous" integrity="sha384-zFUj3gT39cWeOPsDnJFTjlAqY54+xYm3hUwijo4X+DngCEihsh+S7epnPjHjUAtI" as="fetch" type="application/wasm"></head>
+    <body>
+        <!-- Tell Trunk to copy the assets directory -->
+        
+
+        <canvas id="bevy"></canvas>
+    
+<script type="module">
+import init, * as bindings from '/renderer/point-cloud-wasm.js';
+const wasm = await init({ module_or_path: '/renderer/point-cloud-wasm-bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script></body>
+</html>

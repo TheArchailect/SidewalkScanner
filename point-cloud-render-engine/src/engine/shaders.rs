@@ -20,10 +20,12 @@ pub struct PointCloudShader {
 
 impl Material for PointCloudShader {
     fn vertex_shader() -> ShaderRef {
-        "./shaders/point_cloud.wgsl".into()
+        // "./shaders/point_cloud.wgsl".into()  <-- Commented out to debug textures loading in frontend
+        "shaders/point_cloud.wgsl".into()
     }
 
     fn fragment_shader() -> ShaderRef {
-        "./shaders/point_cloud.wgsl".into()
+        // "./shaders/point_cloud.wgsl".into()  <-- Commented out to debug textures loading in frontend
+        "shaders/point_cloud.wgsl".into()
     }
 }

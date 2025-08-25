@@ -7,7 +7,7 @@ A modern, and lean development framework for web projects consisting of a dev se
 ```bash
 # All Node/NPM installs happen inside SideWalkScanner\frontend
 # Install React + Vite + TS
-cd frontend
+cd frontendV2
 npm install
 
 # Launch Vite dev server HMR

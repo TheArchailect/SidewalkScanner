@@ -98,7 +98,7 @@ fn load_manifest_system(
 ) {
     // Kick off
     if loader.handle.is_none() {
-        let path = "encoded_textures/warsaw_manifest_1k.json";
+        let path = "encoded_textures/warsaw.manifest.json";
         println!("Loading manifest: {path}");
         loader.handle = Some(asset_server.load(path));
         return;
@@ -173,6 +173,7 @@ fn create_default_plugins() -> impl PluginGroup {
     };
 
     let asset_config = AssetPlugin {
+        file_path: "renderer/assets".into(),    // Added default filepathing of asset plugin requests so JSON and Rust use no leading prefix
         meta_check: AssetMetaCheck::Never,
         ..default()
     };
