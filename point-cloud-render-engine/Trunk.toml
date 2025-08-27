@@ -1,0 +1,35 @@
+# Copy config for at build time copy X --> dist/Y
+
+[build]
+html_output = "SidewalkScanner.html"
+dist = "../frontend/public/renderer" 
+filehash = false    #   Disables hashing of generated file naming conventions
+no_sri = true       #   Disables SHA-3 file hash security - need to research security implications
+
+[[copy]]
+source = "assets"
+target = "assets"
+
+[[hooks]]
+stage = "post_build"
+command = "scripts/html_config.exe"
+
+
+###
+#Build section
+#The build section has configuration settings for the build process. These control the arguments passed to Cargo when building the application, and the generation of the assets.
+
+#Trunk [build] configs:
+#[build]
+#target = "index.html"       # The index HTML file to drive the bundling process.
+#html_output = "index.html"  # The name of the output HTML file.
+#release = false             # Build in release mode.
+#dist = "dist"               # The output dir for all final assets.
+#public_url = "/"            # The public URL from which assets are to be served.
+#filehash = true             # Whether to include hash values in the output file names.
+#inject_scripts = true       # Whether to inject scripts (and module preloads) into the finalized output.
+#offline = false             # Run without network access
+#frozen = false              # Require Cargo.lock and cache are up to date
+#locked = false              # Require Cargo.lock is up to date
+#minify = "never"            # Control minification: can be one of: never, on_release, always
+#no_sri = false              # Allow disabling sub-resource integrity (SRI)

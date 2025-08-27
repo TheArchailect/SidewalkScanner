@@ -140,6 +140,7 @@ fn create_default_plugins() -> impl PluginGroup {
     };
 
     let asset_config = AssetPlugin {
+        //file_path: "renderer/assets".into(),    // Added default filepathing
         meta_check: AssetMetaCheck::Never,
         ..default()
     };
