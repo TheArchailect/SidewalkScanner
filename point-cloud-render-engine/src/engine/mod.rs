@@ -1,5 +1,7 @@
 pub mod camera;
 pub mod compute_classification;
+pub mod edl_compute_depth;
+pub mod edl_post_processing;
 pub mod gizmos;
 pub mod grid;
 pub mod heightmap;

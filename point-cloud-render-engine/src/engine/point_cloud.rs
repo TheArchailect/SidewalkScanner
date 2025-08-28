@@ -19,9 +19,10 @@ pub struct PointCloud;
 pub struct PointCloudAssets {
     pub position_texture: Handle<Image>, // RGBA32F: XYZ + validity
     pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification (original)
-    pub final_texture: Handle<Image>,    // RGBA32F: Computed output for rendering
+    pub result_texture: Handle<Image>,   // RGBA32F: Computed output for rendering
     pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data
     pub heightmap_texture: Handle<Image>, // R32F: elevation
+    pub result_texture_depth_alpha: Handle<Image>, //
     pub bounds: Option<PointCloudBounds>,
     pub is_loaded: bool,
 }
@@ -146,13 +147,27 @@ pub fn check_textures_loaded(
         println!("Unified DDS textures loaded! Creating GPU point cloud...");
 
         configure_texture_sampling(&mut images, &assets);
+
         if let Some(original_image) = images.get(&assets.colour_class_texture) {
+            // Create both textures from the same source
             let mut final_image = original_image.clone();
             final_image.texture_descriptor.usage |=
                 bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
-            let final_handle = images.add(final_image);
-            assets.final_texture = final_handle;
-            println!("Created final_texture for compute shader output");
+
+            let mut edl_image = original_image.clone();
+            edl_image.texture_descriptor.usage =
+                bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
+                    | bevy::render::render_resource::TextureUsages::STORAGE_BINDING
+                    | bevy::render::render_resource::TextureUsages::COPY_SRC
+                    | bevy::render::render_resource::TextureUsages::COPY_DST;
+
+            // Add both to assets
+            assets.result_texture = images.add(final_image);
+            assets.result_texture_depth_alpha = images.add(edl_image);
+
+            println!(
+                "Created result_texture and result_texture_depth_alpha for compute shader pipeline"
+            );
         }
 
         let mesh = create_point_index_mesh(bounds.loaded_points);
@@ -219,7 +234,7 @@ fn create_point_cloud_material(
 ) -> PointCloudShader {
     PointCloudShader {
         position_texture: assets.position_texture.clone(),
-        final_texture: assets.final_texture.clone(),
+        final_texture: assets.result_texture_depth_alpha.clone(),
         params: [
             Vec4::new(
                 bounds.min_x() as f32,

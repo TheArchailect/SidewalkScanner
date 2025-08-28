@@ -1,15 +1,18 @@
-/// Point cloud renderer with unified texture pipeline
+use crate::engine::compute_classification::{
+    ComputeClassificationState, run_classification_compute,
+};
+use crate::engine::edl_compute_depth::{EDLRenderState, run_edl_compute};
 use bevy::asset::AssetMetaCheck;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PresentMode;
 use bevy_common_assets::json::JsonAssetPlugin;
+use engine::edl_compute_depth::EDLComputePlugin;
 use tools::class_selection::{ClassSelectionState, handle_class_selection};
-
 mod constants;
 mod engine;
 mod tools;
-
+use crate::engine::edl_post_processing::{EDLPostProcessPlugin, EDLSettings};
 use engine::{
     camera::{ViewportCamera, camera_controller},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
@@ -61,7 +64,27 @@ fn create_app() -> App {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
         .add_plugins(ComputeClassificationPlugin)
-        .init_resource::<BoundsLoader>()
+        .add_plugins(EDLComputePlugin)
+        .add_plugins(EDLPostProcessPlugin);
+
+    // Add render app setup here, after plugins are added
+    if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
+        render_app
+            .init_resource::<ComputeClassificationState>()
+            .init_resource::<PolygonClassificationData>()
+            .init_resource::<PointCloudAssets>()
+            .init_resource::<RenderModeState>()
+            .init_resource::<ClassSelectionState>()
+            .init_resource::<EDLRenderState>() // Add this
+            .add_systems(
+                bevy::render::Render,
+                (run_classification_compute, run_edl_compute)
+                    .chain()
+                    .in_set(bevy::render::RenderSet::Queue),
+            );
+    }
+
+    app.init_resource::<BoundsLoader>()
         .init_resource::<ClassSelectionState>()
         .insert_resource(create_point_cloud_assets(None))
         .add_systems(Update, handle_class_selection)
@@ -140,7 +163,7 @@ fn create_default_plugins() -> impl PluginGroup {
     };
 
     let asset_config = AssetPlugin {
-        //file_path: "renderer/assets".into(),    // Added default filepathing
+        //file_path: "renderer/assets".into(),
         meta_check: AssetMetaCheck::Never,
         ..default()
     };
@@ -175,7 +198,8 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
         position_texture: Handle::default(),
         colour_class_texture: Handle::default(),
         spatial_index_texture: Handle::default(),
-        final_texture: Handle::default(),
+        result_texture: Handle::default(),
+        result_texture_depth_alpha: Handle::default(),
         heightmap_texture: Handle::default(),
         bounds,
         is_loaded: false,
@@ -238,6 +262,7 @@ fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAsse
 
     assets.position_texture = asset_server.load(&position_texture_path);
     assets.colour_class_texture = asset_server.load(&colour_class_texture_path);
+    assets.result_texture_depth_alpha = Handle::default();
     assets.spatial_index_texture = asset_server.load(&spatial_index_texture_path);
     assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
 }
@@ -271,6 +296,10 @@ fn spawn_camera_fallback(commands: &mut Commands) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        EDLSettings {
+            radius: 8.0,
+            strength: 1.0,
+        },
     ));
     commands.insert_resource(ViewportCamera::default());
 }

@@ -2,7 +2,7 @@
 name = "point-cloud-render-engine"
 version = "0.1.0"
 edition = "2024"
-build = "build.rs"
+# build = "build.rs"
 
 [dependencies]
 bevy = { version = "0.16", features = ["exr", "dds", "webgpu"] }

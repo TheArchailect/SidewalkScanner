@@ -1,10 +1,11 @@
 # Copy config for at build time copy X --> dist/Y
 
 [build]
+target = "./point-cloud-render-engine/index.html"
 html_output = "SidewalkScanner.html"
-dist = "../frontend/public/renderer" 
-filehash = false    #   Disables hashing of generated file naming conventions
-no_sri = true       #   Disables SHA-3 file hash security - need to research security implications
+dist = "./frontend/public/renderer"
+filehash = false                                  #   Disables hashing of generated file naming conventions
+no_sri = true                                     #   Disables SHA-3 file hash security - need to research security implications
 
 [[copy]]
 source = "assets"
@@ -12,7 +13,7 @@ target = "assets"
 
 [[hooks]]
 stage = "post_build"
-command = "scripts/html_config.exe"
+command = "./point-cloud-render-engine/scripts/html_config.bin"
 
 
 ###

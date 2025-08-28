@@ -1,12 +1,70 @@
+# =============================================================================
+# RUST / CARGO
+# =============================================================================
+# Build output directories
 /*/target
 /target
+Cargo.lock
+
+# =============================================================================
+# NODE.JS / NPM
+# =============================================================================
+# Dependencies
+node_modules
+
+# Build output
 /*/dist
 /dist
+dist
+dist-ssr
 
-Cargo.lock
+# Debug logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local environment files
+*.local
+
+# Lock files (except package-lock.json which should typically be committed)
+*.lock
+
+# =============================================================================
+# EDITORS & IDEs
+# =============================================================================
+# Visual Studio Code
 .vscode/
+.vscode/*
+!.vscode/extensions.json  # Keep shared extension recommendations
 
+# JetBrains IDEs (IntelliJ, WebStorm, etc.)
+.idea
+
+# Visual Studio
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# =============================================================================
+# OPERATING SYSTEM
+# =============================================================================
+# macOS
+.DS_Store
+
+# =============================================================================
+# PROJECT-SPECIFIC
+# =============================================================================
+# Asset files
 assets/*
+frontend/public/*
+# Data files
+*.bin
 *.dds
 *.las
 *.laz

@@ -23,19 +23,8 @@ pub struct ComputeClassificationPlugin;
 impl Plugin for ComputeClassificationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ComputeClassificationState>()
-            .add_systems(Update, trigger_classification_compute);
-
-        // Update the plugin:
-        if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
-            render_app
-                .init_resource::<ComputeClassificationState>()
-                .init_resource::<PolygonClassificationData>()
-                .init_resource::<PointCloudAssets>()
-                .init_resource::<RenderModeState>()
-                .init_resource::<ClassSelectionState>()
-                .add_systems(bevy::render::Render, run_classification_compute);
-        }
-        app.add_plugins(ExtractResourcePlugin::<ComputeClassificationState>::default())
+            .add_systems(Update, trigger_classification_compute)
+            .add_plugins(ExtractResourcePlugin::<ComputeClassificationState>::default())
             .add_plugins(ExtractResourcePlugin::<PolygonClassificationData>::default())
             .add_plugins(ExtractResourcePlugin::<PointCloudAssets>::default())
             .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default())
@@ -105,7 +94,7 @@ pub fn run_classification_compute(
         return;
     };
 
-    let Some(final_gpu) = gpu_images.get(&assets.final_texture) else {
+    let Some(final_gpu) = gpu_images.get(&assets.result_texture) else {
         return;
     };
 

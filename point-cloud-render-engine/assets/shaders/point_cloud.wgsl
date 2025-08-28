@@ -73,5 +73,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
+    let depth = in.color.a;
+    let normalized_depth = clamp((depth - 1.0) / (50.0 - 1.0), 0.0, 1.0);
+    return vec4<f32>(in.color.xyz, normalized_depth);
 }
