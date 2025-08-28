@@ -96,6 +96,7 @@ pub fn run_edl_compute(
     mut render_queue: ResMut<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    camera_query: Query<&GlobalTransform, (With<Camera3d>, Changed<GlobalTransform>)>,
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
 ) {
@@ -158,6 +159,11 @@ pub fn run_edl_compute(
         return;
     };
 
+    let mut camera_pos = Vec3::ZERO;
+    if let Ok(camera_transform) = camera_query.single() {
+        camera_pos = camera_transform.translation();
+    }
+
     execute_depth_compute(
         &render_device,
         &mut render_queue,
@@ -166,6 +172,7 @@ pub fn run_edl_compute(
         position_gpu,
         final_gpu,
         edl_gpu,
+        camera_pos,
         &edl_state,
     );
 }
@@ -245,6 +252,7 @@ fn execute_depth_compute(
     position_gpu: &GpuImage,
     final_gpu: &GpuImage,
     edl_gpu: &GpuImage,
+    camera_pos: Vec3,
     state: &EDLComputeState,
 ) {
     use bytemuck::{Pod, Zeroable};

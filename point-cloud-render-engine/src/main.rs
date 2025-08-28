@@ -13,6 +13,7 @@ mod constants;
 mod engine;
 mod tools;
 use crate::engine::edl_post_processing::{EDLPostProcessPlugin, EDLSettings};
+use crate::engine::point_cloud::update_camera_uniform;
 use engine::{
     camera::{ViewportCamera, camera_controller},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
@@ -20,7 +21,6 @@ use engine::{
     point_cloud::check_textures_loaded,
     point_cloud::{PointCloudAssets, PointCloudBounds},
 };
-
 use tools::polygon::{
     PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
     update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
@@ -67,7 +67,6 @@ fn create_app() -> App {
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin);
 
-    // Add render app setup here, after plugins are added
     if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
         render_app
             .init_resource::<ComputeClassificationState>()
@@ -75,7 +74,7 @@ fn create_app() -> App {
             .init_resource::<PointCloudAssets>()
             .init_resource::<RenderModeState>()
             .init_resource::<ClassSelectionState>()
-            .init_resource::<EDLRenderState>() // Add this
+            .init_resource::<EDLRenderState>()
             .add_systems(
                 bevy::render::Render,
                 (run_classification_compute, run_edl_compute)
@@ -91,6 +90,7 @@ fn create_app() -> App {
         .add_systems(Startup, setup)
         .add_systems(Update, (load_bounds_system, check_textures_loaded))
         .add_systems(Update, (fps_text_update_system, camera_controller))
+        .add_systems(Update, update_camera_uniform)
         .add_systems(
             Update,
             (update_direction_gizmo, update_mouse_intersection_gizmo),
@@ -297,8 +297,10 @@ fn spawn_camera_fallback(commands: &mut Commands) {
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         EDLSettings {
-            radius: 8.0,
-            strength: 1.0,
+            radius: 4.0,
+            strength: 100.0,
+            ambient_boost: 0.8,
+            contrast: 1.2,
         },
     ));
     commands.insert_resource(ViewportCamera::default());

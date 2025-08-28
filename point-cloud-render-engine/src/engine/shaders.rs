@@ -17,7 +17,7 @@ pub struct PointCloudShader {
     pub final_texture: Handle<Image>, // Output from compute shader
 
     #[uniform(4)]
-    pub params: [Vec4; 2], // [min_bounds + texture_size, max_bounds]
+    pub params: [Vec4; 3], // params[0] = min_bounds+size, params[1] = max_bounds, params[2] = camera_pos+padding
 }
 
 impl Material for PointCloudShader {

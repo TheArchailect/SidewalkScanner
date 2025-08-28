@@ -2,13 +2,13 @@ use super::{
     grid::{GridCreated, create_ground_grid},
     shaders::PointCloudShader,
 };
-use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::{
     asset::LoadState,
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     render::view::NoFrustumCulling,
 };
+use bevy::{math::VectorSpace, prelude::*};
 use bevy::{render::mesh::PrimitiveTopology, render::render_asset::RenderAssetUsages};
 
 #[derive(Component)]
@@ -227,6 +227,21 @@ fn configure_texture_sampling(images: &mut ResMut<Assets<Image>>, assets: &Point
     }
 }
 
+pub fn update_camera_uniform(
+    camera_query: Query<&GlobalTransform, (With<Camera3d>, Changed<GlobalTransform>)>,
+    point_cloud_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
+    mut materials: ResMut<Assets<PointCloudShader>>,
+) {
+    if let Ok(camera_transform) = camera_query.single() {
+        if let Ok(material_handle) = point_cloud_query.single() {
+            if let Some(material) = materials.get_mut(&material_handle.0) {
+                let pos = camera_transform.translation();
+                material.params[2] = Vec4::new(pos.x, pos.y, pos.z, 0.0);
+            }
+        }
+    }
+}
+
 /// Create point cloud shader material with unified texture bindings
 fn create_point_cloud_material(
     bounds: &PointCloudBounds,
@@ -235,6 +250,7 @@ fn create_point_cloud_material(
     PointCloudShader {
         position_texture: assets.position_texture.clone(),
         final_texture: assets.result_texture_depth_alpha.clone(),
+
         params: [
             Vec4::new(
                 bounds.min_x() as f32,
@@ -248,6 +264,7 @@ fn create_point_cloud_material(
                 bounds.max_z() as f32,
                 0.0,
             ),
+            Vec4::new(0.0, 0.0, 0.0, 0.0),
         ],
     }
 }
@@ -288,12 +305,23 @@ fn spawn_point_cloud_entity(
 }
 
 /// Create point index mesh for GPU texture sampling
+// pub fn create_point_index_mesh(point_count: usize) -> Mesh {
+//     let mut mesh = Mesh::new(
+//         PrimitiveTopology::PointList,
+//         RenderAssetUsages::RENDER_WORLD,
+//     );
+//     let indices: Vec<[f32; 3]> = (0..point_count).map(|i| [i as f32, 0.0, 0.0]).collect();
+//     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, indices);
+//     mesh
+// }
+
 pub fn create_point_index_mesh(point_count: usize) -> Mesh {
     let mut mesh = Mesh::new(
-        PrimitiveTopology::PointList,
+        PrimitiveTopology::TriangleList, // Changed from PointList
         RenderAssetUsages::RENDER_WORLD,
     );
-    let indices: Vec<[f32; 3]> = (0..point_count).map(|i| [i as f32, 0.0, 0.0]).collect();
+    let vertex_count = point_count * 6; // 6 vertices per point (2 triangles)
+    let indices: Vec<[f32; 3]> = (0..vertex_count).map(|i| [i as f32, 0.0, 0.0]).collect();
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, indices);
     mesh
 }

@@ -4,6 +4,8 @@
 struct EDLSettings {
     radius: f32,
     strength: f32,
+    ambient_boost: f32,
+    contrast: f32,
 }
 
 @group(0) @binding(2) var<uniform> settings: EDLSettings;
@@ -33,15 +35,19 @@ fn fragment(input: FragmentInput) -> @location(0) vec4<f32> {
     var total_obscurance = 0.0;
     var valid_samples = 0u;
 
-    // Sample 4 orthogonal neighbors
-    let sample_offsets = array<vec2<i32>, 4>(
-        vec2<i32>(0, -i32(settings.radius)),  // Up
-        vec2<i32>(-i32(settings.radius), 0),  // Left
-        vec2<i32>(i32(settings.radius), 0),   // Right
-        vec2<i32>(0, i32(settings.radius))    // Down
+    let sample_offsets = array<vec2<i32>, 8>(
+        vec2<i32>(0, -i32(settings.radius)),      // Up
+        vec2<i32>(i32(settings.radius * 0.707), -i32(settings.radius * 0.707)),  // Up-Right
+        vec2<i32>(i32(settings.radius), 0),       // Right
+        vec2<i32>(i32(settings.radius * 0.707), i32(settings.radius * 0.707)),   // Down-Right
+        vec2<i32>(0, i32(settings.radius)),       // Down
+        vec2<i32>(-i32(settings.radius * 0.707), i32(settings.radius * 0.707)),  // Down-Left
+        vec2<i32>(-i32(settings.radius), 0),      // Left
+        vec2<i32>(-i32(settings.radius * 0.707), -i32(settings.radius * 0.707)) // Up-Left
     );
 
-    for (var i = 0u; i < 4u; i++) {
+
+    for (var i = 0u; i < 8u; i++) {
         let neighbor_coords = pixel_coords + sample_offsets[i];
 
         // Check bounds
@@ -52,10 +58,11 @@ fn fragment(input: FragmentInput) -> @location(0) vec4<f32> {
             let neighbor_depth = neighbor_sample.a;
 
             if neighbor_depth > 0.0 {
-                // Calculate depth difference in log space
-                let log_current = log2(max(current_depth, 0.001));
-                let log_neighbor = log2(max(neighbor_depth, 0.001));
-                let depth_diff = max(0.0, log_current - log_neighbor);
+                // // Calculate depth difference in log space
+                // let log_current = log2(max(current_depth, 0.001));
+                // let log_neighbor = log2(max(neighbor_depth, 0.001));
+                // let depth_diff = max(0.0, log_current - log_neighbor);
+                let depth_diff = max(0.0, current_depth - neighbor_depth);
 
                 total_obscurance += depth_diff;
                 valid_samples += 1u;
@@ -66,10 +73,12 @@ fn fragment(input: FragmentInput) -> @location(0) vec4<f32> {
     // Calculate shade factor
     var shade = 1.0;
     if valid_samples > 0u {
-        let avg_obscurance = total_obscurance / f32(valid_samples);
-        shade = exp(-avg_obscurance * 300.0 * settings.strength);
-        shade = clamp(shade, 0.1, 1.0);
+        if (total_obscurance < 0.5) {
+            let avg_obscurance = total_obscurance / f32(valid_samples);
+            shade = exp(-avg_obscurance * settings.strength);
+            shade = clamp(shade, 0.01, 1.0);
+        }
     }
 
-    return vec4<f32>(current_sample.rgb * shade, current_sample.a);
+    return vec4<f32>(current_sample.rgb * shade, 1.0);
 }

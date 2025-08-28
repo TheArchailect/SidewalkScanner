@@ -69,6 +69,8 @@ struct EDLPostProcessLabel;
 pub struct EDLSettings {
     pub radius: f32,
     pub strength: f32,
+    pub ambient_boost: f32,
+    pub contrast: f32,
 }
 
 #[derive(Default)]

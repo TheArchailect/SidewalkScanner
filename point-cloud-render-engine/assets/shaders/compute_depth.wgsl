@@ -12,6 +12,16 @@ struct EDLUniforms {
     _padding3: f32,
 }
 
+fn normalizeRange(x: f32, n: f32, m: f32) -> f32 {
+    return clamp((x - n) / (m - n), 0.0, 1.0);
+}
+
+fn normalizeDepthLog(d: f32, near: f32, far: f32) -> f32 {
+    let nd = log(d / near) / log(far / near);
+    return clamp(nd, 0.0, 1.0);
+}
+
+
 @group(0) @binding(3) var<uniform> edl_params: EDLUniforms;
 
 @compute @workgroup_size(8, 8, 1)
@@ -23,7 +33,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    var depth_camera = vec3<f32>(edl_params.camera_pos.x, 10.0, edl_params.camera_pos.z);
+    var depth_camera = vec3<f32>(edl_params.camera_pos.x, edl_params.camera_pos.y, edl_params.camera_pos.z);
     let position_sample = textureLoad(position_texture, coords, 0);
     let color_sample = textureLoad(color_input, coords, 0);
     var final_depth = 0.0;
@@ -61,6 +71,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         }
     }
 
+    // depth buffer hack, this needs to be re-writen with some more complex logic
+    let norm_depth = normalizeRange(final_depth, 0.0 , edl_params.camera_pos.y * 2.0);
+    // let norm_depth = normalizeDepthLog(final_depth, 0.1, edl_params.camera_pos.y * 2.0);
+    let noise = fract(sin(dot(vec2<f32>(coords), vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let dithered_depth = norm_depth + (noise - 0.5) * 0.001;
+
+    // let near = 0.1;
+    // let far = edl_params.camera_pos.y;
+    // let norm_depth = (final_depth - near) / (far - near);
+
     // Store color in RGB, depth in alpha for fragment shader
-    textureStore(color_output, coords, vec4<f32>(color_sample.rgb, final_depth));
+    textureStore(color_output, coords, vec4<f32>(color_sample.rgb, dithered_depth));
 }
