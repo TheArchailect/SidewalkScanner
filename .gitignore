@@ -11,6 +11,7 @@ Cargo.lock
 # =============================================================================
 # Dependencies
 node_modules
+frontend/package-lock.json
 
 # Build output
 /*/dist
@@ -61,6 +62,7 @@ lerna-debug.log*
 # PROJECT-SPECIFIC
 # =============================================================================
 # Asset files
+point-cloud-render-engine/assets/pre_processor_data/*
 assets/*
 frontend/public/*
 # Data files
@@ -68,4 +70,3 @@ frontend/public/*
 *.dds
 *.las
 *.laz
-*.json
