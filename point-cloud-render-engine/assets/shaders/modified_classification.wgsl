@@ -81,21 +81,21 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
     switch compute_data.render_mode {
         case 0u: { // Original classification
-            return vec4<f32>(classification_to_color(original_class), f32(original_class) / 255.0);
+            return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
-            return vec4<f32>(classification_to_color(final_class), f32(final_class) / 255.0);
+            return vec4<f32>(classification_to_color(final_class), f32(point_connectivity_class_id));
         }
         case 2u: { // RGB with classification brightness
             if length(original_rgb) > 0.1 {
                 let brightness = classification_brightness(final_class);
-                return vec4<f32>(original_rgb * brightness, f32(final_class) / 255.0);
+                return vec4<f32>(original_rgb * brightness, f32(point_connectivity_class_id));
             } else {
-                return vec4<f32>(classification_to_color(final_class), f32(final_class) / 255.0);
+                return vec4<f32>(classification_to_color(final_class), f32(point_connectivity_class_id));
             }
         }
         case 3u: { // Morton code debug
-            return vec4<f32>(morton_to_debug_color_blended(morton_low, morton_high), 1.0);
+            return vec4<f32>(morton_to_debug_color_blended(morton_low, morton_high), f32(point_connectivity_class_id));
         }
         case 4u: { // Spatial Debug - show which points were considered for early termination
             var was_considered = 0.0;
@@ -111,17 +111,17 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             }
 
             if was_considered > 0.5 {
-                return vec4<f32>(1.0, 0.0, 0.0, f32(final_class) / 255.0); // Red = considered
+                return vec4<f32>(1.0, 0.0, 0.0, f32(point_connectivity_class_id)); // Red = considered
             } else {
-                return vec4<f32>(0.0, 0.0, 1.0, f32(final_class) / 255.0); // Blue = culled
+                return vec4<f32>(0.0, 0.0, 1.0, f32(point_connectivity_class_id)); // Blue = culled
             }
         }
         case 5u: {
-            return vec4<f32>(classification_to_color(point_connectivity_class_id), 1.0);
+            return vec4<f32>(classification_to_color(point_connectivity_class_id), f32(point_connectivity_class_id));
 
         }
         default: {
-            return vec4<f32>(original_rgb, f32(final_class) / 255.0);
+            return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
         }
     }
 }

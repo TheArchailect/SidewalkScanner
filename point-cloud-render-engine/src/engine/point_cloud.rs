@@ -4,7 +4,7 @@ use super::{
 };
 use bevy::render::{
     extract_resource::ExtractResource,
-    render_resource::{Extent3d, TextureDimension},
+    render_resource::{Buffer, Extent3d, TextureDimension},
 };
 use bevy::{
     asset::LoadState,
@@ -30,6 +30,8 @@ pub struct PointCloudAssets {
     // Compute Phase: 2
     pub result_texture: Handle<Image>, // RGBA32F: RenderMode = RGB (modified) + A = Depth
 
+    // to do
+    // pub selected_connectivity_classes: ,
     pub bounds: Option<PointCloudBounds>,
     pub is_loaded: bool,
 }
@@ -115,7 +117,7 @@ impl PointCloudBounds {
 }
 
 /// Check texture loading and create point cloud when ready
-pub fn check_textures_loaded(
+pub fn point_cloud_asset_create(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<PointCloudShader>>,

@@ -1,7 +1,6 @@
 @group(0) @binding(0) var position_texture: texture_2d<f32>;
 @group(0) @binding(1) var color_input: texture_2d<f32>;
-// @group(0) @binding(2) var color_output: texture_storage_2d<rgba32float, write>;
-@group(0) @binding(2) var color_output: texture_storage_2d<r32float, write>;
+@group(0) @binding(2) var depth_output: texture_storage_2d<r32float, write>;
 
 struct EDLUniforms {
     view_matrix: mat4x4<f32>,
@@ -76,11 +75,5 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let noise = fract(sin(dot(vec2<f32>(coords), vec2<f32>(12.9898, 78.233))) * 43758.5453);
     let dithered_depth = norm_depth + (noise - 0.5) * 0.001;
 
-    // let near = 0.1;
-    // let far = edl_params.camera_pos.y;
-    // let norm_depth = (final_depth - near) / (far - near);
-
-    // Store color in RGB, depth in alpha for fragment shader
-    // textureStore(color_output, coords, vec4<f32>(color_sample.rgb, dithered_depth));
-    textureStore(color_output, coords, vec4<f32>(dithered_depth, 0.0, 0.0, 0.0));
+    textureStore(depth_output, coords, vec4<f32>(dithered_depth, 0.0, 0.0, 0.0));
 }

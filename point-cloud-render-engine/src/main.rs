@@ -18,7 +18,7 @@ use engine::{
     camera::{ViewportCamera, camera_controller},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
     grid::GridCreated,
-    point_cloud::check_textures_loaded,
+    point_cloud::point_cloud_asset_create,
     point_cloud::{PointCloudAssets, PointCloudBounds},
 };
 use tools::polygon::{
@@ -75,6 +75,7 @@ fn create_app() -> App {
             .init_resource::<RenderModeState>()
             .init_resource::<ClassSelectionState>()
             .init_resource::<EDLRenderState>()
+            .init_resource::<SelectionBuffer>()
             .add_systems(
                 bevy::render::Render,
                 (run_classification_compute, run_edl_compute)
@@ -85,31 +86,33 @@ fn create_app() -> App {
 
     app.init_resource::<BoundsLoader>()
         .init_resource::<ClassSelectionState>()
+        .init_resource::<SelectionBuffer>()
+        .init_resource::<PolygonClassificationData>()
+        .init_resource::<PolygonCounter>()
+        .init_resource::<PolygonTool>()
+        .init_resource::<RenderModeState>()
+        .init_resource::<GridCreated>()
         .insert_resource(create_point_cloud_assets(None))
-        .add_systems(Update, handle_class_selection)
         .add_systems(Startup, setup)
-        .add_systems(Update, (load_bounds_system, check_textures_loaded))
-        .add_systems(Update, (fps_text_update_system, camera_controller))
-        .add_systems(Update, update_camera_uniform)
-        .add_systems(
-            Update,
-            (update_direction_gizmo, update_mouse_intersection_gizmo),
-        )
         .add_systems(
             Update,
             (
+                load_bounds_system,
+                point_cloud_asset_create,
+                handle_class_selection,
+                fps_text_update_system,
+                camera_controller,
+                update_camera_uniform,
+                update_direction_gizmo,
+                update_mouse_intersection_gizmo,
                 polygon_tool_system,
                 update_polygon_preview,
                 update_polygon_render,
                 render_mode_system,
+                update_selection_buffer,
+                update_polygon_classification_shader,
             ),
-        )
-        .init_resource::<PolygonClassificationData>()
-        .add_systems(Update, update_polygon_classification_shader)
-        .init_resource::<PolygonCounter>()
-        .init_resource::<PolygonTool>()
-        .init_resource::<RenderModeState>()
-        .init_resource::<GridCreated>();
+        );
 
     app
 }
@@ -221,7 +224,7 @@ fn setup(
 
     load_unified_textures(&asset_server, &mut assets);
     spawn_lighting(&mut commands);
-    spawn_camera_fallback(&mut commands);
+    create_edl_post_processor_camera(&mut commands);
     spawn_ui(&mut commands);
     spawn_gizmos(&mut commands, &mut meshes, &mut materials, &asset_server);
 }
@@ -291,8 +294,7 @@ fn spawn_lighting(commands: &mut Commands) {
     ));
 }
 
-fn spawn_camera_fallback(commands: &mut Commands) {
-    // Spawn default camera - will be updated once bounds are loaded
+fn create_edl_post_processor_camera(commands: &mut Commands) {
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
@@ -342,5 +344,44 @@ fn fps_text_update_system(
                 text.0 = format!("FPS: {value:.1}");
             }
         }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct SelectionBuffer {
+    pub selected_ids: Vec<u32>,
+}
+
+fn update_selection_buffer(
+    mut selection_buffer: ResMut<SelectionBuffer>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if mouse_button.just_pressed(MouseButton::Left) {
+        println!("add selection id");
+        selection_buffer.selected_ids.push(2);
+    }
+
+    // Number keys 1-9 to set specific IDs
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(10);
+    }
+    if keyboard.just_pressed(KeyCode::Digit2) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(11);
+    }
+    if keyboard.just_pressed(KeyCode::Digit3) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(12);
+    }
+    if keyboard.just_pressed(KeyCode::Digit4) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(13);
+    }
+
+    // Clear all selections
+    if keyboard.just_pressed(KeyCode::KeyC) {
+        selection_buffer.selected_ids.clear();
     }
 }

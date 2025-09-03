@@ -1,10 +1,10 @@
 use crate::engine::render_mode::RenderMode;
+use bevy::render::render_resource::BufferVec;
 use bevy::{
     prelude::*,
     reflect::TypePath,
     render::render_resource::{AsBindGroup, ShaderRef},
 };
-
 /// Simplified point cloud shader material - only textures needed for rendering
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct PointCloudShader {
@@ -22,6 +22,10 @@ pub struct PointCloudShader {
 
     #[uniform(6)]
     pub params: [Vec4; 3], // params[0] = min_bounds+size, params[1] = max_bounds, params[2] = camera_pos+padding
+
+                           // #[storage(7, read_only)]
+                           // i cant use a buffervec here
+                           // pub selection_ids: BufferVec<u32>,
 }
 
 impl Material for PointCloudShader {

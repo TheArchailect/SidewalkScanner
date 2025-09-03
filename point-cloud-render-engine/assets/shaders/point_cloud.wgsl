@@ -19,8 +19,9 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @location(0) color: vec3<f32>,
     @location(1) depth: f32,
+    @location(2) connectivity_class: u32,
 }
 
 @vertex
@@ -66,8 +67,21 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     let right = normalize(cross(to_camera, vec3<f32>(0.0, 1.0, 0.0)));
     let up = cross(right, to_camera);
 
-    // Apply billboarded quad offset
-    let point_size = 0.075;
+    // Apply interpolated billboarded quad offset
+    let point_size_min = 0.05;
+    let point_size_max = 0.2;
+
+    let dist_min = 10.0;
+    let dist_max = 100.0;
+
+    let dist = distance(world_pos, camera);
+
+    // normalised 0..1 factor based on distance
+    let t = clamp((dist - dist_min) / (dist_max - dist_min), 0.0, 1.0);
+
+    // linear interpolation between min and max point sizes
+    let point_size = mix(point_size_min, point_size_max, t);
+
     let offset = right * quad_pos.x * point_size + up * quad_pos.y * point_size;
     let final_world_pos = world_pos + offset;
 
@@ -83,9 +97,24 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
 
     // Sample final color
     let tex_coord = vec2<i32>(i32(x_coord), i32(y_coord));
-    out.color = textureLoad(final_texture, tex_coord, 0);
+    let current_rgba = textureLoad(final_texture, tex_coord, 0);
+    out.color = current_rgba.rgb;
+    out.connectivity_class = u32(current_rgba.a);
     out.depth = textureLoad(depth_texture, tex_coord, 0).r;
     return out;
+}
+
+fn classification_to_color(classification: u32) -> vec3<f32> {
+    let c = classification & 255u;
+    let hash1 = (c * 73u) % 255u;
+    let hash2 = (c * 151u + 17u) % 255u;
+    let hash3 = (c * 211u + 37u) % 255u;
+
+    return vec3<f32>(
+        f32(hash1) / 255.0,
+        f32(hash2) / 255.0,
+        f32(hash3) / 255.0
+    );
 }
 
 @fragment
@@ -97,5 +126,6 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let depth_rb = mix(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.1), norm_depth);
 
     // return vec4<f32>(depth_rb, depth);
-    return vec4<f32>(in.color.xyz, depth);
+    return vec4<f32>(in.color, depth);
+    // return vec4<f32>(classification_to_color(in.connectivity_class), depth);
 }
