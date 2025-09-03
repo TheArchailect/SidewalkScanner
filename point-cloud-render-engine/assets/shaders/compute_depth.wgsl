@@ -56,12 +56,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
                 if nx >= 0 && nx < i32(texture_size.x) && ny >= 0 && ny < i32(texture_size.y) {
                     let neighbor_pos = textureLoad(position_texture, vec2<u32>(u32(nx), u32(ny)), 0);
-                    if neighbor_pos.a > 0.0 {
-                        let neighbor_world = edl_params.bounds_min + neighbor_pos.xyz * (edl_params.bounds_max - edl_params.bounds_min);
-                        let neighbor_depth = length(neighbor_world - depth_camera);
-                        total_depth += neighbor_depth;
-                        count += 1u;
-                    }
+                    let neighbor_world = edl_params.bounds_min + neighbor_pos.xyz * (edl_params.bounds_max - edl_params.bounds_min);
+                    let neighbor_depth = length(neighbor_world - depth_camera);
+                    total_depth += neighbor_depth;
+                    count += 1u;
                 }
             }
         }

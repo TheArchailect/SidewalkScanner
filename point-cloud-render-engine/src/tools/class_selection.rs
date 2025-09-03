@@ -6,7 +6,7 @@ use bevy::window::PrimaryWindow;
 
 #[derive(Resource, Default, ExtractResource, Clone)]
 pub struct ClassSelectionState {
-    pub selection_point: Option<Vec2>,
+    pub selection_point: Option<Vec3>,
     pub is_selecting: bool,
 }
 
@@ -42,8 +42,8 @@ pub fn handle_class_selection(
                     images.get(&assets.heightmap_texture),
                     assets.bounds.as_ref(),
                 ) {
-                    // Convert to Vec2 (XZ plane) for the selection point
-                    selection_state.selection_point = Some(Vec2::new(world_pos.x, world_pos.z));
+                    selection_state.selection_point =
+                        Some(Vec3::new(world_pos.x, world_pos.y, world_pos.z));
                     println!("Selected point: {:?}", selection_state.selection_point);
                 }
             }

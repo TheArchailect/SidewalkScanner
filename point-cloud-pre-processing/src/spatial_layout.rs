@@ -11,6 +11,7 @@ pub struct SpatialPoint {
     pub spatial_cell_id: u32,
     pub classification: u8,
     pub color: Option<(u16, u16, u16)>,
+    pub object_number: f32,
 }
 
 /// Spatial texture generator with Z-order layout
@@ -36,6 +37,7 @@ impl SpatialTextureGenerator {
         world_pos: (f64, f64, f64),
         classification: u8,
         color: Option<(u16, u16, u16)>,
+        object_number: f32,
     ) {
         let norm_pos = (
             self.bounds.normalize_x(world_pos.0),
@@ -60,6 +62,7 @@ impl SpatialTextureGenerator {
             spatial_cell_id,
             classification,
             color,
+            object_number,
         };
 
         self.points.push(spatial_point);
@@ -108,7 +111,7 @@ impl SpatialTextureGenerator {
                 position_data[base_idx] = point.norm_pos.0;
                 position_data[base_idx + 1] = point.norm_pos.1;
                 position_data[base_idx + 2] = point.norm_pos.2;
-                position_data[base_idx + 3] = 1.0; // Validity marker
+                position_data[base_idx + 3] = point.object_number / 121.0;
             }
         }
 

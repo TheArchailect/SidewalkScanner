@@ -8,7 +8,7 @@ struct ComputeUniformData {
    total_points: u32,
    render_mode: u32,
    enable_spatial_opt: u32,
-   selection_point: vec2<f32>,
+   selection_point: vec3<f32>,
    is_selecting: u32,
    _padding: u32,
    point_data: array<vec4<f32>, 512>,
@@ -26,6 +26,9 @@ struct BoundsData {
 
 @group(0) @binding(5) var<uniform> bounds: BoundsData;
 
+const GRID_RESOLUTION: u32 = 512u;
+const MORTON_THRESHOLD = 1000u; // Empirical threshold - represents spatial distance in Morton space
+
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let coords = global_id.xy;
@@ -38,11 +41,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let original_sample = textureLoad(original_texture, coords, 0);
     let position_sample = textureLoad(position_texture, coords, 0);
 
-    if position_sample.a == 0.0 {
-        textureStore(output_texture, coords, vec4<f32>(0.0));
-        return;
-    }
-
+    let point_connectivity_class_id = u32(position_sample.a * 255.0);
     let world_pos = bounds.min_bounds + position_sample.xyz * (bounds.max_bounds - bounds.min_bounds);
     let original_rgb = original_sample.rgb;
     let original_class = u32(original_sample.a * 255.0);
@@ -53,8 +52,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let morton_low = bitcast<u32>(spatial_sample.g);
 
     var final_class = original_class;
-    var tests_performed = 0u;
-    var tests_skipped = 0u;
 
     for (var i = 0u; i < compute_data.polygon_count; i++) {
         let poly_info = compute_data.polygon_info[i];
@@ -63,96 +60,25 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let new_class = u32(poly_info.z);
 
         if compute_data.enable_spatial_opt == 1u {
-            if is_point_near_polygon(world_pos.xz, start_idx, point_count) {
-                tests_performed += 1u;
+            // Morton code early termination: skip expensive polygon test if spatially distant
+            // Mathematical rationale: Z-order curve preserves locality, so Morton distance
+            // correlates with geometric distance in 2D space
+            if is_point_near_polygon(world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz, GRID_RESOLUTION) {
+                // Only perform expensive point-in-polygon test if Morton codes suggest proximity
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
                     final_class = new_class;
-                    break;
+                    break; // Early termination: first matching polygon wins
                 }
-            } else {
-                tests_skipped += 1u;
-            }
-        } else {
-            tests_performed += 1u;
-            if point_in_polygon(world_pos.xz, start_idx, point_count) {
-                final_class = new_class;
-                break;
             }
         }
     }
 
-    let final_color = apply_render_mode(original_rgb, original_class, final_class, world_pos, coords, morton_low, tests_performed);
+    let final_color = apply_render_mode(original_rgb, original_class, final_class, world_pos, coords, morton_low, morton_high, point_connectivity_class_id);
     textureStore(output_texture, coords, final_color);
 }
 
-fn is_point_near_polygon(point: vec2<f32>, start_idx: u32, point_count: u32) -> bool {
-    if point_count == 0u { return false; }
 
-    var min_x = compute_data.point_data[start_idx].x;
-    var max_x = min_x;
-    var min_z = compute_data.point_data[start_idx].y;
-    var max_z = min_z;
-
-    for (var i = 1u; i < point_count; i++) {
-        let pt = compute_data.point_data[start_idx + i].xy;
-        min_x = min(min_x, pt.x);
-        max_x = max(max_x, pt.x);
-        min_z = min(min_z, pt.y);
-        max_z = max(max_z, pt.y);
-    }
-
-    let margin = 1.0;
-    return point.x >= (min_x - margin) && point.x <= (max_x + margin) &&
-           point.y >= (min_z - margin) && point.y <= (max_z + margin);
-}
-
-fn find_nearest_class_at_point(selection_point: vec2<f32>) -> u32 {
-    let texture_size = textureDimensions(original_texture);
-    let search_radius = 5.0;
-
-    var closest_distance = 999999.0;
-    var closest_class = 2u;
-
-    // Convert to texture coordinates
-    let norm_x = (selection_point.x - bounds.min_bounds.x) / (bounds.max_bounds.x - bounds.min_bounds.x);
-    let norm_z = (selection_point.y - bounds.min_bounds.z) / (bounds.max_bounds.z - bounds.min_bounds.z);
-    let center_x = u32(clamp(norm_x, 0.0, 1.0) * f32(texture_size.x - 1u));
-    let center_y = u32(clamp(norm_z, 0.0, 1.0) * f32(texture_size.y - 1u));
-
-    // Search in 10x10 pixel area
-    for (var dy = -5i; dy <= 5i; dy++) {
-        for (var dx = -5i; dx <= 5i; dx++) {
-            let sample_x = i32(center_x) + dx;
-            let sample_y = i32(center_y) + dy;
-
-            if sample_x >= 0 && sample_x < i32(texture_size.x) &&
-               sample_y >= 0 && sample_y < i32(texture_size.y) {
-
-                let sample_coords = vec2<u32>(u32(sample_x), u32(sample_y));
-                let position_sample = textureLoad(position_texture, sample_coords, 0);
-
-                if position_sample.a > 0.0 {
-                    let world_pos = bounds.min_bounds + position_sample.xyz * (bounds.max_bounds - bounds.min_bounds);
-                    let distance = length(world_pos.xz - selection_point);
-
-                    if distance < closest_distance {
-                        let class_sample = textureLoad(original_texture, sample_coords, 0);
-                        let point_class = u32(class_sample.a * 255.0);
-
-                        if point_class > 0u {
-                            closest_distance = distance;
-                            closest_class = point_class;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return closest_class;
-}
-
-fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_code: u32, tests_performed: u32) -> vec4<f32> {
+fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
     switch compute_data.render_mode {
         case 0u: { // Original classification
             return vec4<f32>(classification_to_color(original_class), f32(original_class) / 255.0);
@@ -169,16 +95,16 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             }
         }
         case 3u: { // Morton code debug
-            return vec4<f32>(morton_to_debug_color(morton_code), f32(final_class) / 255.0);
+            return vec4<f32>(morton_to_debug_color_blended(morton_low, morton_high), 1.0);
         }
-        case 4u: { // Spatial Debug - show which points were considered
+        case 4u: { // Spatial Debug - show which points were considered for early termination
             var was_considered = 0.0;
             for (var i = 0u; i < compute_data.polygon_count; i++) {
                 let poly_info = compute_data.polygon_info[i];
                 let start_idx = u32(poly_info.x);
                 let point_count = u32(poly_info.y);
 
-                if is_point_near_polygon(world_pos.xz, start_idx, point_count) {
+                if is_point_near_polygon(world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz, GRID_RESOLUTION) {
                     was_considered = 1.0;
                     break;
                 }
@@ -190,16 +116,9 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
                 return vec4<f32>(0.0, 0.0, 1.0, f32(final_class) / 255.0); // Blue = culled
             }
         }
-        case 5u: { // Class selection
-            if compute_data.is_selecting == 1u {
-                let selected_class = find_nearest_class_at_point(compute_data.selection_point);
+        case 5u: {
+            return vec4<f32>(classification_to_color(point_connectivity_class_id), 1.0);
 
-                if original_class == selected_class {
-                    return vec4<f32>(0.0, 1.0, 0.0, f32(original_class) / 255.0); // Green
-                }
-                return vec4<f32>(original_rgb * 0.3, f32(original_class) / 255.0); // Dimmed others
-            }
-            return vec4<f32>(original_rgb, f32(original_class) / 255.0);
         }
         default: {
             return vec4<f32>(original_rgb, f32(final_class) / 255.0);
@@ -251,9 +170,82 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
     );
 }
 
-fn morton_to_debug_color(morton_code: u32) -> vec3<f32> {
-    let r = f32((morton_code >> 16) & 0xFF) / 255.0;
-    let g = f32((morton_code >> 8) & 0xFF) / 255.0;
-    let b = f32(morton_code & 0xFF) / 255.0;
+fn morton_to_debug_color_blended(morton_high: u32, morton_low: u32) -> vec3<f32> {
+    let combined1 = morton_high ^ (morton_low >> 16);
+    let combined2 = morton_low ^ (morton_high >> 16);
+
+    let r = f32((combined1 >> 16) & 0xFF) / 255.0;
+    let g = f32((combined1 >> 8) & 0xFF) / 255.0;
+    let b = f32(combined2 & 0xFF) / 255.0;
+
     return vec3<f32>(r, g, b);
+}
+
+// Helper function for Morton encoding
+fn morton_part_1by1(n: u32) -> u32 {
+    var result = n & 0x0000FFFFu;
+    result = (result ^ (result << 8u)) & 0x00FF00FFu;
+    result = (result ^ (result << 4u)) & 0x0F0F0F0Fu;
+    result = (result ^ (result << 2u)) & 0x33333333u;
+    result = (result ^ (result << 1u)) & 0x55555555u;
+    return result;
+}
+
+fn morton_encode_2d_optimized(x: u32, z: u32) -> u32 {
+    return morton_part_1by1(x) | (morton_part_1by1(z) << 1u);
+}
+
+fn encode_morton_2d_current(point: vec2<f32>, bounds_min: vec2<f32>, bounds_max: vec2<f32>) -> u32 {
+    // Normalize coordinates (matching your bounds.normalize_x/z logic)
+    let norm_x = (point.x - bounds_min.x) / (bounds_max.x - bounds_min.x);
+    let norm_z = (point.y - bounds_min.y) / (bounds_max.y - bounds_min.y);
+
+    // Calculate grid coordinates (matching your add_point logic)
+    let grid_x = u32(clamp(norm_x * f32(GRID_RESOLUTION - 1u), 0.0, f32(GRID_RESOLUTION - 1u)));
+    let grid_z = u32(clamp(norm_z * f32(GRID_RESOLUTION - 1u), 0.0, f32(GRID_RESOLUTION - 1u)));
+
+    return morton_encode_2d_optimized(grid_x, grid_z);
+}
+
+fn is_point_near_polygon(
+   point: vec2<f32>,
+   start_idx: u32,
+   point_count: u32,
+   bounds_min: vec2<f32>,
+   bounds_max: vec2<f32>,
+   grid_resolution: u32
+) -> bool {
+   if (point_count == 0u) { return false; }
+
+   // Calculate Morton code for query point
+   // Morton codes preserve spatial locality: nearby points in 2D space
+   // have similar Morton codes due to Z-order curve interleaving
+   let query_morton = encode_morton_2d_current(point, bounds_min, bounds_max);
+
+   // Spatial culling via Morton code comparison
+   // Rationale: If no polygon vertices have Morton codes within threshold
+   // of query point, the polygon is spatially distant and can be culled
+   var found_nearby_morton = false;
+
+   // Sample subset of polygon vertices to avoid O(n) cost per query
+   // Mathematical justification: If polygon is spatially coherent,
+   // sampling first few vertices is representative of polygon's spatial extent
+   let sample_count = min(point_count, 8u);
+   for (var i = 0u; i < sample_count; i = i + 1u) {
+       // Get polygon vertex coordinates from uniform buffer
+       let poly_point = compute_data.point_data[start_idx + i].xy;
+
+       // Calculate Morton code for this polygon vertex
+       // Uses same normalization and grid as query point for comparison
+       let poly_morton = encode_morton_2d_current(poly_point, bounds_min, bounds_max);
+
+       // Morton distance approximation: |morton_a - morton_b|
+       // Smaller differences indicate spatial proximity in Z-order curve
+       let morton_diff = abs(i32(query_morton) - i32(poly_morton));
+       if (morton_diff < i32(MORTON_THRESHOLD)) {
+           found_nearby_morton = true;
+           break;
+       }
+   }
+   return found_nearby_morton;
 }

@@ -49,12 +49,6 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     // Sample position
     let pos_sample = textureSampleLevel(position_texture, position_sampler, uv, 0.0);
 
-    if pos_sample.a == 0.0 {
-        out.clip_position = vec4<f32>(0.0, 0.0, -10.0, 1.0);
-        out.color = vec4<f32>(0.0);
-        return out;
-    }
-
     // Denormalize to world space
     let norm_pos = pos_sample.rgb;
     let min_pos = material.params[0].xyz;

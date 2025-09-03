@@ -36,8 +36,6 @@ impl HeightmapGenerator {
         };
 
         println!("Using median road elevation: {:.3}", median_elevation);
-
-        // Initialize heightmap and validity mask
         let mut heightmap = vec![median_elevation; TEXTURE_SIZE * TEXTURE_SIZE];
         let mut valid_mask = vec![false; TEXTURE_SIZE * TEXTURE_SIZE];
 

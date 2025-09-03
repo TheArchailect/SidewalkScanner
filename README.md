@@ -92,7 +92,7 @@ cargo run --bin point-cloud-pre-processing <path to your input file>.laz
 
 This generates:
 
-- `input_file_position_2048x2048.dds` - RGBA32F: XYZ coordinates + validity
+- `input_file_position_2048x2048.dds` - RGBA32F: XYZ coordinates + connectivity class id (a unique id for instances of a classification)
 - `input_file_colour_class_2048x2048.dds` - RGBA32F: RGB colour + classification
 - `input_file_spatial_index_2048x2048.dds` - RGBA32F: Morton codes + spatial data
 - `input_file_heightmap_2048x2048.dds` - R32F: Road surface elevation

@@ -30,7 +30,7 @@ use crate::engine::shaders::PointCloudShader;
 use engine::compute_classification::ComputeClassificationPlugin;
 use engine::render_mode::{RenderModeState, render_mode_system};
 
-const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga";
+const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga_versions/riga_numbered_0.03";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 #[derive(Resource, Default)]
@@ -247,7 +247,7 @@ fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAsse
 
     println!("Loading unified DDS textures:");
     println!(
-        "  Position: {} (RGBA32F XYZ + validity)",
+        "  Position: {} (RGBA32F XYZ + connectivity class id)",
         position_texture_path
     );
     println!(

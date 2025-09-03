@@ -17,7 +17,7 @@ pub struct PointCloud;
 /// Point cloud assets using unified texture format
 #[derive(Resource, FromWorld, ExtractResource, Clone)]
 pub struct PointCloudAssets {
-    pub position_texture: Handle<Image>, // RGBA32F: XYZ + validity
+    pub position_texture: Handle<Image>, // RGBA32F: XYZ + connectivity class id
     pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification (original)
     pub result_texture: Handle<Image>,   // RGBA32F: Computed output for rendering
     pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data

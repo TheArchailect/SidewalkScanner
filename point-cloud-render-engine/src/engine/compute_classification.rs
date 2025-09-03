@@ -285,9 +285,9 @@ fn create_compute_buffer(
         total_points: u32,
         render_mode: u32,
         enable_spatial_opt: u32,
-        selection_point: [f32; 2],
+        selection_point: [f32; 4],
         is_selecting: u32,
-        _padding: u32,
+        _padding: [u32; 3],
         point_data: [[f32; 4]; 512],
         polygon_info: [[f32; 4]; 64],
     }
@@ -299,8 +299,11 @@ fn create_compute_buffer(
 
     uniform.selection_point = selection_state
         .selection_point
-        .map(|p| [p.x, p.y])
-        .unwrap_or([0.0, 0.0]);
+        .map(|p| [p.x, p.y, p.z, 0.0])
+        .unwrap_or([0.0, 0.0, 0.0, 0.0]);
+
+    println!("mouse intersection poing: {:?}", uniform.selection_point);
+
     uniform.is_selecting = if selection_state.is_selecting { 1 } else { 0 };
 
     let mut point_offset = 0;

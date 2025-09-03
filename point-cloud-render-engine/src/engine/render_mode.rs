@@ -24,6 +24,7 @@ pub enum RenderMode {
     MortonCode = 3,
     PerformanceDebug = 4,
     ClassSelection = 5,
+    ConnectivityClass = 6,
 }
 
 /// Handle render mode switching via keyboard
@@ -70,6 +71,12 @@ pub fn render_mode_system(
         new_mode = RenderMode::ClassSelection;
         mode_changed = true;
         println!("Render mode: Class Selection");
+    }
+
+    if keyboard.just_pressed(KeyCode::KeyM) {
+        new_mode = RenderMode::ConnectivityClass;
+        mode_changed = true;
+        println!("Render mode: Connectivity Class");
     }
 
     if mode_changed {
