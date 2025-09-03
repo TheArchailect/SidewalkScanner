@@ -56,6 +56,7 @@ pub struct PolygonTool {
     pub preview_point: Option<Vec3>,
     pub is_completed: bool,
     pub current_class: u32,
+    pub target_point_spacing: f32,
 }
 
 impl Default for PolygonTool {
@@ -65,9 +66,41 @@ impl Default for PolygonTool {
             current_polygon: Vec::new(),
             preview_point: None,
             is_completed: false,
-            current_class: 1, // TODO
+            current_class: 1,
+            target_point_spacing: 1.,
         }
     }
+}
+
+fn resample_polygon_uniform(points: &[Vec3], target_spacing: f32) -> Vec<Vec3> {
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+
+    let mut resampled = Vec::new();
+
+    for i in 0..points.len() {
+        let start = points[i];
+        let end = points[(i + 1) % points.len()];
+
+        // Calculate edge length and number of segments needed
+        let edge_length = (end - start).length();
+        if edge_length < 0.001 {
+            continue; // Skip very short edges
+        }
+
+        let num_segments = (edge_length / target_spacing).max(1.0) as usize;
+        let actual_spacing = edge_length / num_segments as f32;
+
+        // Add uniformly spaced points along this edge (excluding the end point to avoid duplicates)
+        for j in 0..num_segments {
+            let t = j as f32 * actual_spacing / edge_length;
+            let interpolated_point = start + (end - start) * t;
+            resampled.push(interpolated_point);
+        }
+    }
+
+    resampled
 }
 
 #[derive(Resource)]
@@ -187,6 +220,11 @@ pub fn polygon_tool_system(
         }
 
         if keyboard.just_pressed(KeyCode::ShiftLeft) && polygon_tool.current_polygon.len() >= 3 {
+            let resampled_points = resample_polygon_uniform(
+                &polygon_tool.current_polygon,
+                polygon_tool.target_point_spacing,
+            );
+
             // Complete the polygon
             polygon_tool.is_completed = true;
             polygon_tool.preview_point = None;
@@ -198,7 +236,7 @@ pub fn polygon_tool_system(
             // Create classification polygon
             let class_polygon = ClassificationPolygon {
                 id: polygon_id,
-                points: polygon_tool.current_polygon.clone(),
+                points: resampled_points.clone(),
                 new_class: polygon_tool.current_class,
             };
 
@@ -218,7 +256,7 @@ pub fn polygon_tool_system(
 
             create_completed_polygon(
                 &mut commands,
-                &polygon_tool.current_polygon,
+                &resampled_points,
                 polygon_id,
                 viewport_camera.ground_height,
                 &mut meshes,

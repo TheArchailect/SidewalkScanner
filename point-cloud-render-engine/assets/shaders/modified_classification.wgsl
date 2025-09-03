@@ -27,7 +27,7 @@ struct BoundsData {
 @group(0) @binding(5) var<uniform> bounds: BoundsData;
 
 const GRID_RESOLUTION: u32 = 512u;
-const MORTON_THRESHOLD = 1000u; // Empirical threshold - represents spatial distance in Morton space
+const MORTON_THRESHOLD = 250u; // Empirical threshold - represents spatial distance in Morton space
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -227,11 +227,7 @@ fn is_point_near_polygon(
    // of query point, the polygon is spatially distant and can be culled
    var found_nearby_morton = false;
 
-   // Sample subset of polygon vertices to avoid O(n) cost per query
-   // Mathematical justification: If polygon is spatially coherent,
-   // sampling first few vertices is representative of polygon's spatial extent
-   let sample_count = min(point_count, 8u);
-   for (var i = 0u; i < sample_count; i = i + 1u) {
+   for (var i = 0u; i < point_count; i = i + 1u) {
        // Get polygon vertex coordinates from uniform buffer
        let poly_point = compute_data.point_data[start_idx + i].xy;
 

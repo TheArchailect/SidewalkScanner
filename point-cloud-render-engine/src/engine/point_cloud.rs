@@ -19,10 +19,14 @@ pub struct PointCloud;
 pub struct PointCloudAssets {
     pub position_texture: Handle<Image>, // RGBA32F: XYZ + connectivity class id
     pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification (original)
-    pub result_texture: Handle<Image>,   // RGBA32F: Computed output for rendering
     pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data
     pub heightmap_texture: Handle<Image>, // R32F: elevation
-    pub result_texture_depth_alpha: Handle<Image>, //
+
+    // Compute Phase: 1
+    pub result_texture_depth_alpha: Handle<Image>, // RGBA32F: RGB + A = Depth
+    // Compute Phase: 2
+    pub result_texture: Handle<Image>, // RGBA32F: RenderMode = RGB (modified) + A = Depth
+
     pub bounds: Option<PointCloudBounds>,
     pub is_loaded: bool,
 }
@@ -154,8 +158,8 @@ pub fn check_textures_loaded(
             final_image.texture_descriptor.usage |=
                 bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
 
-            let mut edl_image = original_image.clone();
-            edl_image.texture_descriptor.usage =
+            let mut result_texture_depth_alpha = original_image.clone();
+            result_texture_depth_alpha.texture_descriptor.usage =
                 bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
                     | bevy::render::render_resource::TextureUsages::STORAGE_BINDING
                     | bevy::render::render_resource::TextureUsages::COPY_SRC
@@ -163,7 +167,7 @@ pub fn check_textures_loaded(
 
             // Add both to assets
             assets.result_texture = images.add(final_image);
-            assets.result_texture_depth_alpha = images.add(edl_image);
+            assets.result_texture_depth_alpha = images.add(result_texture_depth_alpha);
 
             println!(
                 "Created result_texture and result_texture_depth_alpha for compute shader pipeline"
