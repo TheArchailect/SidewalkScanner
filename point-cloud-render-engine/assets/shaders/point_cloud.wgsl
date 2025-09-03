@@ -7,7 +7,11 @@ struct PointCloudMaterial {
 @group(2) @binding(1) var position_sampler: sampler;
 @group(2) @binding(2) var final_texture: texture_2d<f32>;
 @group(2) @binding(3) var final_sampler: sampler;
-@group(2) @binding(4) var<uniform> material: PointCloudMaterial;
+
+@group(2) @binding(4) var depth_texture: texture_2d<f32>;
+@group(2) @binding(5) var depth_sampler: sampler;
+
+@group(2) @binding(6) var<uniform> material: PointCloudMaterial;
 
 struct VertexInput {
     @builtin(vertex_index) vertex_index: u32,
@@ -16,6 +20,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) depth: f32,
 }
 
 @vertex
@@ -79,13 +84,13 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     // Sample final color
     let tex_coord = vec2<i32>(i32(x_coord), i32(y_coord));
     out.color = textureLoad(final_texture, tex_coord, 0);
-
+    out.depth = textureLoad(depth_texture, tex_coord, 0).r;
     return out;
 }
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let depth = in.color.a;
+    let depth = in.depth;
     let near = 0.1;
     let far = 500.0;
     let norm_depth = (depth - near) / (far - near);

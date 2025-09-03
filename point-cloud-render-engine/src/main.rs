@@ -199,7 +199,7 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
         colour_class_texture: Handle::default(),
         spatial_index_texture: Handle::default(),
         result_texture: Handle::default(),
-        result_texture_depth_alpha: Handle::default(),
+        depth_texture: Handle::default(),
         heightmap_texture: Handle::default(),
         bounds,
         is_loaded: false,
@@ -262,7 +262,7 @@ fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAsse
 
     assets.position_texture = asset_server.load(&position_texture_path);
     assets.colour_class_texture = asset_server.load(&colour_class_texture_path);
-    assets.result_texture_depth_alpha = Handle::default();
+    assets.depth_texture = Handle::default();
     assets.spatial_index_texture = asset_server.load(&spatial_index_texture_path);
     assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
 }

@@ -2,7 +2,10 @@ use super::{
     grid::{GridCreated, create_ground_grid},
     shaders::PointCloudShader,
 };
-use bevy::render::extract_resource::ExtractResource;
+use bevy::render::{
+    extract_resource::ExtractResource,
+    render_resource::{Extent3d, TextureDimension},
+};
 use bevy::{
     asset::LoadState,
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
@@ -23,7 +26,7 @@ pub struct PointCloudAssets {
     pub heightmap_texture: Handle<Image>, // R32F: elevation
 
     // Compute Phase: 1
-    pub result_texture_depth_alpha: Handle<Image>, // RGBA32F: RGB + A = Depth
+    pub depth_texture: Handle<Image>, // R32F: R = Depth
     // Compute Phase: 2
     pub result_texture: Handle<Image>, // RGBA32F: RenderMode = RGB (modified) + A = Depth
 
@@ -158,16 +161,24 @@ pub fn check_textures_loaded(
             final_image.texture_descriptor.usage |=
                 bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
 
-            let mut result_texture_depth_alpha = original_image.clone();
-            result_texture_depth_alpha.texture_descriptor.usage =
+            let mut texture_depth = Image::new_uninit(
+                Extent3d {
+                    width: 2048,
+                    height: 2048,
+                    depth_or_array_layers: 1,
+                },
+                TextureDimension::D2,
+                bevy::render::render_resource::TextureFormat::R32Float,
+                RenderAssetUsages::RENDER_WORLD,
+            );
+            texture_depth.texture_descriptor.usage =
                 bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
                     | bevy::render::render_resource::TextureUsages::STORAGE_BINDING
                     | bevy::render::render_resource::TextureUsages::COPY_SRC
                     | bevy::render::render_resource::TextureUsages::COPY_DST;
 
-            // Add both to assets
             assets.result_texture = images.add(final_image);
-            assets.result_texture_depth_alpha = images.add(result_texture_depth_alpha);
+            assets.depth_texture = images.add(texture_depth);
 
             println!(
                 "Created result_texture and result_texture_depth_alpha for compute shader pipeline"
@@ -253,8 +264,8 @@ fn create_point_cloud_material(
 ) -> PointCloudShader {
     PointCloudShader {
         position_texture: assets.position_texture.clone(),
-        final_texture: assets.result_texture_depth_alpha.clone(),
-
+        final_texture: assets.result_texture.clone(),
+        depth_texture: assets.depth_texture.clone(),
         params: [
             Vec4::new(
                 bounds.min_x() as f32,
@@ -307,17 +318,6 @@ fn spawn_point_cloud_entity(
         bounds.texture_size, bounds.texture_size
     );
 }
-
-/// Create point index mesh for GPU texture sampling
-// pub fn create_point_index_mesh(point_count: usize) -> Mesh {
-//     let mut mesh = Mesh::new(
-//         PrimitiveTopology::PointList,
-//         RenderAssetUsages::RENDER_WORLD,
-//     );
-//     let indices: Vec<[f32; 3]> = (0..point_count).map(|i| [i as f32, 0.0, 0.0]).collect();
-//     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, indices);
-//     mesh
-// }
 
 pub fn create_point_index_mesh(point_count: usize) -> Mesh {
     let mut mesh = Mesh::new(

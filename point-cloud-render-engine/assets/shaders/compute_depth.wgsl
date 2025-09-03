@@ -1,6 +1,7 @@
 @group(0) @binding(0) var position_texture: texture_2d<f32>;
 @group(0) @binding(1) var color_input: texture_2d<f32>;
-@group(0) @binding(2) var color_output: texture_storage_2d<rgba32float, write>;
+// @group(0) @binding(2) var color_output: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(2) var color_output: texture_storage_2d<r32float, write>;
 
 struct EDLUniforms {
     view_matrix: mat4x4<f32>,
@@ -80,5 +81,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // let norm_depth = (final_depth - near) / (far - near);
 
     // Store color in RGB, depth in alpha for fragment shader
-    textureStore(color_output, coords, vec4<f32>(color_sample.rgb, dithered_depth));
+    // textureStore(color_output, coords, vec4<f32>(color_sample.rgb, dithered_depth));
+    textureStore(color_output, coords, vec4<f32>(dithered_depth, 0.0, 0.0, 0.0));
 }

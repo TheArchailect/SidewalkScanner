@@ -116,7 +116,7 @@ pub fn run_edl_compute(
         return;
     };
 
-    let Some(edl_gpu) = gpu_images.get(&assets.result_texture_depth_alpha) else {
+    let Some(edl_gpu) = gpu_images.get(&assets.depth_texture) else {
         println!("EDL: FAIL - edl_texture not found in gpu_images");
         return;
     };
@@ -211,7 +211,7 @@ fn initialise_depth_pipeline(
                 visibility: ShaderStages::COMPUTE,
                 ty: BindingType::StorageTexture {
                     access: StorageTextureAccess::WriteOnly,
-                    format: TextureFormat::Rgba32Float,
+                    format: TextureFormat::R32Float,
                     view_dimension: TextureViewDimension::D2,
                 },
                 count: None,

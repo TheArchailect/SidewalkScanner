@@ -16,7 +16,11 @@ pub struct PointCloudShader {
     #[sampler(3)]
     pub final_texture: Handle<Image>, // Output from compute shader
 
-    #[uniform(4)]
+    #[texture(4)]
+    #[sampler(5)]
+    pub depth_texture: Handle<Image>, //
+
+    #[uniform(6)]
     pub params: [Vec4; 3], // params[0] = min_bounds+size, params[1] = max_bounds, params[2] = camera_pos+padding
 }
 
