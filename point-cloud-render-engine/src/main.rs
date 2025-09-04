@@ -13,12 +13,17 @@ mod constants;
 mod engine;
 mod tools;
 use crate::engine::edl_post_processing::{EDLPostProcessPlugin, EDLSettings};
+use crate::engine::grid::create_ground_grid;
+use crate::engine::point_cloud::PointCloud;
+use crate::engine::point_cloud::create_point_index_mesh;
 use crate::engine::point_cloud::update_camera_uniform;
+use crate::engine::shaders::PointCloudShader;
+use engine::compute_classification::ComputeClassificationPlugin;
+use engine::render_mode::{RenderModeState, render_mode_system};
 use engine::{
     camera::{ViewportCamera, camera_controller},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
     grid::GridCreated,
-    point_cloud::point_cloud_asset_create,
     point_cloud::{PointCloudAssets, PointCloudBounds},
 };
 use tools::polygon::{
@@ -26,18 +31,35 @@ use tools::polygon::{
     update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
 };
 
-use crate::engine::shaders::PointCloudShader;
-use engine::compute_classification::ComputeClassificationPlugin;
-use engine::render_mode::{RenderModeState, render_mode_system};
-
-const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga_versions/riga_numbered_0.03";
-const TEXTURE_RESOLUTION: &'static str = "2048x2048";
-
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Resource)]
+pub enum AppState {
+    #[default]
+    Loading,
+    AssetsLoaded,
+    ComputePipelinesReady,
+    Running,
+}
+#[derive(Resource, Default)]
+pub struct LoadingProgress {
+    pub bounds_loaded: bool,
+    pub textures_loaded: bool,
+    pub textures_configured: bool,
+    pub point_cloud_created: bool,
+    pub compute_pipelines_ready: bool,
+}
 #[derive(Resource, Default)]
 struct BoundsLoader {
     handle: Option<Handle<PointCloudBounds>>,
-    loaded: bool,
 }
+#[derive(Resource, Default)]
+pub struct SelectionBuffer {
+    pub selected_ids: Vec<u32>,
+}
+#[derive(Component)]
+struct FpsText;
+
+const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga_versions/riga_numbered_0.03";
+const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 fn main() {
     let mut app = create_app();
@@ -55,11 +77,11 @@ fn main() {
     }
 }
 
-/// Create application with unified texture pipeline support
 fn create_app() -> App {
     let mut app = App::new();
 
     app.add_plugins(create_default_plugins())
+        .init_state::<AppState>()
         .add_plugins(MaterialPlugin::<PointCloudShader>::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
@@ -67,7 +89,26 @@ fn create_app() -> App {
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin);
 
+    // Initialise resources early
+    app.init_resource::<LoadingProgress>()
+        .init_resource::<BoundsLoader>()
+        .init_resource::<ClassSelectionState>()
+        .init_resource::<SelectionBuffer>()
+        .init_resource::<PolygonClassificationData>()
+        .init_resource::<PolygonCounter>()
+        .init_resource::<PolygonTool>()
+        .init_resource::<RenderModeState>()
+        .init_resource::<GridCreated>()
+        .insert_resource(create_point_cloud_assets(None));
+
+    // Configure render app with proper resource extraction
     if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
+        // Initialise the resource in the render world
+        render_app.init_resource::<State<AppState>>();
+
+        // Extract main-world state each frame
+        render_app.add_systems(bevy::render::ExtractSchedule, extract_app_state);
+
         render_app
             .init_resource::<ComputeClassificationState>()
             .init_resource::<PolygonClassificationData>()
@@ -80,25 +121,38 @@ fn create_app() -> App {
                 bevy::render::Render,
                 (run_classification_compute, run_edl_compute)
                     .chain()
-                    .in_set(bevy::render::RenderSet::Queue),
+                    .in_set(bevy::render::RenderSet::Queue)
+                    .run_if(in_state(AppState::Running)),
             );
     }
 
-    app.init_resource::<BoundsLoader>()
-        .init_resource::<ClassSelectionState>()
-        .init_resource::<SelectionBuffer>()
-        .init_resource::<PolygonClassificationData>()
-        .init_resource::<PolygonCounter>()
-        .init_resource::<PolygonTool>()
-        .init_resource::<RenderModeState>()
-        .init_resource::<GridCreated>()
-        .insert_resource(create_point_cloud_assets(None))
-        .add_systems(Startup, setup)
+    // State-based system scheduling
+    app.add_systems(Startup, (setup, start_loading).chain())
         .add_systems(
             Update,
             (
+                // Loading phase systems
                 load_bounds_system,
-                point_cloud_asset_create,
+                check_texture_loading,
+                configure_loaded_textures,
+                create_point_cloud_when_ready,
+                transition_to_assets_loaded,
+            )
+                .chain()
+                .run_if(in_state(AppState::Loading)),
+        )
+        .add_systems(
+            Update,
+            transition_to_compute_ready.run_if(in_state(AppState::AssetsLoaded)),
+        )
+        .add_systems(
+            Update,
+            transition_to_running.run_if(in_state(AppState::ComputePipelinesReady)),
+        )
+        .add_systems(
+            Update,
+            (
+                // Runtime systems - only run when everything is ready
                 handle_class_selection,
                 fps_text_update_system,
                 camera_controller,
@@ -111,47 +165,331 @@ fn create_app() -> App {
                 render_mode_system,
                 update_selection_buffer,
                 update_polygon_classification_shader,
-            ),
+            )
+                .run_if(in_state(AppState::Running)),
         );
 
     app
 }
 
-/// Load bounds JSON and initialise camera
+fn extract_app_state(
+    main_world: bevy::render::Extract<Res<State<AppState>>>,
+    mut commands: Commands,
+) {
+    commands.insert_resource(State::new(*main_world.get()));
+}
+
+// Startup system that only handles basic initialisation
+fn setup(mut commands: Commands) {
+    spawn_lighting(&mut commands);
+    create_edl_post_processor_camera(&mut commands);
+    spawn_ui(&mut commands);
+}
+
+// Start the loading process
+fn start_loading(mut bounds_loader: ResMut<BoundsLoader>, asset_server: Res<AssetServer>) {
+    let bounds_path = get_bounds_path();
+    bounds_loader.handle = Some(asset_server.load(&bounds_path));
+}
+
+// Load bounds and start texture loading when ready
 fn load_bounds_system(
-    mut bounds_loader: ResMut<BoundsLoader>,
+    mut loading_progress: ResMut<LoadingProgress>,
+    bounds_loader: ResMut<BoundsLoader>,
     mut assets: ResMut<PointCloudAssets>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     bounds_assets: Res<Assets<PointCloudBounds>>,
 ) {
-    // Start loading if not already started
-    if bounds_loader.handle.is_none() {
-        let bounds_path = get_bounds_path();
-        println!("Loading bounds from: {}", bounds_path);
-        bounds_loader.handle = Some(asset_server.load(&bounds_path));
+    if loading_progress.bounds_loaded {
         return;
     }
 
-    // Check if loaded and not yet processed
-    if !bounds_loader.loaded {
-        if let Some(ref handle) = bounds_loader.handle {
-            if let Some(bounds) = bounds_assets.get(handle) {
-                println!("Successfully loaded bounds JSON");
-                assets.bounds = Some(bounds.clone());
-                bounds_loader.loaded = true;
+    if let Some(ref handle) = bounds_loader.handle {
+        if let Some(bounds) = bounds_assets.get(handle) {
+            println!("✓ Bounds loaded successfully");
+            assets.bounds = Some(bounds.clone());
+            loading_progress.bounds_loaded = true;
 
-                // Update camera with bounds
-                if let Some(ref bounds) = assets.bounds {
-                    let vp_camera = ViewportCamera::with_bounds(bounds);
-                    commands.insert_resource(vp_camera);
-                }
-            }
+            // Update camera with bounds
+            let vp_camera = ViewportCamera::with_bounds(bounds);
+            commands.insert_resource(vp_camera);
+
+            // Start loading textures now that we have bounds
+            load_unified_textures(&asset_server, &mut assets);
         }
     }
 }
 
-/// Generate bounds file path for unified texture format
+// Check if all required textures are loaded
+fn check_texture_loading(
+    mut loading_progress: ResMut<LoadingProgress>,
+    assets: Res<PointCloudAssets>,
+    asset_server: Res<AssetServer>,
+) {
+    if loading_progress.textures_loaded || !loading_progress.bounds_loaded {
+        return;
+    }
+
+    let pos_loaded = matches!(
+        asset_server.get_load_state(&assets.position_texture),
+        Some(bevy::asset::LoadState::Loaded)
+    );
+    let colour_class_loaded = matches!(
+        asset_server.get_load_state(&assets.colour_class_texture),
+        Some(bevy::asset::LoadState::Loaded)
+    );
+    let heightmap_loaded = matches!(
+        asset_server.get_load_state(&assets.heightmap_texture),
+        Some(bevy::asset::LoadState::Loaded)
+    );
+    let spatial_loaded = matches!(
+        asset_server.get_load_state(&assets.spatial_index_texture),
+        Some(bevy::asset::LoadState::Loaded)
+    );
+
+    if pos_loaded && colour_class_loaded && spatial_loaded && heightmap_loaded {
+        println!("✓ All DDS textures loaded successfully");
+        loading_progress.textures_loaded = true;
+    }
+}
+
+// Configure texture sampling and create compute-ready textures
+fn configure_loaded_textures(
+    mut loading_progress: ResMut<LoadingProgress>,
+    mut assets: ResMut<PointCloudAssets>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if loading_progress.textures_configured || !loading_progress.textures_loaded {
+        return;
+    }
+    configure_texture_sampling(&mut images, &assets);
+
+    // Create compute-ready textures with proper formats
+    if let Some(original_image) = images.get(&assets.colour_class_texture).cloned() {
+        // Create result texture with proper storage binding usage
+        let mut result_image = original_image;
+        result_image.texture_descriptor.format =
+            bevy::render::render_resource::TextureFormat::Rgba32Float;
+        result_image.texture_descriptor.usage |=
+            bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
+
+        // Create depth texture
+        let mut depth_image = Image::new_uninit(
+            bevy::render::render_resource::Extent3d {
+                width: 2048,
+                height: 2048,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            bevy::render::render_resource::TextureFormat::R32Float,
+            bevy::asset::RenderAssetUsages::RENDER_WORLD,
+        );
+        depth_image.texture_descriptor.usage =
+            bevy::render::render_resource::TextureUsages::TEXTURE_BINDING
+                | bevy::render::render_resource::TextureUsages::STORAGE_BINDING
+                | bevy::render::render_resource::TextureUsages::COPY_SRC
+                | bevy::render::render_resource::TextureUsages::COPY_DST;
+
+        assets.result_texture = images.add(result_image);
+        assets.depth_texture = images.add(depth_image);
+
+        println!("✓ Compute-ready textures created with proper formats");
+        loading_progress.textures_configured = true;
+    }
+}
+
+// Create point cloud and grid when textures are ready
+fn create_point_cloud_when_ready(
+    mut loading_progress: ResMut<LoadingProgress>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<PointCloudShader>>,
+    mut standard_materials: ResMut<Assets<StandardMaterial>>,
+    mut assets: ResMut<PointCloudAssets>,
+    images: ResMut<Assets<Image>>,
+    mut grid_created: ResMut<GridCreated>,
+    asset_server: Res<AssetServer>,
+) {
+    if loading_progress.point_cloud_created || !loading_progress.textures_configured {
+        return;
+    }
+
+    let Some(bounds) = &assets.bounds.clone() else {
+        return;
+    };
+
+    // Create point cloud
+    let mesh = create_point_index_mesh(bounds.loaded_points);
+    let material = create_point_cloud_material(bounds, &assets);
+
+    spawn_point_cloud_entity(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        mesh,
+        material,
+        bounds,
+    );
+
+    // Create grid
+    if !grid_created.created {
+        let heightmap_image = images.get(&assets.heightmap_texture);
+        create_ground_grid(
+            &mut commands,
+            bounds,
+            &mut meshes,
+            &mut standard_materials,
+            heightmap_image,
+        );
+        grid_created.created = true;
+        println!("✓ Grid created");
+    }
+
+    // Create gizmos
+    spawn_gizmos(
+        &mut commands,
+        &mut meshes,
+        &mut standard_materials,
+        &asset_server,
+    );
+
+    assets.is_loaded = true;
+    loading_progress.point_cloud_created = true;
+    println!("✓ Point cloud and visual elements ready");
+}
+
+// Transition to AssetsLoaded state
+fn transition_to_assets_loaded(
+    loading_progress: Res<LoadingProgress>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if loading_progress.point_cloud_created {
+        println!("→ Transitioning to AssetsLoaded state");
+        next_state.set(AppState::AssetsLoaded);
+    }
+}
+
+fn transition_to_compute_ready(
+    mut loading_progress: ResMut<LoadingProgress>,
+    mut next_state: ResMut<NextState<AppState>>,
+) {
+    if loading_progress.point_cloud_created && !loading_progress.compute_pipelines_ready {
+        loading_progress.compute_pipelines_ready = true;
+        println!("→ Transitioning to ComputePipelinesReady state");
+        next_state.set(AppState::ComputePipelinesReady);
+    }
+}
+
+// Final transition to running state
+fn transition_to_running(mut next_state: ResMut<NextState<AppState>>) {
+    println!("→ All systems ready, transitioning to Running state");
+    next_state.set(AppState::Running);
+}
+
+// Abstracted texture loading function
+fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
+    let position_texture_path = format!(
+        "{}_position_{}.dds",
+        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+    let colour_class_texture_path = format!(
+        "{}_colour_class_{}.dds",
+        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+    let heightmap_texture_path = format!(
+        "{}_heightmap_{}.dds",
+        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+    let spatial_index_texture_path = format!(
+        "{}_spatial_index_{}.dds",
+        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+    );
+
+    println!("Loading unified DDS textures...");
+
+    assets.position_texture = asset_server.load(&position_texture_path);
+    assets.colour_class_texture = asset_server.load(&colour_class_texture_path);
+    assets.spatial_index_texture = asset_server.load(&spatial_index_texture_path);
+    assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
+}
+
+// Abstracted texture configuration function
+fn configure_texture_sampling(images: &mut ResMut<Assets<Image>>, assets: &PointCloudAssets) {
+    use bevy::image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
+
+    let sampler_config = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        mag_filter: ImageFilterMode::Nearest,
+        min_filter: ImageFilterMode::Nearest,
+        ..default()
+    });
+
+    for texture_handle in [
+        &assets.position_texture,
+        &assets.colour_class_texture,
+        &assets.spatial_index_texture,
+    ] {
+        if let Some(image) = images.get_mut(texture_handle) {
+            image.sampler = sampler_config.clone();
+        }
+    }
+}
+
+// Abstracted point cloud material creation
+fn create_point_cloud_material(
+    bounds: &PointCloudBounds,
+    assets: &PointCloudAssets,
+) -> PointCloudShader {
+    PointCloudShader {
+        position_texture: assets.position_texture.clone(),
+        final_texture: assets.result_texture.clone(),
+        depth_texture: assets.depth_texture.clone(),
+        params: [
+            Vec4::new(
+                bounds.min_x() as f32,
+                bounds.min_y() as f32,
+                bounds.min_z() as f32,
+                bounds.texture_size as f32,
+            ),
+            Vec4::new(
+                bounds.max_x() as f32,
+                bounds.max_y() as f32,
+                bounds.max_z() as f32,
+                0.0,
+            ),
+            Vec4::new(0.0, 0.0, 0.0, 0.0),
+        ],
+    }
+}
+
+// Abstracted point cloud entity spawning
+fn spawn_point_cloud_entity(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<PointCloudShader>>,
+    mesh: Mesh,
+    material: PointCloudShader,
+    bounds: &PointCloudBounds,
+) {
+    commands.spawn((
+        Mesh3d(meshes.add(mesh)),
+        MeshMaterial3d(materials.add(material)),
+        Transform::from_translation(Vec3::ZERO),
+        Visibility::Visible,
+        InheritedVisibility::VISIBLE,
+        ViewVisibility::default(),
+        GlobalTransform::default(),
+        PointCloud,
+        bevy::render::view::NoFrustumCulling,
+    ));
+
+    println!(
+        "✓ Point cloud entity spawned with {} vertices",
+        bounds.loaded_points
+    );
+}
+
+// Rest of the helper functions remain the same...
 fn get_bounds_path() -> String {
     format!(
         "{}_metadata_{}.json",
@@ -166,7 +504,6 @@ fn create_default_plugins() -> impl PluginGroup {
     };
 
     let asset_config = AssetPlugin {
-        //file_path: "renderer/assets".into(),
         meta_check: AssetMetaCheck::Never,
         ..default()
     };
@@ -195,7 +532,6 @@ fn create_window_config() -> Window {
     }
 }
 
-/// Create point cloud assets resource with unified texture format
 fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAssets {
     PointCloudAssets {
         position_texture: Handle::default(),
@@ -209,76 +545,7 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
     }
 }
 
-#[derive(Component)]
-struct FpsText;
-
-/// Setup renderer with unified texture loading
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut assets: ResMut<PointCloudAssets>,
-) {
-    println!("=== GPU-ACCELERATED POINT CLOUD RENDERER (UNIFIED TEXTURES) ===");
-
-    load_unified_textures(&asset_server, &mut assets);
-    spawn_lighting(&mut commands);
-    create_edl_post_processor_camera(&mut commands);
-    spawn_ui(&mut commands);
-    spawn_gizmos(&mut commands, &mut meshes, &mut materials, &asset_server);
-}
-
-/// Load unified texture set: position, colour+classification, heightmap
-fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
-    let position_texture_path = format!(
-        "{}_position_{}.dds",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    );
-    let colour_class_texture_path = format!(
-        "{}_colour_class_{}.dds",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    );
-    let heightmap_texture_path = format!(
-        "{}_heightmap_{}.dds",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    );
-    let spatial_index_texture_path = format!(
-        "{}_spatial_index_{}.dds",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    );
-
-    println!("Loading unified DDS textures:");
-    println!(
-        "  Position: {} (RGBA32F XYZ + connectivity class id)",
-        position_texture_path
-    );
-    println!(
-        "  Colour+Class: {} (RGBA32F RGB + classification)",
-        colour_class_texture_path
-    );
-    println!(
-        "  Spatial Index: {} (RG32Uint cell_id + point_index)",
-        spatial_index_texture_path
-    );
-    println!("  Heightmap: {} (R32F elevation)", heightmap_texture_path);
-
-    assets.position_texture = asset_server.load(&position_texture_path);
-    assets.colour_class_texture = asset_server.load(&colour_class_texture_path);
-    assets.depth_texture = Handle::default();
-    assets.spatial_index_texture = asset_server.load(&spatial_index_texture_path);
-    assets.heightmap_texture = asset_server.load(&heightmap_texture_path);
-}
-
-fn spawn_gizmos(
-    commands: &mut Commands,
-    meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<StandardMaterial>>,
-    asset_server: &Res<AssetServer>,
-) {
-    create_direction_gizmo(commands, meshes, materials, asset_server);
-}
-
+// UI and lighting systems remain unchanged
 fn spawn_lighting(commands: &mut Commands) {
     commands.spawn((
         DirectionalLight {
@@ -305,7 +572,6 @@ fn create_edl_post_processor_camera(commands: &mut Commands) {
             contrast: 1.2,
         },
     ));
-    commands.insert_resource(ViewportCamera::default());
 }
 
 fn spawn_ui(commands: &mut Commands) {
@@ -334,6 +600,16 @@ fn spawn_ui(commands: &mut Commands) {
         });
 }
 
+fn spawn_gizmos(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    asset_server: &Res<AssetServer>,
+) {
+    create_direction_gizmo(commands, meshes, materials, asset_server);
+}
+
+// FPS system remains unchanged
 fn fps_text_update_system(
     diagnostics: Res<DiagnosticsStore>,
     mut query: Query<&mut Text, With<FpsText>>,
@@ -347,11 +623,7 @@ fn fps_text_update_system(
     }
 }
 
-#[derive(Resource, Default)]
-pub struct SelectionBuffer {
-    pub selected_ids: Vec<u32>,
-}
-
+// Selection buffer system remains unchanged
 fn update_selection_buffer(
     mut selection_buffer: ResMut<SelectionBuffer>,
     mouse_button: Res<ButtonInput<MouseButton>>,

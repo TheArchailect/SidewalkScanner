@@ -85,7 +85,7 @@ impl HeightmapGenerator {
         let mut filled_mask = valid_mask.to_vec();
         let mut queue = VecDeque::new();
 
-        // Initialize queue with all valid points
+        // Initialise queue with all valid points
         for z in 0..TEXTURE_SIZE {
             for x in 0..TEXTURE_SIZE {
                 let idx = z * TEXTURE_SIZE + x;

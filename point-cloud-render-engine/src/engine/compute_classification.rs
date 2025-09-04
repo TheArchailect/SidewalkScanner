@@ -57,7 +57,7 @@ pub fn run_classification_compute(
     render_device: Res<RenderDevice>,
     mut render_queue: ResMut<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
-    mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    gpu_images: ResMut<RenderAssets<GpuImage>>,
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
 ) {
@@ -71,7 +71,7 @@ pub fn run_classification_compute(
     }
 
     if state.bind_group_layout.is_none() {
-        initialize_compute_pipeline(&mut state, &render_device, &pipeline_cache, &asset_server);
+        initialise_compute_pipeline(&mut state, &render_device, &pipeline_cache, &asset_server);
     }
 
     let Some(bind_group_layout) = &state.bind_group_layout else {
@@ -121,7 +121,7 @@ pub fn run_classification_compute(
     );
 }
 
-fn initialize_compute_pipeline(
+fn initialise_compute_pipeline(
     state: &mut ComputeClassificationState,
     render_device: &RenderDevice,
     pipeline_cache: &PipelineCache,
@@ -301,8 +301,6 @@ fn create_compute_buffer(
         .selection_point
         .map(|p| [p.x, p.y, p.z, 0.0])
         .unwrap_or([0.0, 0.0, 0.0, 0.0]);
-
-    println!("mouse intersection poing: {:?}", uniform.selection_point);
 
     uniform.is_selecting = if selection_state.is_selecting { 1 } else { 0 };
 

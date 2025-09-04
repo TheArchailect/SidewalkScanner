@@ -40,7 +40,7 @@ pub struct EDLComputeState {
 pub struct EDLRenderState {
     pub pipeline: Option<CachedComputePipelineId>,
     pub bind_group_layout: Option<BindGroupLayout>,
-    pub initialized: bool,
+    pub initialised: bool,
 }
 
 impl EDLComputeState {
@@ -95,7 +95,7 @@ pub fn run_edl_compute(
     render_device: Res<RenderDevice>,
     mut render_queue: ResMut<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
-    mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    gpu_images: ResMut<RenderAssets<GpuImage>>,
     camera_query: Query<&GlobalTransform, (With<Camera3d>, Changed<GlobalTransform>)>,
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
@@ -122,7 +122,7 @@ pub fn run_edl_compute(
     };
 
     // Initialize pipeline only once using persistent render state
-    if !render_state.initialized {
+    if !render_state.initialised {
         initialise_depth_pipeline(
             &mut render_state,
             &render_device,
@@ -130,10 +130,10 @@ pub fn run_edl_compute(
             &asset_server,
         );
         if render_state.bind_group_layout.is_some() && render_state.pipeline.is_some() {
-            render_state.initialized = true;
+            render_state.initialised = true;
         } else {
             println!(
-                "EDL: Pipeline initialization FAILED - bind_group_layout: {:?}, pipeline: {:?}",
+                "EDL: Pipeline initialisation FAILED - bind_group_layout: {:?}, pipeline: {:?}",
                 render_state.bind_group_layout.is_some(),
                 render_state.pipeline.is_some()
             );
@@ -142,12 +142,12 @@ pub fn run_edl_compute(
     }
 
     let Some(bind_group_layout) = &render_state.bind_group_layout else {
-        println!("EDL: FAIL - bind_group_layout is None after initialization");
+        println!("EDL: FAIL - bind_group_layout is None after initialisation");
         return;
     };
 
     let Some(pipeline_id) = render_state.pipeline else {
-        println!("EDL: FAIL - pipeline_id is None after initialization");
+        println!("EDL: FAIL - pipeline_id is None after initialisation");
         return;
     };
 
