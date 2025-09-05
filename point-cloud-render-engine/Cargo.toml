@@ -12,6 +12,7 @@ serde_json = "1.0"
 wasm-bindgen-futures = "0.4.50"
 web-sys = "0.3"
 bytemuck = "1.23.2"
+indicatif = "0.18.0"
 
 [build-dependencies]
 serde_json = "1.0"

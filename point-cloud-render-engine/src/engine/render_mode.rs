@@ -1,8 +1,6 @@
-use crate::engine::point_cloud::PointCloud;
-use crate::engine::shaders::PointCloudShader;
-/// Rendering mode control system
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
+
 #[derive(Resource, Clone, ExtractResource)]
 pub struct RenderModeState {
     pub current_mode: RenderMode,
@@ -27,11 +25,11 @@ pub enum RenderMode {
     ConnectivityClass = 6,
 }
 
-/// Handle render mode switching via keyboard
+/// Handle render mode switching via keyboard input.
+/// Mode changes trigger compute shader recomputation via resource change detection.
+/// Custom render pipeline receives mode data through RenderModeState extraction.
 pub fn render_mode_system(
     mut render_state: ResMut<RenderModeState>,
-    mut materials: ResMut<Assets<PointCloudShader>>,
-    material_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
     let mut mode_changed = false;
@@ -81,6 +79,7 @@ pub fn render_mode_system(
 
     if mode_changed {
         render_state.current_mode = new_mode;
-        // Compute shader will detect RenderModeState.is_changed() and recompute
+        // Resource change detection triggers compute shader recomputation.
+        // Custom render pipeline receives updated mode through extraction system.
     }
 }

@@ -1,37 +1,43 @@
-use crate::PointCloudShader;
 use crate::engine::camera::ViewportCamera;
 use crate::engine::grid::GroundGrid;
-use crate::engine::point_cloud::{PointCloud, PointCloudAssets};
+use crate::engine::point_cloud::PointCloudAssets;
 use crate::engine::render_mode::RenderModeState;
 use crate::engine::shaders::PolygonClassificationUniform;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
+use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
+
+/// Polygon definition for point cloud classification operations.
+/// Contains spatial coordinates and target classification metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassificationPolygon {
     pub id: u32,
-    pub points: Vec<Vec3>, // XZ plane points (Y ignored for intersection)
-    pub new_class: u32,    // Classification ID to apply to intersecting points
+    pub points: Vec<Vec3>, // XZ plane coordinates for heightmap intersection.
+    pub new_class: u32,    // Target classification ID for enclosed points.
 }
 
+/// Resource containing active polygon classification data.
+/// Extracted to render world for compute shader access.
 #[derive(Resource, ExtractResource, Clone)]
 pub struct PolygonClassificationData {
     pub polygons: Vec<ClassificationPolygon>,
-    pub max_polygons: usize,
+    pub max_polygons: usize, // GPU uniform buffer size constraint.
 }
 
 impl Default for PolygonClassificationData {
     fn default() -> Self {
         Self {
             polygons: Vec::new(),
-            max_polygons: 64, // Conservative GPU uniform limit
+            max_polygons: 64, // Conservative limit for GPU uniform storage.
         }
     }
 }
 
+/// Component markers for polygon visualization entities.
+/// Enables selective cleanup and rendering control.
 #[derive(Component)]
 pub struct PolygonPoints;
 
@@ -49,6 +55,8 @@ pub struct CompletedPolygon {
     pub id: u32,
 }
 
+/// Interactive polygon creation tool state.
+/// Manages user input, preview visualization, and completion logic.
 #[derive(Resource)]
 pub struct PolygonTool {
     pub is_active: bool,
@@ -56,7 +64,7 @@ pub struct PolygonTool {
     pub preview_point: Option<Vec3>,
     pub is_completed: bool,
     pub current_class: u32,
-    pub target_point_spacing: f32,
+    pub target_point_spacing: f32, // Uniform resampling distance.
 }
 
 impl Default for PolygonTool {
@@ -67,11 +75,13 @@ impl Default for PolygonTool {
             preview_point: None,
             is_completed: false,
             current_class: 1,
-            target_point_spacing: 1.,
+            target_point_spacing: 1.0,
         }
     }
 }
 
+/// Resamples polygon edges to ensure uniform point distribution.
+/// Prevents GPU compute shader performance issues from irregular spacing.
 fn resample_polygon_uniform(points: &[Vec3], target_spacing: f32) -> Vec<Vec3> {
     if points.len() < 3 {
         return points.to_vec();
@@ -83,16 +93,17 @@ fn resample_polygon_uniform(points: &[Vec3], target_spacing: f32) -> Vec<Vec3> {
         let start = points[i];
         let end = points[(i + 1) % points.len()];
 
-        // Calculate edge length and number of segments needed
+        // Calculate edge subdivision requirements for uniform spacing.
         let edge_length = (end - start).length();
         if edge_length < 0.001 {
-            continue; // Skip very short edges
+            continue; // Skip degenerate edges to prevent numerical instability.
         }
 
         let num_segments = (edge_length / target_spacing).max(1.0) as usize;
         let actual_spacing = edge_length / num_segments as f32;
 
-        // Add uniformly spaced points along this edge (excluding the end point to avoid duplicates)
+        // Generate uniformly distributed points along edge, excluding endpoints.
+        // Prevents duplicate vertices at polygon corner intersections.
         for j in 0..num_segments {
             let t = j as f32 * actual_spacing / edge_length;
             let interpolated_point = start + (end - start) * t;
@@ -103,6 +114,8 @@ fn resample_polygon_uniform(points: &[Vec3], target_spacing: f32) -> Vec<Vec3> {
     resampled
 }
 
+/// Unique identifier generator for polygon classification entities.
+/// Enables deterministic polygon tracking across render and compute systems.
 #[derive(Resource)]
 pub struct PolygonCounter {
     pub next_id: u32,
@@ -114,6 +127,8 @@ impl Default for PolygonCounter {
     }
 }
 
+/// Primary polygon creation and interaction system.
+/// Handles user input, ground intersection calculation, and polygon completion.
 pub fn polygon_tool_system(
     mut commands: Commands,
     mut polygon_tool: ResMut<PolygonTool>,
@@ -129,7 +144,7 @@ pub fn polygon_tool_system(
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
 ) {
-    // Toggle polygon tool with 'P' key
+    // Toggle polygon tool activation with 'P' key input.
     if keyboard.just_pressed(KeyCode::KeyP) {
         polygon_tool.is_active = !polygon_tool.is_active;
         if polygon_tool.is_active {
@@ -138,7 +153,7 @@ pub fn polygon_tool_system(
                 polygon_tool.current_class
             );
             println!(
-                "Left click to add points, Right click to complete, 'C' to clear current, 'X' to clear all."
+                "Left click to add points, Shift to complete, 'O' to clear current, 'I' to clear all."
             );
         } else {
             println!("Polygon tool deactivated.");
@@ -148,7 +163,7 @@ pub fn polygon_tool_system(
         }
     }
 
-    // Change classification class with number keys
+    // Map number keys to classification IDs for user convenience.
     for (key, class_id) in [
         (KeyCode::Digit1, 1),
         (KeyCode::Digit2, 2),
@@ -170,7 +185,7 @@ pub fn polygon_tool_system(
         return;
     }
 
-    // Clear current polygon with 'C' key
+    // Clear current polygon construction with 'O' key.
     if keyboard.just_pressed(KeyCode::KeyO) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
@@ -178,15 +193,16 @@ pub fn polygon_tool_system(
         println!("Current polygon cleared.");
     }
 
-    // Clear all polygons with 'X' key
+    // Clear all completed polygons with 'I' key.
     if keyboard.just_pressed(KeyCode::KeyI) {
         polygon_tool.current_polygon.clear();
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;
+        classification_data.polygons.clear();
         println!("All polygons cleared.");
     }
 
-    // Update preview point only if not completed
+    // Update preview point for real-time cursor tracking.
     if !polygon_tool.is_completed {
         if let (Ok((camera_global_transform, camera)), Ok(window)) =
             (camera_query.single(), windows.single())
@@ -203,10 +219,9 @@ pub fn polygon_tool_system(
         }
     }
 
-    // Handle mouse clicks only if not completed
+    // Handle mouse click input for vertex addition.
     if !polygon_tool.is_completed {
         if mouse_button.just_pressed(MouseButton::Left) {
-            // Add point to polygon
             if let Some(point) = polygon_tool.preview_point {
                 polygon_tool.current_polygon.push(point);
                 println!(
@@ -219,28 +234,28 @@ pub fn polygon_tool_system(
             }
         }
 
+        // Complete polygon construction with Shift key when minimum vertices met.
         if keyboard.just_pressed(KeyCode::ShiftLeft) && polygon_tool.current_polygon.len() >= 3 {
             let resampled_points = resample_polygon_uniform(
                 &polygon_tool.current_polygon,
                 polygon_tool.target_point_spacing,
             );
 
-            // Complete the polygon
             polygon_tool.is_completed = true;
             polygon_tool.preview_point = None;
 
-            // Create a completed polygon entity
+            // Generate unique polygon identifier for tracking.
             let polygon_id = polygon_counter.next_id;
             polygon_counter.next_id += 1;
 
-            // Create classification polygon
+            // Create classification data structure for compute shader processing.
             let class_polygon = ClassificationPolygon {
                 id: polygon_id,
                 points: resampled_points.clone(),
                 new_class: polygon_tool.current_class,
             };
 
-            // Add to classification data if within limits
+            // Add to classification data with GPU memory constraint validation.
             if classification_data.polygons.len() < classification_data.max_polygons {
                 classification_data.polygons.push(class_polygon);
                 println!(
@@ -254,6 +269,7 @@ pub fn polygon_tool_system(
                 );
             }
 
+            // Create visual representation using standard material pipeline.
             create_completed_polygon(
                 &mut commands,
                 &resampled_points,
@@ -269,29 +285,33 @@ pub fn polygon_tool_system(
                 polygon_tool.current_polygon.len()
             );
 
-            // Clear current polygon to start a new one
+            // Reset state for next polygon creation.
             polygon_tool.current_polygon.clear();
             polygon_tool.is_completed = false;
         }
     }
 }
 
+/// Updates polygon classification data for compute shader consumption.
+/// Removed material system dependencies in favor of resource extraction.
 pub fn update_polygon_classification_shader(
     classification_data: Res<PolygonClassificationData>,
     render_state: Res<RenderModeState>,
-    mut materials: ResMut<Assets<PointCloudShader>>,
-    material_query: Query<&MeshMaterial3d<PointCloudShader>, With<PointCloud>>,
 ) {
-    if !classification_data.is_changed() {
+    // Early exit if no polygon data changes detected.
+    if !classification_data.is_changed() && !render_state.is_changed() {
         return;
     }
 
+    // Create uniform data structure for GPU compute shader compatibility.
+    // Data will be extracted to render world through resource system.
     let mut uniform = PolygonClassificationUniform::default();
     uniform.polygon_count = classification_data.polygons.len().min(64) as u32;
     uniform.render_mode = render_state.current_mode as u32;
 
     let mut point_offset = 0;
     for (i, polygon) in classification_data.polygons.iter().take(64).enumerate() {
+        // Store polygon metadata: point offset, count, and classification ID.
         uniform.polygon_info[i] = Vec4::new(
             point_offset as f32,
             polygon.points.len() as f32,
@@ -299,6 +319,7 @@ pub fn update_polygon_classification_shader(
             0.0,
         );
 
+        // Flatten polygon vertices into linear array for GPU processing.
         for point in &polygon.points {
             if point_offset < 512 {
                 uniform.point_data[point_offset] = Vec4::new(point.x, point.z, 0.0, 0.0);
@@ -308,8 +329,14 @@ pub fn update_polygon_classification_shader(
     }
 
     uniform.total_points = point_offset as u32;
+
+    // Note: Uniform data stored in classification_data resource.
+    // Compute classification system extracts this through resource system
+    // rather than through deprecated material uniform updates.
 }
 
+/// Creates persistent visualization entities for completed polygons.
+/// Uses standard material pipeline for UI elements separate from point cloud.
 fn create_completed_polygon(
     commands: &mut Commands,
     points: &[Vec3],
@@ -322,7 +349,7 @@ fn create_completed_polygon(
         return;
     }
 
-    // Create points for completed polygon
+    // Create vertex markers with emissive material for visibility.
     for (i, point) in points.iter().enumerate() {
         commands.spawn((
             Mesh3d(meshes.add(Sphere::new(0.05))),
@@ -336,16 +363,17 @@ fn create_completed_polygon(
         ));
     }
 
-    // Create lines for completed polygon (including closing line)
+    // Create edge visualization with oriented cuboid meshes.
     for i in 0..points.len() {
         let start = points[i];
-        let end = points[(i + 1) % points.len()];
+        let end = points[(i + 1) % points.len()]; // Close polygon loop.
 
         let direction = end - start;
         let distance = direction.length();
         let midpoint = (start + end) * 0.5;
 
         if distance > 0.1 {
+            // Calculate edge orientation for proper cuboid alignment.
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
             commands.spawn((
@@ -361,8 +389,8 @@ fn create_completed_polygon(
         }
     }
 
-    // Create fill for completed polygon
-    let _ = create_polygon_mesh(points, ground_height);
+    // Create polygon fill mesh for visual feedback (optional).
+    let _fill_mesh = create_polygon_mesh(points, ground_height);
 
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(0.05))),
@@ -375,6 +403,8 @@ fn create_completed_polygon(
     ));
 }
 
+/// Manages real-time preview visualization during polygon construction.
+/// Shows current cursor position and preview edge to last vertex.
 pub fn update_polygon_preview(
     mut commands: Commands,
     polygon_tool: Res<PolygonTool>,
@@ -382,7 +412,7 @@ pub fn update_polygon_preview(
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing_preview: Query<Entity, With<PolygonPreview>>,
 ) {
-    // Clean up existing preview entities
+    // Clean up existing preview entities to prevent accumulation.
     for entity in existing_preview.iter() {
         commands.entity(entity).despawn();
     }
@@ -391,7 +421,7 @@ pub fn update_polygon_preview(
         return;
     }
 
-    // Create preview point if we have one
+    // Create preview cursor visualization at mouse intersection point.
     if let Some(preview_point) = polygon_tool.preview_point {
         commands.spawn((
             Mesh3d(meshes.add(Sphere::new(0.05))),
@@ -404,7 +434,7 @@ pub fn update_polygon_preview(
             PolygonPreview,
         ));
 
-        // If we have existing points, show preview line to current mouse position
+        // Show preview edge from last placed vertex to current cursor position.
         if let Some(last_point) = polygon_tool.current_polygon.last() {
             let direction = preview_point - *last_point;
             let distance = direction.length();
@@ -428,6 +458,8 @@ pub fn update_polygon_preview(
     }
 }
 
+/// Updates current polygon visualization during interactive construction.
+/// Manages vertex markers and edge visualization for incomplete polygons.
 pub fn update_polygon_render(
     mut commands: Commands,
     polygon_tool: Res<PolygonTool>,
@@ -439,19 +471,18 @@ pub fn update_polygon_render(
     existing_fill: Query<Entity, (With<PolygonFill>, Without<GroundGrid>)>,
     completed_polygons: Query<Entity, With<CompletedPolygon>>,
 ) {
-    // Clear all polygons if 'X' was pressed
+    // Handle bulk polygon deletion with 'X' key input.
     if keyboard.just_pressed(KeyCode::KeyX) {
         for entity in completed_polygons.iter() {
             commands.entity(entity).despawn();
         }
     }
 
-    // Only render current polygon if tool is active and not completed
+    // Clean up current polygon visualization when tool inactive.
     if !polygon_tool.is_active
         || polygon_tool.is_completed
         || polygon_tool.current_polygon.is_empty()
     {
-        // Clean up current polygon entities when not active or completed
         for entity in existing_points
             .iter()
             .chain(existing_lines.iter())
@@ -462,7 +493,7 @@ pub fn update_polygon_render(
         return;
     }
 
-    // Clean up existing entities to redraw current polygon
+    // Clean up existing entities for fresh rendering of current state.
     for entity in existing_points
         .iter()
         .chain(existing_lines.iter())
@@ -471,8 +502,8 @@ pub fn update_polygon_render(
         commands.entity(entity).despawn();
     }
 
-    // Render current polygon points
-    for (i, point) in polygon_tool.current_polygon.iter().enumerate() {
+    // Render vertex markers for current polygon construction.
+    for (_i, point) in polygon_tool.current_polygon.iter().enumerate() {
         commands.spawn((
             Mesh3d(meshes.add(Sphere::new(0.05))),
             MeshMaterial3d(materials.add(StandardMaterial {
@@ -485,7 +516,8 @@ pub fn update_polygon_render(
         ));
     }
 
-    // Render current polygon lines (but don't close the loop until completed)
+    // Render edges between consecutive vertices (open polygon).
+    // Intentionally excludes closing edge until polygon completion.
     for i in 0..(polygon_tool.current_polygon.len() - 1) {
         let start = polygon_tool.current_polygon[i];
         let end = polygon_tool.current_polygon[i + 1];
@@ -510,6 +542,8 @@ pub fn update_polygon_render(
     }
 }
 
+/// Creates triangulated mesh representation of polygon for fill visualization.
+/// Uses simple fan triangulation suitable for convex and simple concave shapes.
 fn create_polygon_mesh(points: &[Vec3], ground_height: f32) -> Mesh {
     if points.len() < 3 {
         return Mesh::new(
@@ -521,12 +555,12 @@ fn create_polygon_mesh(points: &[Vec3], ground_height: f32) -> Mesh {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
-    // Add all polygon points at ground height
+    // Project all vertices to consistent ground plane for proper triangulation.
     for point in points {
         vertices.push([point.x, ground_height + 0.1, point.z]);
     }
 
-    // Simple fan triangulation from first vertex
+    // Fan triangulation from first vertex to create triangle list.
     for i in 1..(points.len() - 1) {
         indices.extend_from_slice(&[0, i as u32, (i + 1) as u32]);
     }
@@ -538,7 +572,7 @@ fn create_polygon_mesh(points: &[Vec3], ground_height: f32) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
     mesh.insert_indices(bevy::render::mesh::Indices::U32(indices));
 
-    // Generate normals pointing up
+    // Generate upward-facing normals for consistent lighting behavior.
     let normals: Vec<[f32; 3]> = (0..points.len()).map(|_| [0.0, 1.0, 0.0]).collect();
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 

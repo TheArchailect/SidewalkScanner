@@ -6,5 +6,6 @@ pub mod gizmos;
 pub mod grid;
 pub mod heightmap;
 pub mod point_cloud;
+pub mod point_cloud_render_pipeline;
 pub mod render_mode;
 pub mod shaders;

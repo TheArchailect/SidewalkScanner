@@ -1,43 +1,9 @@
 use crate::engine::render_mode::RenderMode;
-use bevy::render::render_resource::BufferVec;
-use bevy::{
-    prelude::*,
-    reflect::TypePath,
-    render::render_resource::{AsBindGroup, ShaderRef},
-};
-/// Simplified point cloud shader material - only textures needed for rendering
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct PointCloudShader {
-    #[texture(0)]
-    #[sampler(1)]
-    pub position_texture: Handle<Image>,
+use bevy::prelude::*;
 
-    #[texture(2)]
-    #[sampler(3)]
-    pub final_texture: Handle<Image>, // Output from compute shader
-
-    #[texture(4)]
-    #[sampler(5)]
-    pub depth_texture: Handle<Image>, //
-
-    #[uniform(6)]
-    pub params: [Vec4; 3], // params[0] = min_bounds+size, params[1] = max_bounds, params[2] = camera_pos+padding
-
-                           // #[storage(7, read_only)]
-                           // i cant use a buffervec here
-                           // pub selection_ids: BufferVec<u32>,
-}
-
-impl Material for PointCloudShader {
-    fn vertex_shader() -> ShaderRef {
-        "./shaders/point_cloud.wgsl".into()
-    }
-
-    fn fragment_shader() -> ShaderRef {
-        "./shaders/point_cloud.wgsl".into()
-    }
-}
-
+/// Uniform data structure for polygon classification compute shaders.
+/// Maintains compatibility with existing compute pipeline while removing
+/// dependency on Bevy's Material trait system.
 #[derive(Debug, Clone, Copy, bevy::render::render_resource::ShaderType)]
 #[repr(C)]
 pub struct PolygonClassificationUniform {

@@ -1,34 +1,40 @@
-use crate::engine::compute_classification::{
-    ComputeClassificationState, run_classification_compute,
-};
-use crate::engine::edl_compute_depth::{EDLRenderState, run_edl_compute};
+// Standard library and external crates
 use bevy::asset::AssetMetaCheck;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::window::PresentMode;
 use bevy_common_assets::json::JsonAssetPlugin;
-use engine::edl_compute_depth::EDLComputePlugin;
-use tools::class_selection::{ClassSelectionState, handle_class_selection};
+
+// Local modules
 mod constants;
 mod engine;
 mod tools;
-use crate::engine::edl_post_processing::{EDLPostProcessPlugin, EDLSettings};
-use crate::engine::grid::create_ground_grid;
-use crate::engine::point_cloud::PointCloud;
-use crate::engine::point_cloud::create_point_index_mesh;
-use crate::engine::point_cloud::update_camera_uniform;
-use crate::engine::shaders::PointCloudShader;
-use engine::compute_classification::ComputeClassificationPlugin;
-use engine::render_mode::{RenderModeState, render_mode_system};
-use engine::{
+
+// Crate engine modules
+use crate::engine::{
     camera::{ViewportCamera, camera_controller},
+    compute_classification::{
+        ComputeClassificationPlugin, ComputeClassificationState, run_classification_compute,
+    },
+    edl_compute_depth::{EDLComputePlugin, EDLRenderState, run_edl_compute},
+    edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
-    grid::GridCreated,
-    point_cloud::{PointCloudAssets, PointCloudBounds},
+    grid::{GridCreated, create_ground_grid},
+    point_cloud::{PointCloud, PointCloudAssets, PointCloudBounds, create_point_index_mesh},
+    point_cloud_render_pipeline::{
+        PointCloudRenderPlugin, PointCloudRenderable, extract_point_cloud_render_state,
+    },
+    render_mode::{RenderModeState, render_mode_system},
 };
-use tools::polygon::{
-    PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
-    update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
+
+// Crate tools modules
+use crate::tools::{
+    class_selection::{ClassSelectionState, handle_class_selection},
+    polygon::{
+        PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
+        update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
+    },
 };
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Resource)]
@@ -57,6 +63,14 @@ pub struct SelectionBuffer {
 }
 #[derive(Component)]
 struct FpsText;
+#[derive(Resource, Default, Clone, ExtractResource)]
+pub struct PipelineDebugState {
+    pub entities_queued: u32,
+    pub mesh_instances_found: u32,
+    pub pipeline_specializations: u32,
+    pub phase_items_added: u32,
+    pub views_with_phases: u32,
+}
 
 const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga_versions/riga_numbered_0.03";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
@@ -82,7 +96,12 @@ fn create_app() -> App {
 
     app.add_plugins(create_default_plugins())
         .init_state::<AppState>()
-        .add_plugins(MaterialPlugin::<PointCloudShader>::default())
+        .add_plugins(PointCloudRenderPlugin)
+        .init_resource::<PipelineDebugState>()
+        .add_plugins(ExtractResourcePlugin::<PipelineDebugState>::default())
+        .add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<
+            PointCloudRenderable,
+        >::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
         .add_plugins(ComputeClassificationPlugin)
@@ -104,10 +123,19 @@ fn create_app() -> App {
     // Configure render app with proper resource extraction
     if let Some(render_app) = app.get_sub_app_mut(bevy::render::RenderApp) {
         // Initialise the resource in the render world
-        render_app.init_resource::<State<AppState>>();
+        render_app
+            .init_resource::<State<AppState>>()
+            .init_resource::<PipelineDebugState>();
 
         // Extract main-world state each frame
-        render_app.add_systems(bevy::render::ExtractSchedule, extract_app_state);
+        render_app.add_systems(
+            bevy::render::ExtractSchedule,
+            (
+                extract_app_state,
+                extract_point_cloud_render_state,
+                extract_camera_phases,
+            ),
+        );
 
         render_app
             .init_resource::<ComputeClassificationState>()
@@ -156,7 +184,6 @@ fn create_app() -> App {
                 handle_class_selection,
                 fps_text_update_system,
                 camera_controller,
-                update_camera_uniform,
                 update_direction_gizmo,
                 update_mouse_intersection_gizmo,
                 polygon_tool_system,
@@ -167,9 +194,36 @@ fn create_app() -> App {
                 update_polygon_classification_shader,
             )
                 .run_if(in_state(AppState::Running)),
+        )
+        .add_systems(
+            Update,
+            debug_pipeline_state.run_if(in_state(AppState::Running)),
         );
 
     app
+}
+
+fn extract_camera_phases(
+    mut point_cloud_phases: ResMut<
+        bevy::render::render_phase::ViewSortedRenderPhases<
+            engine::point_cloud_render_pipeline::PointCloudPhase,
+        >,
+    >,
+    cameras: bevy::render::Extract<Query<(Entity, &Camera), With<Camera3d>>>,
+    mut live_entities: Local<std::collections::HashSet<bevy::render::view::RetainedViewEntity>>,
+) {
+    live_entities.clear();
+    for (main_entity, camera) in &cameras {
+        if !camera.is_active {
+            continue;
+        }
+
+        let retained_view_entity =
+            bevy::render::view::RetainedViewEntity::new(main_entity.into(), None, 0);
+        point_cloud_phases.insert_or_clear(retained_view_entity);
+        live_entities.insert(retained_view_entity);
+    }
+    point_cloud_phases.retain(|camera_entity, _| live_entities.contains(camera_entity));
 }
 
 fn extract_app_state(
@@ -274,6 +328,14 @@ fn configure_loaded_textures(
         result_image.texture_descriptor.usage |=
             bevy::render::render_resource::TextureUsages::STORAGE_BINDING;
 
+        // Ensure result texture uses non-filtering sampler.
+        result_image.sampler =
+            bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+                mag_filter: bevy::image::ImageFilterMode::Nearest,
+                min_filter: bevy::image::ImageFilterMode::Nearest,
+                ..default()
+            });
+
         // Create depth texture
         let mut depth_image = Image::new_uninit(
             bevy::render::render_resource::Extent3d {
@@ -291,6 +353,14 @@ fn configure_loaded_textures(
                 | bevy::render::render_resource::TextureUsages::COPY_SRC
                 | bevy::render::render_resource::TextureUsages::COPY_DST;
 
+        // Add sampler configuration to depth texture.
+        depth_image.sampler =
+            bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+                mag_filter: bevy::image::ImageFilterMode::Nearest,
+                min_filter: bevy::image::ImageFilterMode::Nearest,
+                ..default()
+            });
+
         assets.result_texture = images.add(result_image);
         assets.depth_texture = images.add(depth_image);
 
@@ -299,12 +369,10 @@ fn configure_loaded_textures(
     }
 }
 
-// Create point cloud and grid when textures are ready
 fn create_point_cloud_when_ready(
     mut loading_progress: ResMut<LoadingProgress>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<PointCloudShader>>,
     mut standard_materials: ResMut<Assets<StandardMaterial>>,
     mut assets: ResMut<PointCloudAssets>,
     images: ResMut<Assets<Image>>,
@@ -319,20 +387,10 @@ fn create_point_cloud_when_ready(
         return;
     };
 
-    // Create point cloud
-    let mesh = create_point_index_mesh(bounds.loaded_points);
-    let material = create_point_cloud_material(bounds, &assets);
+    // Create point cloud entity without material - custom pipeline handles rendering.
+    spawn_point_cloud_entity(&mut commands, &mut meshes, bounds);
 
-    spawn_point_cloud_entity(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        mesh,
-        material,
-        bounds,
-    );
-
-    // Create grid
+    // Create grid with standard material pipeline.
     if !grid_created.created {
         let heightmap_image = images.get(&assets.heightmap_texture);
         create_ground_grid(
@@ -343,10 +401,10 @@ fn create_point_cloud_when_ready(
             heightmap_image,
         );
         grid_created.created = true;
-        println!("✓ Grid created");
+        println!("Grid created");
     }
 
-    // Create gizmos
+    // Create gizmos using standard material system.
     spawn_gizmos(
         &mut commands,
         &mut meshes,
@@ -356,7 +414,7 @@ fn create_point_cloud_when_ready(
 
     assets.is_loaded = true;
     loading_progress.point_cloud_created = true;
-    println!("✓ Point cloud and visual elements ready");
+    println!("Point cloud and visual elements ready");
 }
 
 // Transition to AssetsLoaded state
@@ -428,6 +486,8 @@ fn configure_texture_sampling(images: &mut ResMut<Assets<Image>>, assets: &Point
         &assets.position_texture,
         &assets.colour_class_texture,
         &assets.spatial_index_texture,
+        &assets.result_texture,
+        &assets.depth_texture,
     ] {
         if let Some(image) = images.get_mut(texture_handle) {
             image.sampler = sampler_config.clone();
@@ -435,66 +495,82 @@ fn configure_texture_sampling(images: &mut ResMut<Assets<Image>>, assets: &Point
     }
 }
 
-// Abstracted point cloud material creation
-fn create_point_cloud_material(
-    bounds: &PointCloudBounds,
-    assets: &PointCloudAssets,
-) -> PointCloudShader {
-    PointCloudShader {
-        position_texture: assets.position_texture.clone(),
-        final_texture: assets.result_texture.clone(),
-        depth_texture: assets.depth_texture.clone(),
-        params: [
-            Vec4::new(
-                bounds.min_x() as f32,
-                bounds.min_y() as f32,
-                bounds.min_z() as f32,
-                bounds.texture_size as f32,
-            ),
-            Vec4::new(
-                bounds.max_x() as f32,
-                bounds.max_y() as f32,
-                bounds.max_z() as f32,
-                0.0,
-            ),
-            Vec4::new(0.0, 0.0, 0.0, 0.0),
-        ],
-    }
-}
-
-// Abstracted point cloud entity spawning
 fn spawn_point_cloud_entity(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    materials: &mut ResMut<Assets<PointCloudShader>>,
-    mesh: Mesh,
-    material: PointCloudShader,
     bounds: &PointCloudBounds,
 ) {
+    // Create indexed vertex buffer for GPU-side point expansion.
+    let mesh = create_point_index_mesh(bounds.loaded_points);
+
     commands.spawn((
+        // Standard 3D mesh component without material binding.
         Mesh3d(meshes.add(mesh)),
-        MeshMaterial3d(materials.add(material)),
         Transform::from_translation(Vec3::ZERO),
         Visibility::Visible,
         InheritedVisibility::VISIBLE,
         ViewVisibility::default(),
         GlobalTransform::default(),
+        // Point cloud identification for systems and queries.
         PointCloud,
+        // Custom render pipeline component containing vertex count for draw calls.
+        PointCloudRenderable {
+            point_count: bounds.loaded_points as u32,
+        },
+        // Disable frustum culling for large-scale point cloud rendering.
         bevy::render::view::NoFrustumCulling,
     ));
 
     println!(
-        "✓ Point cloud entity spawned with {} vertices",
+        "Point cloud entity spawned with {} vertices using custom render pipeline",
         bounds.loaded_points
     );
 }
 
-// Rest of the helper functions remain the same...
 fn get_bounds_path() -> String {
     format!(
         "{}_metadata_{}.json",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
     )
+}
+
+pub fn debug_pipeline_state(
+    debug_state: Res<PipelineDebugState>,
+    point_cloud_query: Query<Entity, With<PointCloudRenderable>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if keyboard.just_pressed(KeyCode::F1) {
+        let pc_entities = point_cloud_query.iter().count();
+
+        println!("=== PIPELINE DEBUG STATE ===");
+        println!("Point cloud entities in main world: {}", pc_entities);
+        println!(
+            "Entities queued for rendering: {}",
+            debug_state.entities_queued
+        );
+        println!("Mesh instances found: {}", debug_state.mesh_instances_found);
+        println!(
+            "Pipeline specializations: {}",
+            debug_state.pipeline_specializations
+        );
+        println!("Phase items added: {}", debug_state.phase_items_added);
+        println!("Views with phases: {}", debug_state.views_with_phases);
+
+        // Critical assertions
+        assert!(pc_entities > 0, "No point cloud entities in main world");
+        assert!(
+            debug_state.entities_queued > 0,
+            "No entities queued for rendering"
+        );
+        assert!(
+            debug_state.mesh_instances_found > 0,
+            "No mesh instances found"
+        );
+        assert!(debug_state.phase_items_added > 0, "No phase items added");
+        assert!(debug_state.views_with_phases > 0, "No views have phases");
+
+        println!("All assertions passed!");
+    }
 }
 
 fn create_default_plugins() -> impl PluginGroup {
@@ -549,7 +625,7 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
 fn spawn_lighting(commands: &mut Commands) {
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: false,
+            shadows_enabled: true,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(

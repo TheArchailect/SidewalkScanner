@@ -20,23 +20,21 @@ use bevy::render::{
 
 pub struct ComputeClassificationPlugin;
 
+#[derive(Resource, Default, ExtractResource, Clone)]
+pub struct ComputeClassificationState {
+    pub should_recompute: bool,
+    pub pipeline: Option<CachedComputePipelineId>,
+    pub bind_group_layout: Option<BindGroupLayout>,
+}
+
 impl Plugin for ComputeClassificationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ComputeClassificationState>()
             .add_systems(Update, trigger_classification_compute)
             .add_plugins(ExtractResourcePlugin::<ComputeClassificationState>::default())
             .add_plugins(ExtractResourcePlugin::<PolygonClassificationData>::default())
-            .add_plugins(ExtractResourcePlugin::<PointCloudAssets>::default())
-            .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default())
-            .add_plugins(ExtractResourcePlugin::<RenderModeState>::default());
+            .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default());
     }
-}
-
-#[derive(Resource, Default, ExtractResource, Clone)]
-pub struct ComputeClassificationState {
-    pub should_recompute: bool,
-    pub pipeline: Option<CachedComputePipelineId>,
-    pub bind_group_layout: Option<BindGroupLayout>,
 }
 
 pub fn trigger_classification_compute(
