@@ -176,13 +176,8 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
         case 1u: { // Modified classification
             return vec4<f32>(classification_to_color(final_class), f32(point_connectivity_class_id));
         }
-        case 2u: { // RGB with classification brightness
-            if length(original_rgb) > 0.1 {
-                let brightness = classification_brightness(final_class);
-                return vec4<f32>(original_rgb * brightness, f32(point_connectivity_class_id));
-            } else {
-                return vec4<f32>(classification_to_color(final_class), f32(point_connectivity_class_id));
-            }
+        case 2u: { // RGB
+            return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
         }
         case 3u: { // Morton code debug
             return vec4<f32>(morton_to_debug_color_blended(morton_low, morton_high), f32(point_connectivity_class_id));
@@ -240,20 +235,6 @@ fn point_in_polygon(point: vec2<f32>, start_idx: u32, point_count: u32) -> bool 
         j = i;
     }
     return inside;
-}
-
-fn classification_brightness(classification: u32) -> f32 {
-    switch classification {
-        case 2u: { return 1.2; }
-        case 10u: { return 1.2; }
-        case 11u: { return 1.2; }
-        case 12u: { return 1.2; }
-        case 3u: { return 0.8; }
-        case 4u: { return 0.8; }
-        case 5u: { return 0.8; }
-        case 6u: { return 1.1; }
-        default: { return 1.0; }
-    }
 }
 
 fn classification_to_color(classification: u32) -> vec3<f32> {

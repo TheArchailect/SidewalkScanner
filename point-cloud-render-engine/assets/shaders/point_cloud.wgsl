@@ -22,6 +22,7 @@ struct VertexOutput {
     @location(0) color: vec3<f32>,
     @location(1) depth: f32,
     @location(2) connectivity_class: u32,
+    @location(3) quad_pos: vec2<f32>,
 }
 
 @vertex
@@ -42,6 +43,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
         case 4u: { quad_pos = vec2<f32>( 0.5,  0.5); } // Top right (triangle 2)
         default: { quad_pos = vec2<f32>(-0.5,  0.5); } // Top left (triangle 2)
     }
+    out.quad_pos = quad_pos;
 
     let texture_size = material.params[0].w;
     let x_coord = point_index % u32(texture_size);
@@ -68,10 +70,10 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     let up = cross(right, to_camera);
 
     // Apply interpolated billboarded quad offset
-    let point_size_min = 0.085;
-    let point_size_max = 0.4;
+    let point_size_min = 0.075;
+    let point_size_max = 0.3;
 
-    let dist_min = 10.0;
+    let dist_min = 5.0;
     let dist_max = 100.0;
 
     let dist = distance(world_pos, camera);
@@ -119,6 +121,13 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    let r = length(in.quad_pos); // 0 at center, ~0.707 at corners
+    let radius = 0.5;
+
+    if (r > radius) {
+        discard;  // hard circle cutout
+    }
+
     let depth = in.depth;
     let near = 0.1;
     let far = 500.0;
