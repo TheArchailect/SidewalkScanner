@@ -1,6 +1,6 @@
 /// Point cloud coordinate bounds tracking and normalisation
-
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PointCloudBounds {
     pub min_x: f64,
     pub max_x: f64,
