@@ -1,5 +1,6 @@
 use crate::AppState;
 use crate::PipelineDebugState;
+use crate::SceneManifest;
 use crate::engine::point_cloud::PointCloudAssets;
 use crate::engine::render_mode::RenderModeState;
 use bevy::core_pipeline::core_3d::graph::{Core3d, Node3d};
@@ -710,6 +711,7 @@ pub fn extract_point_cloud_render_state(
     mut commands: Commands,
     camera_query: bevy::render::Extract<Query<&GlobalTransform, With<Camera3d>>>,
     assets: bevy::render::Extract<Res<PointCloudAssets>>,
+    manifests: bevy::render::Extract<Res<Assets<SceneManifest>>>,
 ) {
     let mut render_state = PointCloudRenderState::default();
 
@@ -718,19 +720,21 @@ pub fn extract_point_cloud_render_state(
         render_state.should_render = true;
     }
 
-    if let Some(bounds) = &assets.bounds {
-        render_state.bounds_min = Vec3::new(
-            bounds.min_x() as f32,
-            bounds.min_y() as f32,
-            bounds.min_z() as f32,
-        );
-        render_state.bounds_max = Vec3::new(
-            bounds.max_x() as f32,
-            bounds.max_y() as f32,
-            bounds.max_z() as f32,
-        );
-        render_state.texture_size = bounds.texture_size as f32;
-    }
+    let Some(bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
+
+    render_state.bounds_min = Vec3::new(
+        bounds.min_x() as f32,
+        bounds.min_y() as f32,
+        bounds.min_z() as f32,
+    );
+    render_state.bounds_max = Vec3::new(
+        bounds.max_x() as f32,
+        bounds.max_y() as f32,
+        bounds.max_z() as f32,
+    );
+    render_state.texture_size = bounds.texture_size as f32;
 
     commands.insert_resource(render_state);
 }

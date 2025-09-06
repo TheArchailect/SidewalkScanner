@@ -1,6 +1,6 @@
 use crate::RenderModeState;
 /// GPU-accelerated polygon classification compute pipeline (MVP)
-use crate::engine::point_cloud::{PointCloudAssets, PointCloudBounds};
+use crate::engine::point_cloud::{PointCloudAssets, SceneManifest};
 use crate::engine::render_mode::RenderMode;
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
@@ -58,6 +58,7 @@ pub fn run_classification_compute(
     gpu_images: ResMut<RenderAssets<GpuImage>>,
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
+    manifest: Res<SceneManifest>,
 ) {
     let should_update = classification_data.is_changed()
         || render_mode.is_changed()
@@ -107,7 +108,7 @@ pub fn run_classification_compute(
         final_gpu,
         &classification_data.polygons,
         &selection_state,
-        &assets.bounds,
+        manifest.terrain_bounds(), // Pass terrain bounds directly from manifest.
         render_mode.current_mode,
     );
 
@@ -217,12 +218,12 @@ fn execute_compute_shader(
     final_gpu: &GpuImage,
     polygons: &[ClassificationPolygon],
     selection_state: &ClassSelectionState,
-    bounds: &Option<PointCloudBounds>,
+    terrain_bounds: &crate::engine::point_cloud::BoundsData, // Accept terrain bounds directly.
     current_mode: RenderMode,
 ) {
     let compute_buffer =
         create_compute_buffer(render_device, polygons, selection_state, current_mode);
-    let bounds_buffer = create_bounds_buffer(render_device, bounds);
+    let bounds_buffer = create_terrain_bounds_buffer(render_device, terrain_bounds);
 
     let bind_group = render_device.create_bind_group(
         "classification_compute_bind_group",
@@ -328,42 +329,39 @@ fn create_compute_buffer(
     })
 }
 
-fn create_bounds_buffer(
+/// Create uniform buffer from terrain bounds data without legacy conversion.
+fn create_terrain_bounds_buffer(
     render_device: &RenderDevice,
-    bounds: &Option<PointCloudBounds>,
+    terrain_bounds: &crate::engine::point_cloud::BoundsData,
 ) -> bevy::render::render_resource::Buffer {
     use bytemuck::{Pod, Zeroable};
 
     #[repr(C)]
     #[derive(Pod, Zeroable, Copy, Clone)]
-    struct BoundsUniform {
+    struct TerrainBoundsUniform {
         min_bounds: [f32; 3],
         _padding1: f32,
         max_bounds: [f32; 3],
         _padding2: f32,
     }
 
-    let uniform = if let Some(bounds) = bounds {
-        BoundsUniform {
-            min_bounds: [
-                bounds.min_x() as f32,
-                bounds.min_y() as f32,
-                bounds.min_z() as f32,
-            ],
-            _padding1: 0.0,
-            max_bounds: [
-                bounds.max_x() as f32,
-                bounds.max_y() as f32,
-                bounds.max_z() as f32,
-            ],
-            _padding2: 0.0,
-        }
-    } else {
-        BoundsUniform::zeroed()
+    let uniform = TerrainBoundsUniform {
+        min_bounds: [
+            terrain_bounds.min_x as f32,
+            terrain_bounds.min_y as f32,
+            terrain_bounds.min_z as f32,
+        ],
+        _padding1: 0.0,
+        max_bounds: [
+            terrain_bounds.max_x as f32,
+            terrain_bounds.max_y as f32,
+            terrain_bounds.max_z as f32,
+        ],
+        _padding2: 0.0,
     };
 
     render_device.create_buffer_with_data(&bevy::render::render_resource::BufferInitDescriptor {
-        label: Some("bounds_data"),
+        label: Some("terrain_bounds_data"),
         contents: bytemuck::cast_slice(&[uniform]),
         usage: BufferUsages::UNIFORM,
     })

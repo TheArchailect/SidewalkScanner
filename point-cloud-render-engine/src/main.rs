@@ -22,7 +22,9 @@ use crate::engine::{
     edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
     gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
     grid::{GridCreated, create_ground_grid},
-    point_cloud::{PointCloud, PointCloudAssets, PointCloudBounds, create_point_index_mesh},
+    point_cloud::{
+        PointCloud, PointCloudAssets, PointCloudBounds, SceneManifest, create_point_index_mesh,
+    },
     point_cloud_render_pipeline::{
         PointCloudRenderPlugin, PointCloudRenderable, extract_point_cloud_render_state,
     },
@@ -60,14 +62,17 @@ pub struct LoadingProgress {
     pub point_cloud_created: bool,
     pub compute_pipelines_ready: bool,
 }
+
 #[derive(Resource, Default)]
-struct BoundsLoader {
-    handle: Option<Handle<PointCloudBounds>>,
+struct ManifestLoader {
+    handle: Option<Handle<SceneManifest>>,
 }
+
 #[derive(Resource, Default)]
 pub struct SelectionBuffer {
     pub selected_ids: Vec<u32>,
 }
+
 #[derive(Component)]
 struct FpsText;
 #[derive(Resource, Default, Clone, ExtractResource)]
@@ -79,7 +84,8 @@ pub struct PipelineDebugState {
     pub views_with_phases: u32,
 }
 
-const RELATIVE_ASSET_PATH: &'static str = "pre_processor_data/riga_versions/riga_numbered_0.03";
+const RELATIVE_ASSET_PATH: &'static str = "output/terrain/RigaNumbered0.03";
+const RELATIVE_MANIFEST_PATH: &'static str = "output/";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 fn main() {
@@ -110,7 +116,10 @@ fn create_app() -> App {
             PointCloudRenderable,
         >::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
+        // Registers SceneManifest as a loadable asset type from JSON files.
+        .add_plugins(JsonAssetPlugin::<SceneManifest>::new(&["json"]))
+        // Automatically extracts SceneManifest resource from main world to render world.
+        .add_plugins(ExtractResourcePlugin::<SceneManifest>::default())
         .add_plugins(ComputeClassificationPlugin)
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin)
@@ -118,7 +127,7 @@ fn create_app() -> App {
 
     // Initialise resources early
     app.init_resource::<LoadingProgress>()
-        .init_resource::<BoundsLoader>()
+        .init_resource::<ManifestLoader>()
         .init_resource::<ClassSelectionState>()
         .init_resource::<SelectionBuffer>()
         .init_resource::<PolygonClassificationData>()
@@ -145,6 +154,7 @@ fn create_app() -> App {
                 extract_app_state,
                 extract_point_cloud_render_state,
                 extract_camera_phases,
+                extract_scene_manifest,
             ),
         );
 
@@ -292,33 +302,49 @@ fn setup(mut commands: Commands) {
     }
 }
 
+fn extract_scene_manifest(
+    mut commands: Commands,
+    assets: bevy::render::Extract<Res<PointCloudAssets>>,
+    manifests: bevy::render::Extract<Res<Assets<SceneManifest>>>,
+) {
+    // Extract manifest once when available.
+    if let Some(ref handle) = assets.manifest {
+        if let Some(manifest) = manifests.get(handle) {
+            commands.insert_resource(manifest.clone());
+        }
+    }
+}
+
 // Start the loading process
-fn start_loading(mut bounds_loader: ResMut<BoundsLoader>, asset_server: Res<AssetServer>) {
-    let bounds_path = get_bounds_path();
-    bounds_loader.handle = Some(asset_server.load(&bounds_path));
+fn start_loading(mut manifest_loader: ResMut<ManifestLoader>, asset_server: Res<AssetServer>) {
+    // let bounds_path = get_bounds_path();
+    let manifest_path = format!("{}/manifest.json", RELATIVE_MANIFEST_PATH);
+    manifest_loader.handle = Some(asset_server.load(&manifest_path));
 }
 
 // Load bounds and start texture loading when ready
 fn load_bounds_system(
     mut loading_progress: ResMut<LoadingProgress>,
-    bounds_loader: ResMut<BoundsLoader>,
+    manifest_loader: ResMut<ManifestLoader>,
     mut assets: ResMut<PointCloudAssets>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    bounds_assets: Res<Assets<PointCloudBounds>>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     if loading_progress.bounds_loaded {
         return;
     }
 
-    if let Some(ref handle) = bounds_loader.handle {
-        if let Some(bounds) = bounds_assets.get(handle) {
+    if let Some(ref handle) = manifest_loader.handle {
+        if let Some(manifest) = manifests.get(handle) {
             println!("✓ Bounds loaded successfully");
-            assets.bounds = Some(bounds.clone());
+            assets.manifest = Some(handle.clone());
+            commands.insert_resource(manifest.clone());
             loading_progress.bounds_loaded = true;
 
             // Update camera with bounds
-            let vp_camera = ViewportCamera::with_bounds(bounds);
+            let bounds = manifest.to_point_cloud_bounds();
+            let vp_camera = ViewportCamera::with_bounds(&bounds);
             commands.insert_resource(vp_camera);
 
             // Start loading textures now that we have bounds
@@ -430,12 +456,13 @@ fn create_point_cloud_when_ready(
     images: ResMut<Assets<Image>>,
     mut grid_created: ResMut<GridCreated>,
     asset_server: Res<AssetServer>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     if loading_progress.point_cloud_created || !loading_progress.textures_configured {
         return;
     }
 
-    let Some(bounds) = &assets.bounds.clone() else {
+    let Some(bounds) = &assets.get_bounds(&manifests) else {
         return;
     };
 
@@ -499,20 +526,18 @@ fn transition_to_running(mut next_state: ResMut<NextState<AppState>>) {
 
 // Abstracted texture loading function
 fn load_unified_textures(asset_server: &AssetServer, assets: &mut PointCloudAssets) {
-    let position_texture_path = format!(
-        "{}_position_{}.dds",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    );
+    let position_texture_path =
+        format!("{}{}/position.dds", RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION);
     let colour_class_texture_path = format!(
-        "{}_colour_class_{}.dds",
+        "{}{}/colourclass.dds",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
     );
     let heightmap_texture_path = format!(
-        "{}_heightmap_{}.dds",
+        "{}{}/heightmap.dds",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
     );
     let spatial_index_texture_path = format!(
-        "{}_spatial_index_{}.dds",
+        "{}{}/spatialindex.dds",
         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
     );
 
@@ -579,12 +604,12 @@ fn spawn_point_cloud_entity(
     );
 }
 
-fn get_bounds_path() -> String {
-    format!(
-        "{}_metadata_{}.json",
-        RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
-    )
-}
+// fn get_bounds_path() -> String {
+//     format!(
+//         "{}_metadata_{}.json",
+//         RELATIVE_ASSET_PATH, TEXTURE_RESOLUTION
+//     )
+// }
 
 pub fn debug_pipeline_state(
     debug_state: Res<PipelineDebugState>,
@@ -660,7 +685,7 @@ fn create_window_config() -> Window {
     }
 }
 
-fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAssets {
+fn create_point_cloud_assets(manifest: Option<Handle<SceneManifest>>) -> PointCloudAssets {
     PointCloudAssets {
         position_texture: Handle::default(),
         colour_class_texture: Handle::default(),
@@ -668,11 +693,13 @@ fn create_point_cloud_assets(bounds: Option<PointCloudBounds>) -> PointCloudAsse
         result_texture: Handle::default(),
         depth_texture: Handle::default(),
         heightmap_texture: Handle::default(),
-        bounds,
+        // Asset textures are None until manifest confirms asset atlas presence.
+        asset_position_texture: None,
+        asset_colour_class_texture: None,
+        manifest,
         is_loaded: false,
     }
 }
-
 // UI and lighting systems remain unchanged
 fn spawn_lighting(commands: &mut Commands) {
     commands.spawn((

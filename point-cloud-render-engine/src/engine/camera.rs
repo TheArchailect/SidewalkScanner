@@ -1,12 +1,12 @@
+use super::{
+    heightmap::sample_heightmap_bilinear,
+    point_cloud::{PointCloudAssets, PointCloudBounds},
+};
+use crate::SceneManifest;
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
     window::PrimaryWindow,
-};
-
-use super::{
-    heightmap::sample_heightmap_bilinear,
-    point_cloud::{PointCloudAssets, PointCloudBounds},
 };
 
 #[derive(Resource)]
@@ -69,13 +69,13 @@ impl ViewportCamera {
         camera: &Camera,
         camera_transform: &GlobalTransform,
         heightmap_image: Option<&Image>,
-        bounds: Option<&PointCloudBounds>,
+        bounds: &PointCloudBounds,
     ) -> Option<Vec3> {
         let ray = camera
             .viewport_to_world(camera_transform, cursor_pos)
             .ok()?;
 
-        let intersection = if let (Some(heightmap), Some(bounds)) = (heightmap_image, bounds) {
+        let intersection = if let Some(heightmap) = heightmap_image {
             self.precise_heightmap_intersection(&ray, heightmap, bounds)
         } else {
             self.flat_plane_intersection(&ray)
@@ -248,6 +248,7 @@ pub fn camera_controller(
     time: Res<Time>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
         // Update cursor position
@@ -294,6 +295,10 @@ pub fn camera_controller(
             maps_camera.yaw += rotation_input * rotation_speed;
         }
 
+        let Some(bounds) = assets.get_bounds(&manifests) else {
+            return;
+        };
+
         // Follow mouse with spacebar
         if is_following_mouse {
             let last_pos = maps_camera.last_mouse_pos;
@@ -302,7 +307,7 @@ pub fn camera_controller(
                 camera,
                 global_transform,
                 images.get(&assets.heightmap_texture),
-                assets.bounds.as_ref(),
+                &bounds,
             ) {
                 let movement_speed = 2.0 * time.delta_secs();
                 maps_camera.focus_point = maps_camera.focus_point.lerp(pivot_point, movement_speed);

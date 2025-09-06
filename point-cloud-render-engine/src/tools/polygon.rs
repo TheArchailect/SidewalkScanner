@@ -1,3 +1,4 @@
+use crate::SceneManifest;
 use crate::engine::camera::ViewportCamera;
 use crate::engine::grid::GroundGrid;
 use crate::engine::point_cloud::PointCloudAssets;
@@ -9,7 +10,6 @@ use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
-
 /// Polygon definition for point cloud classification operations.
 /// Contains spatial coordinates and target classification metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +164,7 @@ pub fn polygon_tool_system(
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     // Only process input when polygon tool is active (controlled by tool manager).
     if !polygon_tool.is_active {
@@ -227,6 +228,10 @@ pub fn polygon_tool_system(
         );
     }
 
+    let Some(bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
+
     // Update preview point for real-time cursor tracking.
     if !polygon_tool.is_completed {
         if let (Ok((camera_global_transform, camera)), Ok(window)) =
@@ -238,7 +243,7 @@ pub fn polygon_tool_system(
                     camera,
                     camera_global_transform,
                     images.get(&assets.heightmap_texture),
-                    assets.bounds.as_ref(),
+                    &bounds,
                 );
             }
         }

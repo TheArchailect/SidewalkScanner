@@ -1,3 +1,4 @@
+use crate::SceneManifest;
 use crate::engine::point_cloud::PointCloudAssets;
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
@@ -12,7 +13,6 @@ use bevy::render::{
     renderer::{RenderDevice, RenderQueue},
     texture::GpuImage,
 };
-
 pub struct EDLComputePlugin;
 
 impl Plugin for EDLComputePlugin {
@@ -67,6 +67,7 @@ pub fn trigger_edl_compute(
     mut state: ResMut<EDLComputeState>,
     camera_query: Query<&GlobalTransform, (With<Camera3d>, Changed<GlobalTransform>)>,
     assets: Res<PointCloudAssets>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     if let Ok(camera_transform) = camera_query.single() {
         state.should_recompute = true;
@@ -74,7 +75,7 @@ pub fn trigger_edl_compute(
         state.camera_transform = camera_transform.compute_matrix();
 
         // Get bounds from assets
-        if let Some(bounds) = &assets.bounds {
+        if let Some(bounds) = &assets.get_bounds(&manifests) {
             state.bounds_min = Vec3::new(
                 bounds.min_x() as f32,
                 bounds.min_y() as f32,
