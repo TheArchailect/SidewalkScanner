@@ -560,9 +560,9 @@ pub fn update_polygon_render(
     // Render vertex markers for current polygon construction.
     for (_i, point) in polygon_tool.current_polygon.iter().enumerate() {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.05))),
+            Mesh3d(meshes.add(Sphere::new(0.1))),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::hsv(0., 1., 1.),
+                base_color: Color::hsv(0., 0.5, 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
                 ..default()
             })),
@@ -584,7 +584,7 @@ pub fn update_polygon_render(
         if distance > 0.1 {
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
+                Mesh3d(meshes.add(Cuboid::new(distance, 0.045, 0.045))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),

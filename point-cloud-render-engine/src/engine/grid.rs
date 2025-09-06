@@ -24,7 +24,7 @@ pub fn create_ground_grid(
     heightmap_image: Option<&Image>,
 ) {
     let grid_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.5, 0.5, 0.5, 0.0),
+        base_color: Color::srgba(0.5, 0.5, 0.5, 0.),
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
