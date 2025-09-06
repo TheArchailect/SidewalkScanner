@@ -9,6 +9,7 @@ use bevy_common_assets::json::JsonAssetPlugin;
 // Local modules
 mod constants;
 mod engine;
+mod rpc;
 mod tools;
 
 // Crate engine modules
@@ -35,7 +36,13 @@ use crate::tools::{
         PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
         update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
     },
+    tool_manager::{
+        PolygonActionEvent, ToolManager, ToolSelectionEvent, handle_polygon_action_events,
+        handle_tool_keyboard_shortcuts, handle_tool_selection_events,
+    },
 };
+// Create Web RPC modules
+use rpc::web_rpc::WebRpcPlugin;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States, Resource)]
 pub enum AppState {
@@ -106,7 +113,8 @@ fn create_app() -> App {
         .add_plugins(JsonAssetPlugin::<PointCloudBounds>::new(&["json"]))
         .add_plugins(ComputeClassificationPlugin)
         .add_plugins(EDLComputePlugin)
-        .add_plugins(EDLPostProcessPlugin);
+        .add_plugins(EDLPostProcessPlugin)
+        .add_plugins(WebRpcPlugin);
 
     // Initialise resources early
     app.init_resource::<LoadingProgress>()
@@ -118,6 +126,9 @@ fn create_app() -> App {
         .init_resource::<PolygonTool>()
         .init_resource::<RenderModeState>()
         .init_resource::<GridCreated>()
+        .init_resource::<ToolManager>()
+        .add_event::<ToolSelectionEvent>()
+        .add_event::<PolygonActionEvent>()
         .insert_resource(create_point_cloud_assets(None));
 
     // Configure render app with proper resource extraction
@@ -176,29 +187,42 @@ fn create_app() -> App {
         .add_systems(
             Update,
             transition_to_running.run_if(in_state(AppState::ComputePipelinesReady)),
-        )
-        .add_systems(
-            Update,
-            (
-                // Runtime systems - only run when everything is ready
-                handle_class_selection,
-                fps_text_update_system,
-                camera_controller,
-                update_direction_gizmo,
-                update_mouse_intersection_gizmo,
-                polygon_tool_system,
-                update_polygon_preview,
-                update_polygon_render,
-                render_mode_system,
-                update_selection_buffer,
-                update_polygon_classification_shader,
-            )
-                .run_if(in_state(AppState::Running)),
-        )
-        .add_systems(
-            Update,
-            debug_pipeline_state.run_if(in_state(AppState::Running)),
         );
+
+    // Base runtime systems that run on all platforms.
+    let runtime_systems = (
+        // Runtime systems - only run when everything is ready
+        handle_class_selection,
+        fps_notification_system,
+        camera_controller,
+        update_direction_gizmo,
+        update_mouse_intersection_gizmo,
+        // Tool management systems
+        handle_tool_keyboard_shortcuts, // Native shortcuts or no-op for WASM
+        handle_tool_selection_events,   // Process tool activation events
+        handle_polygon_action_events,   // Process polygon action events
+        // Tool-specific systems - run after tool state changes
+        polygon_tool_system,
+        update_polygon_preview,
+        update_polygon_render,
+        // Other systems
+        render_mode_system,
+        update_selection_buffer,
+        update_polygon_classification_shader,
+    );
+
+    // Add fps_text_update_system only for native builds.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.add_systems(Update, fps_text_update_system);
+    }
+
+    app.add_systems(Update, runtime_systems.run_if(in_state(AppState::Running)));
+
+    app.add_systems(
+        Update,
+        debug_pipeline_state.run_if(in_state(AppState::Running)),
+    );
 
     app
 }
@@ -226,6 +250,30 @@ fn extract_camera_phases(
     point_cloud_phases.retain(|camera_entity, _| live_entities.contains(camera_entity));
 }
 
+fn fps_notification_system(
+    mut rpc_interface: ResMut<rpc::web_rpc::WebRpcInterface>,
+    diagnostics: Res<DiagnosticsStore>,
+    mut last_send_time: Local<f32>,
+    time: Res<Time>,
+) {
+    let current_time = time.elapsed_secs();
+
+    // Send FPS every 0.5 seconds
+    if current_time - *last_send_time >= 0.5 {
+        if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
+            if let Some(value) = fps.smoothed() {
+                rpc_interface.send_notification(
+                    "fps_update",
+                    serde_json::json!({
+                        "fps": value as f32
+                    }),
+                );
+                *last_send_time = current_time;
+            }
+        }
+    }
+}
+
 fn extract_app_state(
     main_world: bevy::render::Extract<Res<State<AppState>>>,
     mut commands: Commands,
@@ -237,7 +285,11 @@ fn extract_app_state(
 fn setup(mut commands: Commands) {
     spawn_lighting(&mut commands);
     create_edl_post_processor_camera(&mut commands);
-    spawn_ui(&mut commands);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        create_native_overlays(&mut commands);
+    }
 }
 
 // Start the loading process
@@ -650,7 +702,7 @@ fn create_edl_post_processor_camera(commands: &mut Commands) {
     ));
 }
 
-fn spawn_ui(commands: &mut Commands) {
+fn create_native_overlays(commands: &mut Commands) {
     commands
         .spawn(Node {
             width: Val::Percent(100.0),
@@ -685,7 +737,6 @@ fn spawn_gizmos(
     create_direction_gizmo(commands, meshes, materials, asset_server);
 }
 
-// FPS system remains unchanged
 fn fps_text_update_system(
     diagnostics: Res<DiagnosticsStore>,
     mut query: Query<&mut Text, With<FpsText>>,

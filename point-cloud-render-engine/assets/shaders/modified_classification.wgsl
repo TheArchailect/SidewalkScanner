@@ -27,7 +27,9 @@ struct BoundsData {
 @group(0) @binding(5) var<uniform> bounds: BoundsData;
 
 const GRID_RESOLUTION: u32 = 512u;
-const MORTON_THRESHOLD = 250u; // Empirical threshold - represents spatial distance in Morton space
+const MORTON_THRESHOLD = 1500u; // Empirical threshold for Morton spatial distance.
+const USE_MORTON_SPATIAL: bool = false; // Toggle: true=Morton, false=AABB
+const IGNORE_CLASS_MASK: u32 = 5u;
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -46,28 +48,47 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let original_rgb = original_sample.rgb;
     let original_class = u32(original_sample.a * 255.0);
 
-    // Get Morton code for spatial optimisation
+    // Get Morton code for spatial optimisation when using Morton mode.
     let spatial_sample = textureLoad(spatial_index_texture, coords, 0);
     let morton_high = bitcast<u32>(spatial_sample.r);
     let morton_low = bitcast<u32>(spatial_sample.g);
 
     var final_class = original_class;
 
-    for (var i = 0u; i < compute_data.polygon_count; i++) {
-        let poly_info = compute_data.polygon_info[i];
-        let start_idx = u32(poly_info.x);
-        let point_count = u32(poly_info.y);
-        let new_class = u32(poly_info.z);
+    if (original_class != IGNORE_CLASS_MASK) {
+        for (var i = 0u; i < compute_data.polygon_count; i++) {
+            let poly_info = compute_data.polygon_info[i];
+            let start_idx = u32(poly_info.x);
+            let point_count = u32(poly_info.y);
+            let new_class = u32(poly_info.z);
 
-        if compute_data.enable_spatial_opt == 1u {
-            // Morton code early termination: skip expensive polygon test if spatially distant
-            // Mathematical rationale: Z-order curve preserves locality, so Morton distance
-            // correlates with geometric distance in 2D space
-            if is_point_near_polygon(world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz, GRID_RESOLUTION) {
-                // Only perform expensive point-in-polygon test if Morton codes suggest proximity
+            if compute_data.enable_spatial_opt == 1u {
+                // Compile-time spatial optimization method selection.
+                var should_test_polygon = false;
+
+                if USE_MORTON_SPATIAL {
+                    // Morton code spatial filtering with centroid coverage.
+                    should_test_polygon = is_point_near_polygon_morton(
+                        world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
+                    );
+                } else {
+                    // AABB spatial filtering for guaranteed coverage.
+                    should_test_polygon = is_point_near_polygon_aabb(
+                        world_pos.xz, start_idx, point_count
+                    );
+                }
+
+                if should_test_polygon {
+                    if point_in_polygon(world_pos.xz, start_idx, point_count) {
+                        final_class = new_class;
+                        break; // Early termination: first matching polygon wins.
+                    }
+                }
+            } else {
+                // Direct polygon testing without spatial optimization.
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
                     final_class = new_class;
-                    break; // Early termination: first matching polygon wins
+                    break;
                 }
             }
         }
@@ -77,6 +98,75 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     textureStore(output_texture, coords, final_color);
 }
 
+/// Morton-based spatial filtering with centroid coverage for large polygons.
+/// Provides fine-grained spatial discrimination but requires Morton encoding overhead.
+fn is_point_near_polygon_morton(
+    point: vec2<f32>,
+    start_idx: u32,
+    point_count: u32,
+    bounds_min: vec2<f32>,
+    bounds_max: vec2<f32>
+) -> bool {
+    if point_count == 0u { return false; }
+
+    let query_morton = encode_morton_2d_current(point, bounds_min, bounds_max);
+
+    // Calculate polygon centroid for interior coverage.
+    // Addresses Morton spatial gaps in large polygon interiors.
+    var centroid = vec2<f32>(0.0, 0.0);
+    for (var i = 0u; i < point_count; i++) {
+        centroid += compute_data.point_data[start_idx + i].xy;
+    }
+    centroid /= f32(point_count);
+
+    // Priority check: centroid Morton distance for interior points.
+    let centroid_morton = encode_morton_2d_current(centroid, bounds_min, bounds_max);
+    let centroid_diff = abs(i32(query_morton) - i32(centroid_morton));
+    if centroid_diff < i32(MORTON_THRESHOLD) {
+        return true;
+    }
+
+    // Fallback: boundary vertex Morton distance checks.
+    for (var i = 0u; i < point_count; i++) {
+        let poly_point = compute_data.point_data[start_idx + i].xy;
+        let poly_morton = encode_morton_2d_current(poly_point, bounds_min, bounds_max);
+        let morton_diff = abs(i32(query_morton) - i32(poly_morton));
+        if morton_diff < i32(MORTON_THRESHOLD) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/// AABB-based spatial filtering with guaranteed coverage and no false negatives.
+/// Simpler computation with O(n) vertex iteration for bounding box calculation.
+fn is_point_near_polygon_aabb(
+    point: vec2<f32>,
+    start_idx: u32,
+    point_count: u32
+) -> bool {
+    if point_count == 0u { return false; }
+
+    // Calculate axis-aligned bounding box from polygon vertices.
+    var min_x = compute_data.point_data[start_idx].x;
+    var max_x = min_x;
+    var min_z = compute_data.point_data[start_idx].y;
+    var max_z = min_z;
+
+    for (var i = 1u; i < point_count; i++) {
+        let pt = compute_data.point_data[start_idx + i].xy;
+        min_x = min(min_x, pt.x);
+        max_x = max(max_x, pt.x);
+        min_z = min(min_z, pt.y);
+        max_z = max(max_z, pt.y);
+    }
+
+    // Spatial margin to account for point cloud sampling density.
+    let margin = 1.0;
+    return point.x >= (min_x - margin) && point.x <= (max_x + margin) &&
+           point.y >= (min_z - margin) && point.y <= (max_z + margin);
+}
 
 fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
     switch compute_data.render_mode {
@@ -97,14 +187,24 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
         case 3u: { // Morton code debug
             return vec4<f32>(morton_to_debug_color_blended(morton_low, morton_high), f32(point_connectivity_class_id));
         }
-        case 4u: { // Spatial Debug - show which points were considered for early termination
+        case 4u: { // Spatial Debug - show which points were considered for processing
             var was_considered = 0.0;
             for (var i = 0u; i < compute_data.polygon_count; i++) {
                 let poly_info = compute_data.polygon_info[i];
                 let start_idx = u32(poly_info.x);
                 let point_count = u32(poly_info.y);
 
-                if is_point_near_polygon(world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz, GRID_RESOLUTION) {
+                // Use same spatial filtering method as main processing loop.
+                var should_test = false;
+                if USE_MORTON_SPATIAL {
+                    should_test = is_point_near_polygon_morton(
+                        world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
+                    );
+                } else {
+                    should_test = is_point_near_polygon_aabb(world_pos.xz, start_idx, point_count);
+                }
+
+                if should_test {
                     was_considered = 1.0;
                     break;
                 }
@@ -118,7 +218,6 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
         }
         case 5u: {
             return vec4<f32>(classification_to_color(point_connectivity_class_id), f32(point_connectivity_class_id));
-
         }
         default: {
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
@@ -196,52 +295,13 @@ fn morton_encode_2d_optimized(x: u32, z: u32) -> u32 {
 }
 
 fn encode_morton_2d_current(point: vec2<f32>, bounds_min: vec2<f32>, bounds_max: vec2<f32>) -> u32 {
-    // Normalize coordinates (matching your bounds.normalize_x/z logic)
+    // Normalize coordinates to match bounds normalization logic.
     let norm_x = (point.x - bounds_min.x) / (bounds_max.x - bounds_min.x);
     let norm_z = (point.y - bounds_min.y) / (bounds_max.y - bounds_min.y);
 
-    // Calculate grid coordinates (matching your add_point logic)
+    // Calculate grid coordinates for Morton encoding.
     let grid_x = u32(clamp(norm_x * f32(GRID_RESOLUTION - 1u), 0.0, f32(GRID_RESOLUTION - 1u)));
     let grid_z = u32(clamp(norm_z * f32(GRID_RESOLUTION - 1u), 0.0, f32(GRID_RESOLUTION - 1u)));
 
     return morton_encode_2d_optimized(grid_x, grid_z);
-}
-
-fn is_point_near_polygon(
-   point: vec2<f32>,
-   start_idx: u32,
-   point_count: u32,
-   bounds_min: vec2<f32>,
-   bounds_max: vec2<f32>,
-   grid_resolution: u32
-) -> bool {
-   if (point_count == 0u) { return false; }
-
-   // Calculate Morton code for query point
-   // Morton codes preserve spatial locality: nearby points in 2D space
-   // have similar Morton codes due to Z-order curve interleaving
-   let query_morton = encode_morton_2d_current(point, bounds_min, bounds_max);
-
-   // Spatial culling via Morton code comparison
-   // Rationale: If no polygon vertices have Morton codes within threshold
-   // of query point, the polygon is spatially distant and can be culled
-   var found_nearby_morton = false;
-
-   for (var i = 0u; i < point_count; i = i + 1u) {
-       // Get polygon vertex coordinates from uniform buffer
-       let poly_point = compute_data.point_data[start_idx + i].xy;
-
-       // Calculate Morton code for this polygon vertex
-       // Uses same normalization and grid as query point for comparison
-       let poly_morton = encode_morton_2d_current(poly_point, bounds_min, bounds_max);
-
-       // Morton distance approximation: |morton_a - morton_b|
-       // Smaller differences indicate spatial proximity in Z-order curve
-       let morton_diff = abs(i32(query_morton) - i32(poly_morton));
-       if (morton_diff < i32(MORTON_THRESHOLD)) {
-           found_nearby_morton = true;
-           break;
-       }
-   }
-   return found_nearby_morton;
 }

@@ -36,6 +36,24 @@ impl Default for PolygonClassificationData {
     }
 }
 
+impl PolygonTool {
+    /// Set the active state of the polygon tool.
+    /// Called by the tool manager during activation and deactivation.
+    pub fn set_active(&mut self, active: bool) {
+        self.is_active = active;
+
+        if !active {
+            // Clear any in-progress polygon when tool is deactivated.
+            self.current_polygon.clear();
+        }
+    }
+
+    /// Check if the polygon tool is currently active.
+    pub fn is_active(&self) -> bool {
+        self.is_active
+    }
+}
+
 /// Component markers for polygon visualization entities.
 /// Enables selective cleanup and rendering control.
 #[derive(Component)]
@@ -81,7 +99,8 @@ impl Default for PolygonTool {
 }
 
 /// Resamples polygon edges to ensure uniform point distribution.
-/// Prevents GPU compute shader performance issues from irregular spacing.
+/// Prevents GPU compute shader performance issues from irregular spacing. specifically for our z-order morton codes we need we're looking up near points for each point of the polygons.
+/// there for large polygons or triangles with no internal points will miss 'close' regions in the intersection collision checks
 fn resample_polygon_uniform(points: &[Vec3], target_spacing: f32) -> Vec<Vec3> {
     if points.len() < 3 {
         return points.to_vec();
@@ -129,6 +148,7 @@ impl Default for PolygonCounter {
 
 /// Primary polygon creation and interaction system.
 /// Handles user input, ground intersection calculation, and polygon completion.
+/// Now integrates with tool manager for activation state control and RPC completion.
 pub fn polygon_tool_system(
     mut commands: Commands,
     mut polygon_tool: ResMut<PolygonTool>,
@@ -143,24 +163,11 @@ pub fn polygon_tool_system(
     mut materials: ResMut<Assets<StandardMaterial>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
+    mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
-    // Toggle polygon tool activation with 'P' key input.
-    if keyboard.just_pressed(KeyCode::KeyP) {
-        polygon_tool.is_active = !polygon_tool.is_active;
-        if polygon_tool.is_active {
-            println!(
-                "Polygon classification tool activated. Current class: {}",
-                polygon_tool.current_class
-            );
-            println!(
-                "Left click to add points, Shift to complete, 'O' to clear current, 'I' to clear all."
-            );
-        } else {
-            println!("Polygon tool deactivated.");
-            polygon_tool.current_polygon.clear();
-            polygon_tool.preview_point = None;
-            polygon_tool.is_completed = false;
-        }
+    // Only process input when polygon tool is active (controlled by tool manager).
+    if !polygon_tool.is_active {
+        return;
     }
 
     // Map number keys to classification IDs for user convenience.
@@ -178,11 +185,15 @@ pub fn polygon_tool_system(
         if keyboard.just_pressed(key) {
             polygon_tool.current_class = class_id;
             println!("Classification class set to: {}", class_id);
-        }
-    }
 
-    if !polygon_tool.is_active {
-        return;
+            // Notify frontend of class change
+            rpc_interface.send_notification(
+                "polygon_class_changed",
+                serde_json::json!({
+                    "current_class": class_id
+                }),
+            );
+        }
     }
 
     // Clear current polygon construction with 'O' key.
@@ -191,6 +202,13 @@ pub fn polygon_tool_system(
         polygon_tool.preview_point = None;
         polygon_tool.is_completed = false;
         println!("Current polygon cleared.");
+
+        rpc_interface.send_notification(
+            "polygon_cleared",
+            serde_json::json!({
+                "action": "clear_current"
+            }),
+        );
     }
 
     // Clear all completed polygons with 'I' key.
@@ -200,6 +218,13 @@ pub fn polygon_tool_system(
         polygon_tool.is_completed = false;
         classification_data.polygons.clear();
         println!("All polygons cleared.");
+
+        rpc_interface.send_notification(
+            "polygon_cleared",
+            serde_json::json!({
+                "action": "clear_all"
+            }),
+        );
     }
 
     // Update preview point for real-time cursor tracking.
@@ -231,18 +256,28 @@ pub fn polygon_tool_system(
                     point.y,
                     point.z
                 );
+
+                // Notify frontend of point addition
+                rpc_interface.send_notification(
+                    "polygon_point_added",
+                    serde_json::json!({
+                        "point_count": polygon_tool.current_polygon.len(),
+                        "position": [point.x, point.y, point.z]
+                    }),
+                );
             }
         }
 
-        // Complete polygon construction with Shift key when minimum vertices met.
-        if keyboard.just_pressed(KeyCode::ShiftLeft) && polygon_tool.current_polygon.len() >= 3 {
+        // Complete polygon construction with Shift key OR via RPC completion flag
+        let should_complete = (keyboard.just_pressed(KeyCode::ShiftLeft)
+            || polygon_tool.is_completed)
+            && polygon_tool.current_polygon.len() >= 3;
+
+        if should_complete {
             let resampled_points = resample_polygon_uniform(
                 &polygon_tool.current_polygon,
                 polygon_tool.target_point_spacing,
             );
-
-            polygon_tool.is_completed = true;
-            polygon_tool.preview_point = None;
 
             // Generate unique polygon identifier for tracking.
             let polygon_id = polygon_counter.next_id;
@@ -262,36 +297,56 @@ pub fn polygon_tool_system(
                     "Added classification polygon {} with class {}",
                     polygon_id, polygon_tool.current_class
                 );
+
+                // Create visual representation using standard material pipeline.
+                create_completed_polygon(
+                    &mut commands,
+                    &resampled_points,
+                    polygon_id,
+                    viewport_camera.ground_height,
+                    &mut meshes,
+                    &mut materials,
+                );
+
+                println!(
+                    "Polygon {} completed with {} points",
+                    polygon_id,
+                    polygon_tool.current_polygon.len()
+                );
+
+                // Notify frontend of successful completion
+                rpc_interface.send_notification(
+                    "polygon_completed",
+                    serde_json::json!({
+                        "polygon_id": polygon_id,
+                        "point_count": polygon_tool.current_polygon.len(),
+                        "class": polygon_tool.current_class,
+                        "total_polygons": classification_data.polygons.len()
+                    }),
+                );
             } else {
                 println!(
                     "Warning: Maximum polygon limit reached ({})",
                     classification_data.max_polygons
                 );
+
+                // Notify frontend of error
+                rpc_interface.send_notification(
+                    "polygon_error",
+                    serde_json::json!({
+                        "error": "Maximum polygon limit reached",
+                        "max_polygons": classification_data.max_polygons
+                    }),
+                );
             }
-
-            // Create visual representation using standard material pipeline.
-            create_completed_polygon(
-                &mut commands,
-                &resampled_points,
-                polygon_id,
-                viewport_camera.ground_height,
-                &mut meshes,
-                &mut materials,
-            );
-
-            println!(
-                "Polygon {} completed with {} points",
-                polygon_id,
-                polygon_tool.current_polygon.len()
-            );
 
             // Reset state for next polygon creation.
             polygon_tool.current_polygon.clear();
+            polygon_tool.preview_point = None;
             polygon_tool.is_completed = false;
         }
     }
 }
-
 /// Updates polygon classification data for compute shader consumption.
 /// Removed material system dependencies in favor of resource extraction.
 pub fn update_polygon_classification_shader(

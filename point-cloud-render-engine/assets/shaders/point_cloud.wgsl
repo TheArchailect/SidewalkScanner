@@ -68,8 +68,8 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     let up = cross(right, to_camera);
 
     // Apply interpolated billboarded quad offset
-    let point_size_min = 0.05;
-    let point_size_max = 0.2;
+    let point_size_min = 0.085;
+    let point_size_max = 0.4;
 
     let dist_min = 10.0;
     let dist_max = 100.0;
