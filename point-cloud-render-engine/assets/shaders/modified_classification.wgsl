@@ -27,8 +27,8 @@ struct BoundsData {
 @group(0) @binding(5) var<uniform> bounds: BoundsData;
 
 const GRID_RESOLUTION: u32 = 512u;
-const MORTON_THRESHOLD = 1500u; // Empirical threshold for Morton spatial distance.
-const USE_MORTON_SPATIAL: bool = false; // Toggle: true=Morton, false=AABB
+const MORTON_THRESHOLD = 100u; // Empirical threshold for Morton spatial distance.
+const USE_MORTON_SPATIAL: bool = true; // Toggle: true=Morton, false=AABB
 const IGNORE_CLASS_MASK: u32 = 5u;
 
 @compute @workgroup_size(8, 8, 1)
@@ -174,7 +174,7 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
-            return vec4<f32>(classification_to_color(final_class), f32(point_connectivity_class_id));
+            return vec4<f32>(classification_to_color(final_class), f32(original_class));
         }
         case 2u: { // RGB
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));

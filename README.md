@@ -88,6 +88,8 @@ npm run dev
 ```bash
 # Convert LAZ/LAS to unified texture format
 cargo run --bin point-cloud-pre-processing <path to your input file>.laz
+
+cargo run --bin point-cloud-pre-processing <path to your input laz file>.laz <asset_dir> <output dir>
 ```
 
 This generates:

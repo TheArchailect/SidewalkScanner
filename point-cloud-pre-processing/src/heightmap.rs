@@ -1,6 +1,6 @@
 /// Fast parallel heightmap generation with smooth blending
 use crate::constants::TEXTURE_SIZE;
-use crate::dds_writer::write_r32f_texture;
+use crate::dds_writer::write_f32_texture;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::collections::VecDeque;
@@ -60,7 +60,12 @@ impl HeightmapGenerator {
             "{}_heightmap_{}x{}.dds",
             self.output_stem, TEXTURE_SIZE, TEXTURE_SIZE
         );
-        write_r32f_texture(&heightmap_path, TEXTURE_SIZE, &smoothed_heightmap)?;
+        write_f32_texture(
+            &heightmap_path,
+            TEXTURE_SIZE,
+            &smoothed_heightmap,
+            ddsfile::DxgiFormat::R32_Float,
+        )?;
         println!("Saved {} (R32F heightmap)", heightmap_path);
 
         Ok(())

@@ -7,7 +7,7 @@ use crate::constants::TEXTURE_SIZE;
 pub struct SpatialPoint {
     pub world_pos: (f64, f64, f64),
     pub norm_pos: (f32, f32, f32),
-    pub morton_index: u64,
+    pub morton_index: u32,
     pub spatial_cell_id: u32,
     pub classification: u8,
     pub color: Option<(u16, u16, u16)>,
@@ -76,20 +76,16 @@ impl SpatialTextureGenerator {
 
     /// Generate spatial index texture with split Morton codes
     pub fn generate_spatial_index_texture(&self) -> Vec<f32> {
-        let mut spatial_data = vec![0.0f32; TEXTURE_SIZE * TEXTURE_SIZE * 4]; // RGBA format
+        let mut spatial_data = vec![0.0f32; TEXTURE_SIZE * TEXTURE_SIZE * 2]; // RG format
 
         for (i, point) in self.points.iter().enumerate() {
-            let base_idx = i * 4;
+            let base_idx = i * 2;
             if base_idx + 3 < spatial_data.len() {
-                // Split 64-bit Morton code into two 32-bit parts
-                let morton_high = (point.morton_index >> 32) as u32;
-                let morton_low = (point.morton_index & 0xFFFFFFFF) as u32;
-
                 // Store as reinterpreted floats (preserves all 32 bits)
-                spatial_data[base_idx] = f32::from_bits(morton_high); // R: high 32 bits
-                spatial_data[base_idx + 1] = f32::from_bits(morton_low); // G: low 32 bits
-                spatial_data[base_idx + 2] = point.spatial_cell_id as f32; // B: cell ID
-                spatial_data[base_idx + 3] = i as f32; // A: point index
+                spatial_data[base_idx] = f32::from_bits(point.morton_index); // R: code 32 bits
+                spatial_data[base_idx + 1] = point.spatial_cell_id as f32; // G: cell ID 32 bits
+                // spatial_data[base_idx + 2] = point.spatial_cell_id as f32; // B: cell ID
+                // spatial_data[base_idx + 3] = i as f32; // A: point index
             }
         }
 
@@ -142,13 +138,25 @@ impl SpatialTextureGenerator {
     }
 }
 
-/// Morton encoding for 2D coordinates
-pub fn morton_encode_2d(x: u32, z: u32) -> u64 {
-    let mut result = 0u64;
+// /// Morton encoding for 2D coordinates
+// pub fn morton_encode_2d(x: u32, z: u32) -> u64 {
+//     let mut result = 0u64;
+//     for i in 0..16 {
+//         // 16 bits is enough for up to 65536x65536 grid
+//         result |= ((x & (1 << i)) as u64) << (2 * i); // Interleave X bits at even positions
+//         result |= ((z & (1 << i)) as u64) << (2 * i + 1); // Interleave Z bits at odd positions
+//     }
+//     result
+// }
+
+/// Morton encoding for 2D coordinates (32-bit version)
+/// This version can handle coordinates up to 65535x65535 (16 bits each)
+pub fn morton_encode_2d(x: u32, z: u32) -> u32 {
+    let mut result = 0u32;
     for i in 0..16 {
-        // 16 bits is enough for up to 65536x65536 grid
-        result |= ((x & (1 << i)) as u64) << (2 * i); // Interleave X bits at even positions
-        result |= ((z & (1 << i)) as u64) << (2 * i + 1); // Interleave Z bits at odd positions
+        // 16 bits each for x and z to fit in 32-bit result (32 bits total)
+        result |= x & (1 << i) << i; // Interleave X bits at even positions
+        result |= z & (1 << i) << (i + 1); // Interleave Z bits at odd positions
     }
     result
 }

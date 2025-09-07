@@ -84,8 +84,8 @@ pub struct PipelineDebugState {
     pub views_with_phases: u32,
 }
 
-const RELATIVE_ASSET_PATH: &'static str = "output/terrain/RigaNumbered0.03";
-const RELATIVE_MANIFEST_PATH: &'static str = "output/";
+const RELATIVE_ASSET_PATH: &'static str = "output/riga_numbered_0.03/terrain/";
+const RELATIVE_MANIFEST_PATH: &'static str = "output/riga_numbered_0.03";
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 
 fn main() {

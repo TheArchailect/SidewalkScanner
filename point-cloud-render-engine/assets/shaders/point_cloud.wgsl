@@ -23,6 +23,7 @@ struct VertexOutput {
     @location(1) depth: f32,
     @location(2) connectivity_class: u32,
     @location(3) quad_pos: vec2<f32>,
+    @location(4) type_class: u32,
 }
 
 @vertex
@@ -103,6 +104,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     out.color = current_rgba.rgb;
     out.connectivity_class = u32(current_rgba.a);
     out.depth = textureLoad(depth_texture, tex_coord, 0).r;
+    out.type_class = u32(current_rgba.a); // TODO organise the correct swizling
     return out;
 }
 
@@ -119,8 +121,14 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
     );
 }
 
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
+    const RENDERMODE_DISCARD_CLASS: u32 = 15u;
+
+
+    if (in.type_class == RENDERMODE_DISCARD_CLASS) {discard;};
+
     let r = length(in.quad_pos); // 0 at center, ~0.707 at corners
     let radius = 0.5;
 
@@ -137,4 +145,5 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(depth_rb, depth);
     return vec4<f32>(in.color, depth);
     // return vec4<f32>(classification_to_color(in.connectivity_class), depth);
+    // return vec4<f32>(classification_to_color(in.type_class), depth);
 }

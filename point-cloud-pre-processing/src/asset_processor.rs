@@ -5,7 +5,7 @@ use crate::atlas::{
 };
 use crate::bounds::PointCloudBounds;
 use crate::constants::{COORDINATE_TRANSFORM, TEXTURE_SIZE};
-use crate::dds_writer::write_rgba32f_texture;
+use crate::dds_writer::write_f32_texture;
 use crate::spatial_layout::SpatialPoint;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
@@ -112,16 +112,18 @@ impl AssetProcessor {
         let position_path = asset_dir_path.join("position.dds");
         let colour_class_path = asset_dir_path.join("colourclass.dds");
 
-        write_rgba32f_texture(
+        write_f32_texture(
             position_path.to_str().unwrap(),
             TEXTURE_SIZE,
             &atlas_textures.position_data,
+            ddsfile::DxgiFormat::R32G32B32A32_Float,
         )?;
 
-        write_rgba32f_texture(
+        write_f32_texture(
             colour_class_path.to_str().unwrap(),
             TEXTURE_SIZE,
             &atlas_textures.colour_class_data,
+            ddsfile::DxgiFormat::R32G32B32A32_Float,
         )?;
 
         println!("Saved asset atlas textures");

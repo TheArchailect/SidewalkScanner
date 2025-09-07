@@ -6,7 +6,7 @@ use crate::constants::{
     COLOUR_DETECTION_SAMPLE_SIZE, COORDINATE_TRANSFORM, MAX_POINTS, ROAD_CLASSIFICATIONS,
     TEXTURE_SIZE,
 };
-use crate::dds_writer::{write_r32f_texture, write_rgba32f_texture};
+use crate::dds_writer::write_f32_texture;
 use crate::heightmap::HeightmapGenerator;
 use crate::manifest::{ManifestGenerator, TerrainInfo, TerrainTextureFiles};
 use crate::spatial_layout::SpatialTextureGenerator;
@@ -159,7 +159,10 @@ impl PointCloudConverter {
         self.generate_flood_fill_heightmap(&road_points)?;
 
         // Create organized terrain directory structure.
-        let terrain_dir = self.output_dir.join("terrain");
+        let terrain_dir = self
+            .output_dir
+            .join("terrain")
+            .join(format!("{:?}x{:?}", TEXTURE_SIZE, TEXTURE_SIZE));
         fs::create_dir_all(&terrain_dir)?;
 
         // Move terrain files to organized structure with programmatic names.
@@ -237,16 +240,6 @@ impl PointCloudConverter {
                 println!("Organized: {} -> {}", source_name, target_path.display());
             }
         }
-
-        // // Save terrain metadata in organized directory.
-        // let metadata = serde_json::json!({
-        //     "texture_size": TEXTURE_SIZE,
-        //     "texture_format": "RGBA32F",
-        //     "coordinate_transform": COORDINATE_TRANSFORM,
-        // });
-
-        // let metadata_path = terrain_dir.join("metadata.json");
-        // fs::write(&metadata_path, metadata.to_string())?;
 
         Ok(())
     }
@@ -363,8 +356,8 @@ impl PointCloudConverter {
             1.0
         };
 
-        // Create spatial generator with 512x512 grid for Z-order organization.
-        let mut spatial_gen = SpatialTextureGenerator::new(bounds.clone(), 512);
+        // Create spatial generator with n*n grid for Z-order organization.
+        let mut spatial_gen = SpatialTextureGenerator::new(bounds.clone(), 1024);
         let mut road_points = Vec::new();
         let mut stats = ProcessingStats::new();
         let mut expected_loaded = 0.0;
@@ -508,16 +501,23 @@ impl PointCloudConverter {
             self.output_name, TEXTURE_SIZE, TEXTURE_SIZE
         ));
 
-        write_rgba32f_texture(pos_path.to_str().unwrap(), TEXTURE_SIZE, position_data)?;
-        write_rgba32f_texture(
+        write_f32_texture(
+            pos_path.to_str().unwrap(),
+            TEXTURE_SIZE,
+            position_data,
+            ddsfile::DxgiFormat::R32G32B32A32_Float,
+        )?;
+        write_f32_texture(
             colour_path.to_str().unwrap(),
             TEXTURE_SIZE,
             colour_class_data,
+            ddsfile::DxgiFormat::R32G32B32A32_Float,
         )?;
-        write_rgba32f_texture(
+        write_f32_texture(
             spatial_path.to_str().unwrap(),
             TEXTURE_SIZE,
             spatial_index_data,
+            ddsfile::DxgiFormat::R32G32_Float,
         )?;
 
         println!("Saved {} (Position RGBA32F)", pos_path.display());

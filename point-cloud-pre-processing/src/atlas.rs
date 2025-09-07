@@ -1,7 +1,7 @@
 /// Asset library atlas generation for efficient GPU rendering
 use crate::bounds::PointCloudBounds;
 use crate::constants::TEXTURE_SIZE;
-use crate::dds_writer::write_rgba32f_texture;
+use crate::dds_writer::write_f32_texture;
 use crate::spatial_layout::SpatialPoint;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;

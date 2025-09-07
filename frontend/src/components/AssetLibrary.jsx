@@ -16,37 +16,78 @@ const AssetLibrary = ({ isVisible, onClose, canvasRef }) => {
   };
 
   const assetCategories = [
-    { id: "all", name: "All Assets", count: 24 },
-    { id: "buildings", name: "Buildings", count: 8 },
-    { id: "vehicles", name: "Vehicles", count: 6 },
-    { id: "furniture", name: "Furniture", count: 5 },
-    { id: "nature", name: "Nature", count: 5 },
+    { id: "all", name: "All Assets", count: 10 },
+    { id: "vehicles", name: "Vehicles", count: 2 },
+    { id: "street_furniture", name: "Street Furniture", count: 4 },
+    { id: "vegetation", name: "Vegetation", count: 4 },
   ];
 
   const mockAssets = [
+    // Vehicles
     {
-      id: 1,
-      name: "Modern Building A",
-      category: "buildings",
-      type: "3D Model",
+      id: "vehicle-001",
+      name: "Maintenance Truck",
+      category: "vehicles",
+      type: "Municipal Vehicle",
     },
-    { id: 2, name: "Sports Car", category: "vehicles", type: "3D Model" },
-    { id: 3, name: "Office Chair", category: "furniture", type: "3D Model" },
-    { id: 4, name: "Pine Tree", category: "nature", type: "3D Model" },
     {
-      id: 5,
-      name: "Apartment Complex",
-      category: "buildings",
-      type: "3D Model",
+      id: "vehicle-002",
+      name: "Street Sweeper",
+      category: "vehicles",
+      type: "Cleaning Equipment",
     },
-    { id: 6, name: "Delivery Truck", category: "vehicles", type: "3D Model" },
+
+    // Street Furniture
     {
-      id: 7,
-      name: "Conference Table",
-      category: "furniture",
-      type: "3D Model",
+      id: "furniture-001",
+      name: "Bus Stop Shelter",
+      category: "street_furniture",
+      type: "Public Shelter",
     },
-    { id: 8, name: "Oak Tree", category: "nature", type: "3D Model" },
+    {
+      id: "furniture-002",
+      name: "Park Bench",
+      category: "street_furniture",
+      type: "Seating",
+    },
+    {
+      id: "furniture-003",
+      name: "Street Light",
+      category: "street_furniture",
+      type: "Lighting",
+    },
+    {
+      id: "furniture-004",
+      name: "Traffic Island",
+      category: "street_furniture",
+      type: "Traffic Control",
+    },
+
+    // Vegetation
+    {
+      id: "vegetation-001",
+      name: "River Red Gum",
+      category: "vegetation",
+      type: "Tree",
+    },
+    {
+      id: "vegetation-002",
+      name: "Lavender Garden Bed",
+      category: "vegetation",
+      type: "Garden Bed",
+    },
+    {
+      id: "vegetation-003",
+      name: "Plane Tree Avenue",
+      category: "vegetation",
+      type: "Tree Line",
+    },
+    {
+      id: "vegetation-004",
+      name: "Native Grass Verge",
+      category: "vegetation",
+      type: "Ground Cover",
+    },
   ];
 
   const filteredAssets = mockAssets.filter((asset) => {
