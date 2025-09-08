@@ -124,7 +124,7 @@ npm run dev
 ### Camera Navigation
 
 - **Mouse Wheel**: Zoom in/out
-- **Middle Mouse + Drag**: Free look
+- **Right Mouse + Drag**: Free look
 - **WASD**: Move around
 - **Q/E**: Up and down
 - **Hold + Shift**: Move faster
