@@ -24,8 +24,9 @@ pub fn create_ground_grid(
     heightmap_image: Option<&Image>,
 ) {
     let grid_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.5, 0.5, 0.5, 0.),
-        alpha_mode: AlphaMode::Blend,
+        base_color: Color::srgba(1.0, 1.0, 0.0, 1.0), // adjust color as needed for gridlines
+        emissive: Color::srgba(1.0, 1.0, 0.0, 1.0).into(),
+        alpha_mode: AlphaMode::Opaque, // changed from Blend to Opaque
         unlit: true,
         ..default()
     });
@@ -50,7 +51,7 @@ fn create_heightfield_grid(
     let grid_size_z = size.z;
 
     // Target cell size in metres
-    let target_cell_size = 0.25;
+    let target_cell_size = 1.0;
 
     // Calculate optimal line counts based on target cell size
     let line_count_x = (grid_size_x / target_cell_size).round() as u32;

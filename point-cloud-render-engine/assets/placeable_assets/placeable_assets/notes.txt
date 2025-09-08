@@ -1,0 +1,4 @@
+objects of varying density, meant to be placed on a point cloud.
+- bottom corner should be around 0,0,0 with no global offset
+- varying densities. car_ika is from a 3d model, the rest are cutout from scans. 
+- object_number is above 10000. Subject to change. 
