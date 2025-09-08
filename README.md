@@ -124,9 +124,12 @@ npm run dev
 ### Camera Navigation
 
 - **Mouse Wheel**: Zoom in/out
-- **Middle Mouse + Drag**: Pan view
-- **Space**: Follow mouse cursor on terrain
-- **A/D**: Rotate around focus point
+- **Middle Mouse + Drag**: Free look
+- **WASD**: Move around
+- **Q/E**: Up and down
+- **Hold + Shift**: Move faster
+- **Hold + Ctrl**: Move slower
+
 
 ### Render Modes
 
