@@ -2,6 +2,8 @@ use crate::engine::assets::bounds::PointCloudBounds;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::scene::heightmap::sample_heightmap_bilinear;
+use bevy::math::EulerRot;
+use bevy::input::mouse::MouseScrollUnit;
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
@@ -254,80 +256,78 @@ pub fn camera_controller(
             maps_camera.last_mouse_pos = cursor.position;
         }
 
-        // Handle zoom (scroll wheel)
-        for scroll in scroll_events.read() {
-            let zoom_factor = if scroll.y > 0.0 { 0.9 } else { 1.1 };
-            maps_camera.height *= zoom_factor;
-            maps_camera.height = maps_camera.height.clamp(5.0, 5000.0);
+        // Read mouse motion
+        let mouse_delta: Vec2 = mouse_motion.read().map(|m| m.delta).sum();
+
+        // Mouse motion with right click (look around)
+        if mouse_button.pressed(MouseButton::Right) && mouse_delta != Vec2::ZERO {
+        let yaw_sens = 0.0035;
+        let pitch_sens = 0.0030;
+        maps_camera.yaw += -mouse_delta.x * yaw_sens; 
+        maps_camera.pitch += -mouse_delta.y * pitch_sens; 
+        maps_camera.pitch = maps_camera.pitch.clamp(-1.55, 1.55);
         }
 
-        // Collect mouse motion
-        let total_motion: Vec2 = mouse_motion.read().map(|motion| motion.delta).sum();
+        let Some(bounds) = assets.get_bounds(&manifests) else { return; };
 
-        let is_panning = mouse_button.pressed(MouseButton::Middle);
-        let is_following_mouse = keyboard.pressed(KeyCode::Space);
-
-        // Handle panning - fixed directions
-        if is_panning && total_motion != Vec2::ZERO {
-            let sensitivity = maps_camera.height * 0.001;
-            let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
-            let right = yaw_rot * Vec3::X;
-            let forward = yaw_rot * Vec3::Z;
-
-            maps_camera.focus_point += right * -total_motion.x * sensitivity;
-            maps_camera.focus_point += forward * -total_motion.y * sensitivity;
-        }
-
-        // Handle keyboard rotation (works always)
-        let mut rotation_input = 0.0;
-        if keyboard.pressed(KeyCode::KeyA) {
-            rotation_input -= 1.0;
-        }
-        if keyboard.pressed(KeyCode::KeyD) {
-            rotation_input += 1.0;
-        }
-
-        // Apply rotation if keys are pressed
-        if rotation_input != 0.0 {
-            let rotation_speed = 1.0 * time.delta_secs();
-            maps_camera.yaw += rotation_input * rotation_speed;
-        }
-
-        let Some(bounds) = assets.get_bounds(&manifests) else {
-            return;
+        // Mouse wheel scroll accumulation (pixel and line scroll)
+        let mut scroll_accum = 0.0;
+        for ev in scroll_events.read() {
+        scroll_accum += match ev.unit {
+        MouseScrollUnit::Line => ev.y * 1.0,
+        MouseScrollUnit::Pixel => ev.y * 0.05,
         };
-
-        // Follow mouse with spacebar
-        if is_following_mouse {
-            let last_pos = maps_camera.last_mouse_pos;
-            if let Some(pivot_point) = maps_camera.mouse_to_ground_plane(
-                last_pos,
-                camera,
-                global_transform,
-                images.get(&assets.heightmap_texture),
-                &bounds,
-            ) {
-                let movement_speed = 2.0 * time.delta_secs();
-                maps_camera.focus_point = maps_camera.focus_point.lerp(pivot_point, movement_speed);
-            }
         }
 
-        // Simple camera positioning
-        let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
-        let horizontal_offset = yaw_rot * Vec3::new(0.0, 0.0, maps_camera.height * 0.5);
-        let target_pos = maps_camera.focus_point
-            + Vec3::new(horizontal_offset.x, maps_camera.height, horizontal_offset.z);
+        // Mouse wheel scroll along dolly with camera view
+        if scroll_accum.abs() > f32::EPSILON {
+        let mut dolly_speed = (maps_camera.height * 0.2).clamp(0.5, 500.0);
+        let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+        let forward = (view_rot * Vec3::Z).normalize();
+        maps_camera.focus_point -= forward * (scroll_accum * dolly_speed);
+        }
 
-        let target_transform =
-            Transform::from_translation(target_pos).looking_at(maps_camera.focus_point, Vec3::Y);
+        // Keyboard movement input
+        let mut move_input = Vec3::ZERO;
+        if keyboard.pressed(KeyCode::KeyW) { move_input.z -= 1.0; }
+        if keyboard.pressed(KeyCode::KeyS) { move_input.z += 1.0; }
+        if keyboard.pressed(KeyCode::KeyD) { move_input.x += 1.0; }
+        if keyboard.pressed(KeyCode::KeyA) { move_input.x -= 1.0; }
+        if keyboard.pressed(KeyCode::KeyE) { move_input.y += 1.0; } // Up
+        if keyboard.pressed(KeyCode::KeyQ) { move_input.y -= 1.0; } // Down
 
-        // Smooth interpolation
+
+        if move_input != Vec3::ZERO {
+        let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+        let forward = (view_rot * Vec3::Z).normalize();
+        let right = (view_rot * Vec3::X).normalize();
+        let up = Vec3::Y; 
+
+        // Adjust speed, shift = faster, ctrl = slower
+        let mut speed = (maps_camera.height * 1.0).clamp(2.0, 200.0);
+        if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) { speed *= 3.5; }
+        if keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) { speed *= 0.25; }
+
+
+        let world_delta = right * move_input.x + up * move_input.y + forward * move_input.z;
+        maps_camera.focus_point += world_delta.normalize() * speed * time.delta_secs();
+        }
+
+        // Fixed camera positioning
+        let target_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+        let mut target_pos = maps_camera.focus_point;
+
+     
+        let target_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+        let target_pos = maps_camera.focus_point;
+
+
         let lerp_speed = 12.0 * time.delta_secs();
         camera_transform.translation = camera_transform
-            .translation
-            .lerp(target_transform.translation, lerp_speed.min(1.0));
+        .translation
+        .lerp(target_pos, lerp_speed.min(1.0));
         camera_transform.rotation = camera_transform
-            .rotation
-            .slerp(target_transform.rotation, lerp_speed.min(1.0));
+        .rotation
+        .slerp(target_rot, lerp_speed.min(1.0));
     }
 }
