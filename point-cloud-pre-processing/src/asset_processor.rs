@@ -105,7 +105,8 @@ impl AssetProcessor {
         let asset_dir_path = self
             .output_dir
             .join("assets")
-            .join(format!("AssetAtlas{}x{}", TEXTURE_SIZE, TEXTURE_SIZE));
+            .join("AssetAtlas")
+            .join(format!("{}x{}", TEXTURE_SIZE, TEXTURE_SIZE));
         fs::create_dir_all(&asset_dir_path)?;
 
         // Save atlas textures with organized naming.

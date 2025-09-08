@@ -26,9 +26,9 @@ struct BoundsData {
 
 @group(0) @binding(5) var<uniform> bounds: BoundsData;
 
-const GRID_RESOLUTION: u32 = 512u;
-const MORTON_THRESHOLD = 100u; // Empirical threshold for Morton spatial distance.
-const USE_MORTON_SPATIAL: bool = flase; // Toggle: true=Morton, false=AABB
+const GRID_RESOLUTION: u32 = 1024u;
+const MORTON_THRESHOLD = 500u; // Empirical threshold for Morton spatial distance.
+const USE_MORTON_SPATIAL: bool = false; // Toggle: true=Morton, false=AABB
 const IGNORE_CLASS_MASK: u32 = 5u;
 
 @compute @workgroup_size(8, 8, 1)

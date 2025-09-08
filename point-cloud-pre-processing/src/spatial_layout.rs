@@ -138,19 +138,7 @@ impl SpatialTextureGenerator {
     }
 }
 
-// /// Morton encoding for 2D coordinates
-// pub fn morton_encode_2d(x: u32, z: u32) -> u64 {
-//     let mut result = 0u64;
-//     for i in 0..16 {
-//         // 16 bits is enough for up to 65536x65536 grid
-//         result |= ((x & (1 << i)) as u64) << (2 * i); // Interleave X bits at even positions
-//         result |= ((z & (1 << i)) as u64) << (2 * i + 1); // Interleave Z bits at odd positions
-//     }
-//     result
-// }
-
 /// Morton encoding for 2D coordinates (32-bit version)
-/// This version can handle coordinates up to 65535x65535 (16 bits each)
 pub fn morton_encode_2d(x: u32, z: u32) -> u32 {
     let mut result = 0u32;
     for i in 0..16 {
