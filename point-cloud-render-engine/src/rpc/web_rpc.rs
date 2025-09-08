@@ -126,11 +126,6 @@ fn setup_message_listener(mut commands: Commands) {
     commands.insert_resource(MessageQueue(message_queue));
 }
 
-// #[cfg(not(target_arch = "wasm32"))]
-// fn setup_message_listener(_commands: Commands) {
-//     // No-op for non-WASM targets.
-// }
-
 /// Resource wrapping thread-safe message queue for WASM event handling.
 #[derive(Resource)]
 struct MessageQueue(std::sync::Arc<std::sync::Mutex<Vec<String>>>);

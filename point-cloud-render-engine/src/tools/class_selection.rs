@@ -4,10 +4,51 @@ use crate::engine::point_cloud::PointCloudAssets;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::window::PrimaryWindow;
+
+#[derive(Resource, Default)]
+pub struct SelectionBuffer {
+    pub selected_ids: Vec<u32>,
+}
+
 #[derive(Resource, Default, ExtractResource, Clone)]
 pub struct ClassSelectionState {
     pub selection_point: Option<Vec3>,
     pub is_selecting: bool,
+}
+
+// Selection buffer system remains unchanged
+pub fn update_selection_buffer(
+    mut selection_buffer: ResMut<SelectionBuffer>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if mouse_button.just_pressed(MouseButton::Left) {
+        println!("add selection id");
+        selection_buffer.selected_ids.push(2);
+    }
+
+    // Number keys 1-9 to set specific IDs
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(10);
+    }
+    if keyboard.just_pressed(KeyCode::Digit2) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(11);
+    }
+    if keyboard.just_pressed(KeyCode::Digit3) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(12);
+    }
+    if keyboard.just_pressed(KeyCode::Digit4) {
+        selection_buffer.selected_ids.clear();
+        selection_buffer.selected_ids.push(13);
+    }
+
+    // Clear all selections
+    if keyboard.just_pressed(KeyCode::KeyC) {
+        selection_buffer.selected_ids.clear();
+    }
 }
 
 pub fn handle_class_selection(
