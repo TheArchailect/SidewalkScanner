@@ -1,4 +1,5 @@
-use crate::engine::point_cloud::{PointCloudAssets, SceneManifest};
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use bevy::prelude::*;
 
 pub fn extract_scene_manifest(

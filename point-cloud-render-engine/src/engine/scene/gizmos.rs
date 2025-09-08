@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use super::camera::ViewportCamera;
-use super::point_cloud::PointCloudAssets;
-use crate::SceneManifest;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::camera::viewport_camera::ViewportCamera;
+
 #[derive(Component)]
 pub struct MouseIntersectionGizmo;
 

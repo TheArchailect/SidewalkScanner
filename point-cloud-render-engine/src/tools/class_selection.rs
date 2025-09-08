@@ -1,6 +1,6 @@
-use crate::SceneManifest;
-use crate::engine::camera::ViewportCamera;
-use crate::engine::point_cloud::PointCloudAssets;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::camera::viewport_camera::ViewportCamera;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::window::PrimaryWindow;

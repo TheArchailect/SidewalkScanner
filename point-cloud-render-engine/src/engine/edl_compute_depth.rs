@@ -1,5 +1,5 @@
-use crate::SceneManifest;
-use crate::engine::point_cloud::PointCloudAssets;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{

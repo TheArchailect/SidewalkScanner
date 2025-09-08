@@ -1,6 +1,6 @@
-/// Heightmap sampling utilities for terrain intersection
-use super::point_cloud::PointCloudBounds;
 use crate::constants::texture::TEXTURE_SIZE;
+/// Heightmap sampling utilities for terrain intersection
+use crate::engine::assets::bounds::PointCloudBounds;
 
 use bevy::prelude::*;
 

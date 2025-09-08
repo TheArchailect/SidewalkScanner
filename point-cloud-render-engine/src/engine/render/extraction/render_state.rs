@@ -1,9 +1,7 @@
-use bevy::prelude::*;
-
-// Crate engine modules
-use crate::engine::point_cloud::{PointCloudAssets, SceneManifest};
-
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::point_cloud_render_pipeline::PointCloudRenderState;
+use bevy::prelude::*;
 
 /// System to extract point cloud render state from main world to render world.
 /// Captures camera position and bounds data for GPU uniform buffer creation.

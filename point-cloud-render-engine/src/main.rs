@@ -6,13 +6,9 @@ mod rpc;
 mod tools;
 
 use crate::constants::path::RELATIVE_ASSET_PATH;
-
-use crate::engine::{
-    point_cloud::{PointCloudAssets, SceneManifest},
-    render_mode::RenderModeState,
-};
-
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_setup::create_app;
+use crate::engine::render_mode::RenderModeState;
 
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 

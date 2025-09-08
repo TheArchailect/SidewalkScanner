@@ -1,15 +1,16 @@
-use crate::SceneManifest;
-use crate::engine::camera::ViewportCamera;
-use crate::engine::grid::GroundGrid;
-use crate::engine::point_cloud::PointCloudAssets;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::camera::viewport_camera::ViewportCamera;
+use crate::engine::render_mode::RenderMode;
 use crate::engine::render_mode::RenderModeState;
-use crate::engine::shaders::PolygonClassificationUniform;
+use crate::engine::scene::grid::GroundGrid;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
+
 /// Polygon definition for point cloud classification operations.
 /// Contains spatial coordinates and target classification metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +72,33 @@ pub struct PolygonPreview;
 #[derive(Component)]
 pub struct CompletedPolygon {
     pub id: u32,
+}
+
+/// Uniform data structure for polygon classification compute shaders.
+/// Maintains compatibility with existing compute pipeline while removing
+/// dependency on Bevy's Material trait system.
+#[derive(Debug, Clone, Copy, bevy::render::render_resource::ShaderType)]
+#[repr(C)]
+pub struct PolygonClassificationUniform {
+    pub polygon_count: u32,
+    pub total_points: u32,
+    pub render_mode: u32,
+    pub _padding: u32,
+    pub point_data: [Vec4; 512],
+    pub polygon_info: [Vec4; 64],
+}
+
+impl Default for PolygonClassificationUniform {
+    fn default() -> Self {
+        Self {
+            polygon_count: 0,
+            total_points: 0,
+            render_mode: RenderMode::RgbColour as u32,
+            _padding: 0,
+            point_data: [Vec4::ZERO; 512],
+            polygon_info: [Vec4::ZERO; 64],
+        }
+    }
 }
 
 /// Interactive polygon creation tool state.

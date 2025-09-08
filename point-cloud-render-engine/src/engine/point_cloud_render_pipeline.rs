@@ -1,5 +1,5 @@
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_state::{AppState, PipelineDebugState};
-use crate::engine::point_cloud::PointCloudAssets;
 use crate::engine::render::extraction::render_state::extract_point_cloud_render_state;
 use crate::engine::render_mode::RenderModeState;
 use bevy::core_pipeline::core_3d::graph::{Core3d, Node3d};

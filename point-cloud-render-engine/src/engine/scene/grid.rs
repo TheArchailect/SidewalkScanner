@@ -5,7 +5,7 @@ use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::view::NoFrustumCulling;
 
 use super::heightmap::sample_heightmap_bilinear;
-use super::point_cloud::PointCloudBounds;
+use crate::engine::assets::bounds::PointCloudBounds;
 
 #[derive(Component)]
 pub struct GroundGrid;

@@ -1,45 +1,9 @@
-// Standard library and external crates
-use bevy::asset::AssetMetaCheck;
-use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
-use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
-use bevy::window::PresentMode;
-use bevy_common_assets::json::JsonAssetPlugin;
-
-// Crate engine modules
-use crate::engine::{
-    camera::{ViewportCamera, camera_controller},
-    compute_classification::{
-        ComputeClassificationPlugin, ComputeClassificationState, run_classification_compute,
-    },
-    edl_compute_depth::{EDLComputePlugin, EDLRenderState, run_edl_compute},
-    edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
-    gizmos::{create_direction_gizmo, update_direction_gizmo, update_mouse_intersection_gizmo},
-    grid::{GridCreated, create_ground_grid},
-    point_cloud::{
-        PointCloud, PointCloudAssets, PointCloudBounds, SceneManifest, create_point_index_mesh,
-    },
-    point_cloud_render_pipeline::{PointCloudRenderPlugin, PointCloudRenderable},
-    render_mode::{RenderModeState, render_mode_system},
-};
+use bevy::render::extract_resource::ExtractResource;
 
 // Crate tools modules
-use crate::engine::core::app_state::{AppState, PipelineDebugState};
-use crate::tools::{
-    class_selection::{ClassSelectionState, SelectionBuffer, handle_class_selection},
-    polygon::{
-        PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
-        update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
-    },
-    tool_manager::{
-        PolygonActionEvent, ToolManager, ToolSelectionEvent, handle_polygon_action_events,
-        handle_tool_keyboard_shortcuts, handle_tool_selection_events,
-    },
-};
-// Create Web RPC modules
-use crate::rpc::web_rpc::WebRpcPlugin;
-
-use crate::engine::core::window_config::create_window_config;
+use crate::engine::assets::bounds::PointCloudBounds;
+use crate::engine::assets::scene_manifest::SceneManifest;
 
 pub fn create_point_cloud_assets(manifest: Option<Handle<SceneManifest>>) -> PointCloudAssets {
     PointCloudAssets {
@@ -54,5 +18,57 @@ pub fn create_point_cloud_assets(manifest: Option<Handle<SceneManifest>>) -> Poi
         asset_colour_class_texture: None,
         manifest,
         is_loaded: false,
+    }
+}
+
+/// Point cloud assets using unified texture format with terrain and asset support.
+/// Manages all textures and scene metadata for the rendering pipeline.
+#[derive(Resource, FromWorld, ExtractResource, Clone)]
+pub struct PointCloudAssets {
+    // Terrain textures - always present for base point cloud rendering.
+    pub position_texture: Handle<Image>, // RGBA32F: XYZ + connectivity class id.
+    pub colour_class_texture: Handle<Image>, // RGBA32F: RGB + classification.
+    pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data.
+    pub heightmap_texture: Handle<Image>, // R32F: elevation.
+
+    // Asset atlas textures - populated when manifest contains asset_atlas.
+    pub asset_position_texture: Option<Handle<Image>>,
+    pub asset_colour_class_texture: Option<Handle<Image>>,
+
+    // Compute pipeline textures for classification and EDL processing.
+    pub depth_texture: Handle<Image>,  // R32F: R = Depth.
+    pub result_texture: Handle<Image>, // RGBA32F: RenderMode = RGB + A = Depth.
+
+    // Scene manifest contains all metadata including terrain bounds and assets.
+    pub manifest: Option<Handle<SceneManifest>>,
+    pub is_loaded: bool,
+}
+
+impl PointCloudAssets {
+    /// Extract bounds from manifest for systems expecting legacy PointCloudBounds.
+    /// Returns None if manifest is not loaded yet. Prefer direct manifest access.
+    pub fn get_bounds(&self, manifests: &Assets<SceneManifest>) -> Option<PointCloudBounds> {
+        let manifest_handle = self.manifest.as_ref()?;
+        let manifest = manifests.get(manifest_handle)?;
+        Some(manifest.to_point_cloud_bounds())
+    }
+
+    /// Check if manifest has been loaded and assets are ready for rendering.
+    pub fn is_manifest_loaded(&self, manifests: &Assets<SceneManifest>) -> bool {
+        if let Some(handle) = &self.manifest {
+            manifests.get(handle).is_some()
+        } else {
+            false
+        }
+    }
+
+    /// Get terrain point count from manifest for mesh generation.
+    /// Returns 0 if manifest not loaded yet.
+    pub fn terrain_point_count(&self, manifests: &Assets<SceneManifest>) -> usize {
+        self.manifest
+            .as_ref()
+            .and_then(|h| manifests.get(h))
+            .map(|m| m.terrain_point_count())
+            .unwrap_or(0)
     }
 }

@@ -1,6 +1,7 @@
 use crate::RenderModeState;
-/// GPU-accelerated polygon classification compute pipeline (MVP)
-use crate::engine::point_cloud::{PointCloudAssets, SceneManifest};
+use crate::engine::assets::bounds::BoundsData;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::render_mode::RenderMode;
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
@@ -218,7 +219,7 @@ fn execute_compute_shader(
     final_gpu: &GpuImage,
     polygons: &[ClassificationPolygon],
     selection_state: &ClassSelectionState,
-    terrain_bounds: &crate::engine::point_cloud::BoundsData, // Accept terrain bounds directly.
+    terrain_bounds: &BoundsData, // Accept terrain bounds directly.
     current_mode: RenderMode,
 ) {
     let compute_buffer =
@@ -332,7 +333,7 @@ fn create_compute_buffer(
 /// Create uniform buffer from terrain bounds data without legacy conversion.
 fn create_terrain_bounds_buffer(
     render_device: &RenderDevice,
-    terrain_bounds: &crate::engine::point_cloud::BoundsData,
+    terrain_bounds: &BoundsData,
 ) -> bevy::render::render_resource::Buffer {
     use bytemuck::{Pod, Zeroable};
 

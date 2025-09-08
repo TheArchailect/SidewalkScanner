@@ -1,14 +1,12 @@
-use super::{
-    heightmap::sample_heightmap_bilinear,
-    point_cloud::{PointCloudAssets, PointCloudBounds},
-};
-use crate::SceneManifest;
+use crate::engine::assets::bounds::PointCloudBounds;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::scene::heightmap::sample_heightmap_bilinear;
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
     window::PrimaryWindow,
 };
-
 #[derive(Resource)]
 pub struct ViewportCamera {
     pub focus_point: Vec3,
