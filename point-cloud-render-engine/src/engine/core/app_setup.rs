@@ -39,6 +39,9 @@ use crate::tools::{
         PolygonActionEvent, ToolManager, ToolSelectionEvent, handle_polygon_action_events,
         handle_tool_keyboard_shortcuts, handle_tool_selection_events,
     },
+    asset_manager::{
+        AssetManagerUiPlugin,
+    },
 };
 // Create Web RPC modules
 use crate::engine::assets::point_cloud_assets::create_point_cloud_assets;
@@ -78,6 +81,8 @@ pub fn create_app() -> App {
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin)
         .add_plugins(WebRpcPlugin);
+        
+    app.add_plugins(AssetManagerUiPlugin);
 
     // Initialise resources early
     app.init_resource::<LoadingProgress>()
