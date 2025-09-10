@@ -81,7 +81,8 @@ pub fn create_app() -> App {
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin)
         .add_plugins(WebRpcPlugin);
-        
+    
+    // Plugin for asset manager UI panel
     app.add_plugins(AssetManagerUiPlugin);
 
     // Initialise resources early

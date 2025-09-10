@@ -24,7 +24,7 @@ pub fn create_ground_grid(
     heightmap_image: Option<&Image>,
 ) {
     let grid_material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 1.0, 0.0, 1.0), // adjust color as needed for gridlines
+        base_color: Color::srgba(0.0, 0.0, 0.0, 0.0), // adjust color as needed for gridlines
         emissive: Color::srgba(1.0, 1.0, 0.0, 1.0).into(),
         alpha_mode: AlphaMode::Opaque, // changed from Blend to Opaque
         unlit: true,
