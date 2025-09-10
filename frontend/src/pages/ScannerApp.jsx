@@ -21,17 +21,15 @@ const ScannerApp = () => {
   }, [onNotification]);
 
   const handleToolSelect = async (toolId) => {
+    // Show asset library only when assets tool is selected
     if (toolId === "assets") {
       setShowAssetLibrary(true);
     } else {
       setShowAssetLibrary(false);
     }
 
-    if (toolId == selectTool) {
-      setSelectedTool(null);
-    } else {
-      setSelectedTool(toolId);
-    }
+    // Always select the clicked tool (each tool is either on or off)
+    setSelectedTool(toolId);
 
     // Send tool selection to Bevy via RPC
     try {
@@ -105,6 +103,7 @@ const ScannerApp = () => {
       {/* Tool Palette Component */}
       <ToolPalette
         selectedTool={selectedTool}
+        showAssetLibrary={showAssetLibrary}
         onToolSelect={handleToolSelect}
         isConnected={isConnected}
       />
