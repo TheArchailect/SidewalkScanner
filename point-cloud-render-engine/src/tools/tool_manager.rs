@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum ToolType {
     Polygon,
-    Knife,
+    Measure,
 }
 
 impl ToolType {
@@ -14,7 +14,7 @@ impl ToolType {
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "polygon" => Some(Self::Polygon),
-            "knife" => Some(Self::Knife),
+            "measure" => Some(Self::Measure),
             _ => None,
         }
     }
@@ -23,7 +23,7 @@ impl ToolType {
     pub fn to_string(&self) -> &'static str {
         match self {
             Self::Polygon => "polygon",
-            Self::Knife => "knife",
+            Self::Measure => "knife",
         }
     }
 }
@@ -143,14 +143,17 @@ pub fn handle_tool_selection_events(
                     }),
                 );
             }
-            ToolType::Knife => {
-                info!("Knife tool activated via {:?} (placeholder)", event.source);
+            ToolType::Measure => {
+                info!(
+                    "Measure tool activated via {:?} (placeholder)",
+                    event.source
+                );
 
                 // Send confirmation to frontend.
                 rpc_interface.send_notification(
                     "tool_state_changed",
                     serde_json::json!({
-                        "tool": "knife",
+                        "tool": "measure",
                         "active": true
                     }),
                 );
@@ -251,7 +254,7 @@ pub fn handle_tool_keyboard_shortcuts(
 
     if keyboard.just_pressed(KeyCode::KeyK) {
         tool_events.send(ToolSelectionEvent {
-            tool_type: ToolType::Knife,
+            tool_type: ToolType::Measure,
             source: ToolSelectionSource::Keyboard,
         });
     }
