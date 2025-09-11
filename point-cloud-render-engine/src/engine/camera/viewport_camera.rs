@@ -9,6 +9,23 @@ use bevy::{
     prelude::*,
     window::PrimaryWindow,
 };
+
+// TODO: Fix cursor "disappearing" 
+// - Add keybind functionality to toggle modes and rebind keys
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CameraMode {
+    Fly,
+    Orbit,
+}
+
+// Temporary orbit spawn constants 
+const ORBIT_SPAWN: Vec3 = Vec3::new(-6.422367, 50.903121, 10.592193);
+const ORBIT_YAW: f32   = 0.0;
+const ORBIT_PITCH: f32 = -0.6;
+const ORBIT_DISTANCE: f32 = 20.0; 
+
+
 #[derive(Resource)]
 pub struct ViewportCamera {
     pub focus_point: Vec3,
@@ -23,6 +40,9 @@ pub struct ViewportCamera {
     // Add smoothing for intersection
     pub last_intersection: Option<Vec3>,
     pub intersection_smooth_factor: f32,
+    
+    pub mode: CameraMode,
+    pub fly_base_speed: f32,
 }
 
 impl ViewportCamera {
@@ -40,6 +60,8 @@ impl ViewportCamera {
             pan_start_world_point: None,
             last_intersection: None,
             intersection_smooth_factor: 0.1, // Adjust for smoothness vs responsiveness
+            mode: CameraMode::Fly, 
+            fly_base_speed: 20.0         
         }
     }
 
@@ -60,6 +82,8 @@ impl ViewportCamera {
             pan_start_world_point: None,
             last_intersection: None,
             intersection_smooth_factor: 0.15,
+            mode: CameraMode::Fly,
+            fly_base_speed: 20.0
         }
     }
 
@@ -232,6 +256,8 @@ impl Default for ViewportCamera {
             pan_start_world_point: None,
             last_intersection: None,
             intersection_smooth_factor: 0.15,
+            mode: CameraMode::Fly, 
+            fly_base_speed: 20.0,
         }
     }
 }
@@ -256,78 +282,157 @@ pub fn camera_controller(
             maps_camera.last_mouse_pos = cursor.position;
         }
 
+        // Toggle mode with "F"
+        if keyboard.just_pressed(KeyCode::KeyF) {
+            let going_to_orbit = matches!(maps_camera.mode, CameraMode::Fly);
+            maps_camera.mode = if going_to_orbit { CameraMode::Orbit } else { CameraMode::Fly };
+
+            if going_to_orbit {
+                // reset orbit state
+                maps_camera.focus_point = ORBIT_SPAWN;
+                maps_camera.yaw   = ORBIT_YAW;
+                maps_camera.pitch = ORBIT_PITCH;
+                maps_camera.height = ORBIT_DISTANCE;
+
+                let orbit_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+                let horiz = orbit_rot * Vec3::new(0.0, 0.0, maps_camera.height * 0.5);
+                let target_pos = maps_camera.focus_point + Vec3::new(horiz.x, maps_camera.height, horiz.z);
+
+                camera_transform.translation = target_pos;
+                camera_transform.rotation = Transform::from_translation(target_pos)
+                    .looking_at(maps_camera.focus_point, Vec3::Y)
+                    .rotation;
+            }
+        }
+
         // Read mouse motion
         let mouse_delta: Vec2 = mouse_motion.read().map(|m| m.delta).sum();
 
-        // Mouse motion with right click (look around)
-        if mouse_button.pressed(MouseButton::Right) && mouse_delta != Vec2::ZERO {
-        let yaw_sens = 0.0035;
-        let pitch_sens = 0.0030;
-        maps_camera.yaw += -mouse_delta.x * yaw_sens; 
-        maps_camera.pitch += -mouse_delta.y * pitch_sens; 
-        maps_camera.pitch = maps_camera.pitch.clamp(-1.55, 1.55);
-        }
+        // Obtain bounds 
+        let _maybe_bounds = assets.get_bounds(&manifests);
 
-        let Some(bounds) = assets.get_bounds(&manifests) else { return; };
-
-        // Mouse wheel scroll accumulation (pixel and line scroll)
+        // Accumulate scroll (pixel/line)
         let mut scroll_accum = 0.0;
         for ev in scroll_events.read() {
-        scroll_accum += match ev.unit {
-        MouseScrollUnit::Line => ev.y * 1.0,
-        MouseScrollUnit::Pixel => ev.y * 0.05,
-        };
+            scroll_accum += match ev.unit {
+                MouseScrollUnit::Line => ev.y * 1.0,
+                MouseScrollUnit::Pixel => ev.y * 0.05,
+            };
         }
 
-        // Mouse wheel scroll along dolly with camera view
-        if scroll_accum.abs() > f32::EPSILON {
-        let mut dolly_speed = (maps_camera.height * 0.2).clamp(0.5, 500.0);
-        let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
-        let forward = (view_rot * Vec3::Z).normalize();
-        maps_camera.focus_point -= forward * (scroll_accum * dolly_speed);
+        match maps_camera.mode {
+            CameraMode::Fly => {
+                // Look with right mouse button
+                if mouse_button.pressed(MouseButton::Right) && mouse_delta != Vec2::ZERO {
+                    let yaw_sens = 0.003;
+                    let pitch_sens = 0.003;
+                    maps_camera.yaw   += -mouse_delta.x * yaw_sens;
+                    maps_camera.pitch += -mouse_delta.y * pitch_sens;
+                    maps_camera.pitch = maps_camera.pitch.clamp(-1.55, 1.55);
+                }
+
+                // Zoom
+                if scroll_accum.abs() > f32::EPSILON {
+                    let mut dolly_speed = (maps_camera.height * 0.2).clamp(0.5, 500.0);
+                    let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+                    let forward = (view_rot * Vec3::Z).normalize();
+                    maps_camera.focus_point -= forward * (scroll_accum * dolly_speed);
+                }
+
+                // Movement WASD + Q/W (up/down)
+                let mut move_input = Vec3::ZERO;
+                if keyboard.pressed(KeyCode::KeyW) { move_input.z -= 1.0; }
+                if keyboard.pressed(KeyCode::KeyS) { move_input.z += 1.0; }
+                if keyboard.pressed(KeyCode::KeyD) { move_input.x += 1.0; }
+                if keyboard.pressed(KeyCode::KeyA) { move_input.x -= 1.0; }
+                if keyboard.pressed(KeyCode::KeyE) { move_input.y += 1.0; } // Up
+                if keyboard.pressed(KeyCode::KeyQ) { move_input.y -= 1.0; } // Down
+
+                if move_input != Vec3::ZERO {
+                    let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+                    let forward = (view_rot * Vec3::Z).normalize();
+                    let right   = (view_rot * Vec3::X).normalize();
+                    let up = Vec3::Y;
+
+                    let mut speed = maps_camera.fly_base_speed;
+                    if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) { speed *= 3.5; }
+                    if keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) { speed *= 0.25; }
+
+
+                    let world_delta = right * move_input.x + up * move_input.y + forward * move_input.z;
+                    maps_camera.focus_point += world_delta.normalize() * speed * time.delta_secs();
+                }
+
+                // Camera transformation
+                let target_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+                let target_pos = maps_camera.focus_point;
+                let s = (12.0 * time.delta_secs()).min(1.0);
+                camera_transform.translation = camera_transform.translation.lerp(target_pos, s);
+                camera_transform.rotation    = camera_transform.rotation.slerp(target_rot, s);
+            }
+
+            CameraMode::Orbit => {
+                // AD rotate
+                let mut yaw_input = 0.0;
+                if keyboard.pressed(KeyCode::KeyA) { yaw_input -= 1.0; }
+                if keyboard.pressed(KeyCode::KeyD) { yaw_input += 1.0; }
+                let yaw_speed   = 1.4; 
+                maps_camera.yaw   += yaw_input * yaw_speed * time.delta_secs();
+               
+                // Right mouse pan
+                if mouse_button.pressed(MouseButton::Right) && mouse_delta != Vec2::ZERO {
+                    let sensitivity = maps_camera.height * 0.0025;
+                    let yaw_only = Quat::from_rotation_y(maps_camera.yaw);
+                    let right   = yaw_only * Vec3::X;
+                    let forward = yaw_only * Vec3::Z;
+                    maps_camera.focus_point += right   * -mouse_delta.x * sensitivity;
+                    maps_camera.focus_point += forward * -mouse_delta.y * sensitivity;
+                }
+
+                // Scroll zoom
+                if scroll_accum.abs() > f32::EPSILON {
+                    // Decide new height 
+                    let zoom_factor = if scroll_accum > 0.0 { 0.90 } else { 1.10 }; 
+                    let old_h = maps_camera.height;
+                    let new_h = (old_h * zoom_factor).clamp(2.0, 5000.0);
+
+                    // Get ground hit under the cursor
+                    let mut hit_world: Option<Vec3> = None;
+                    if let Some(bounds) = _maybe_bounds {
+                        
+                        let cursor_pos = maps_camera.last_mouse_pos; 
+                        let heightmap_opt = None;                   
+
+                        hit_world = maps_camera.mouse_to_ground_plane(
+                            cursor_pos,
+                            camera,
+                            global_transform,
+                            heightmap_opt,
+                            &bounds,
+                        );
+                    }
+
+                    // Move focus toward the cursor 
+                    if let Some(hit) = hit_world {
+                        let k = ((old_h - new_h) / old_h).clamp(0.0, 1.0);
+                        maps_camera.focus_point = maps_camera.focus_point.lerp(hit, k);
+                    }
+                    maps_camera.height = new_h;
+                }
+
+                // Orbit placement
+                let orbit_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
+                let horizontal_offset = orbit_rot * Vec3::new(0.0, 0.0, maps_camera.height * 0.5);
+                let target_pos = maps_camera.focus_point
+                    + Vec3::new(horizontal_offset.x, maps_camera.height, horizontal_offset.z);
+                let target_rot = Transform::from_translation(target_pos)
+                    .looking_at(maps_camera.focus_point, Vec3::Y)
+                    .rotation;
+
+                let s = (12.0 * time.delta_secs()).min(1.0);
+                camera_transform.translation = camera_transform.translation.lerp(target_pos, s);
+                camera_transform.rotation    = camera_transform.rotation.slerp(target_rot, s);
+            }
         }
-
-        // Keyboard movement input
-        let mut move_input = Vec3::ZERO;
-        if keyboard.pressed(KeyCode::KeyW) { move_input.z -= 1.0; }
-        if keyboard.pressed(KeyCode::KeyS) { move_input.z += 1.0; }
-        if keyboard.pressed(KeyCode::KeyD) { move_input.x += 1.0; }
-        if keyboard.pressed(KeyCode::KeyA) { move_input.x -= 1.0; }
-        if keyboard.pressed(KeyCode::KeyE) { move_input.y += 1.0; } // Up
-        if keyboard.pressed(KeyCode::KeyQ) { move_input.y -= 1.0; } // Down
-
-
-        if move_input != Vec3::ZERO {
-        let view_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
-        let forward = (view_rot * Vec3::Z).normalize();
-        let right = (view_rot * Vec3::X).normalize();
-        let up = Vec3::Y; 
-
-        // Adjust speed, shift = faster, ctrl = slower
-        let mut speed = (maps_camera.height * 1.0).clamp(2.0, 200.0);
-        if keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) { speed *= 3.5; }
-        if keyboard.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) { speed *= 0.25; }
-
-
-        let world_delta = right * move_input.x + up * move_input.y + forward * move_input.z;
-        maps_camera.focus_point += world_delta.normalize() * speed * time.delta_secs();
-        }
-
-        // Fixed camera positioning
-        let target_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
-        let mut target_pos = maps_camera.focus_point;
-
-     
-        let target_rot = Quat::from_euler(EulerRot::YXZ, maps_camera.yaw, maps_camera.pitch, 0.0);
-        let target_pos = maps_camera.focus_point;
-
-
-        let lerp_speed = 12.0 * time.delta_secs();
-        camera_transform.translation = camera_transform
-        .translation
-        .lerp(target_pos, lerp_speed.min(1.0));
-        camera_transform.rotation = camera_transform
-        .rotation
-        .slerp(target_rot, lerp_speed.min(1.0));
     }
 }
