@@ -54,7 +54,7 @@ const ScannerApp = () => {
       {/* WASM Canvas - Full Screen */}
       <iframe
         ref={canvasRef}
-        src="/renderer/SidewalkScanner.html"
+        src="./renderer/SidewalkScanner.html"
         style={{
           position: "absolute",
           top: 0,

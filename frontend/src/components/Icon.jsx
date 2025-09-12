@@ -12,7 +12,7 @@ const Icon = ({
   useEffect(() => {
     const loadSvg = async () => {
       try {
-        const response = await fetch(`/icons/${name}.svg`);
+        const response = await fetch(`./icons/${name}.svg`);
         let text = await response.text();
 
         // Replace fill color in SVG content
