@@ -4,6 +4,7 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy_common_assets::json::JsonAssetPlugin;
+use bevy::pbr::wireframe::{WireframePlugin, WireframeConfig};
 // Crate engine modules
 use crate::engine::camera::viewport_camera::{ViewportCamera, camera_controller};
 use crate::engine::loading::point_cloud_creator::create_point_cloud_when_ready;
@@ -80,7 +81,14 @@ pub fn create_app() -> App {
         .add_plugins(ComputeClassificationPlugin)
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin)
-        .add_plugins(WebRpcPlugin);
+        .add_plugins(WebRpcPlugin)
+
+        .add_plugins(WireframePlugin::default())
+        .insert_resource(WireframeConfig {
+            global: false,
+            default_color: Color::WHITE,
+        });
+
     
     // Plugin for asset manager UI panel
     app.add_plugins(AssetManagerUiPlugin);
