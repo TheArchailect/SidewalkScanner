@@ -13,9 +13,8 @@ pub fn create_point_cloud_assets(manifest: Option<Handle<SceneManifest>>) -> Poi
         result_texture: Handle::default(),
         depth_texture: Handle::default(),
         heightmap_texture: Handle::default(),
-        // Asset textures are None until manifest confirms asset atlas presence.
-        asset_position_texture: None,
-        asset_colour_class_texture: None,
+        asset_position_texture: Handle::default(),
+        asset_colour_class_texture: Handle::default(),
         manifest,
         is_loaded: false,
     }
@@ -31,9 +30,9 @@ pub struct PointCloudAssets {
     pub spatial_index_texture: Handle<Image>, // RG32Uint: spatial data.
     pub heightmap_texture: Handle<Image>, // R32F: elevation.
 
-    // Asset atlas textures - populated when manifest contains asset_atlas.
-    pub asset_position_texture: Option<Handle<Image>>,
-    pub asset_colour_class_texture: Option<Handle<Image>>,
+    // Asset atlas textures
+    pub asset_position_texture: Handle<Image>,
+    pub asset_colour_class_texture: Handle<Image>,
 
     // Compute pipeline textures for classification and EDL processing.
     pub depth_texture: Handle<Image>,  // R32F: R = Depth.
