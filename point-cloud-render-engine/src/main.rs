@@ -8,7 +8,7 @@ mod tools;
 use crate::constants::path::{ASSET_PATH, RELATIVE_MANIFEST_PATH, TERRAIN_PATH};
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_setup::create_app;
-use crate::engine::render_mode::RenderModeState;
+use crate::engine::systems::render_mode::RenderModeState;
 
 const TEXTURE_RESOLUTION: &'static str = "2048x2048";
 

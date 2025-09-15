@@ -1,9 +1,9 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
-use crate::engine::render_mode::RenderMode;
-use crate::engine::render_mode::RenderModeState;
 use crate::engine::scene::grid::GroundGrid;
+use crate::engine::systems::render_mode::RenderMode;
+use crate::engine::systems::render_mode::RenderModeState;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;

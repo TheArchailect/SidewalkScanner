@@ -1,8 +1,6 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
-use crate::engine::point_cloud_render_pipeline::PointCloudRenderState;
-use crate::tools::asset_manager::PlacedAssetInstance;
-use crate::tools::asset_manager::PlacedAssetInstances;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderState;
 use bevy::prelude::*;
 
 /// System to extract point cloud render state from main world to render world.
@@ -12,7 +10,6 @@ pub fn extract_point_cloud_render_state(
     camera_query: bevy::render::Extract<Query<&GlobalTransform, With<Camera3d>>>,
     assets: bevy::render::Extract<Res<PointCloudAssets>>,
     manifests: bevy::render::Extract<Res<Assets<SceneManifest>>>,
-    placed_assets: bevy::render::Extract<Query<&PlacedAssetInstance>>,
 ) {
     let mut render_state = PointCloudRenderState::default();
 

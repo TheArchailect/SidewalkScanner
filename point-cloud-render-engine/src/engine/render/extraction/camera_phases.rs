@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::engine::point_cloud_render_pipeline::PointCloudPhase;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudPhase;
 
 pub fn extract_camera_phases(
     mut point_cloud_phases: ResMut<

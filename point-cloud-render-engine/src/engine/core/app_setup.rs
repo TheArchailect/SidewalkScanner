@@ -1,12 +1,12 @@
 use crate::engine::core::app_state::FpsText;
 use bevy::asset::AssetMetaCheck;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
+use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy_common_assets::json::JsonAssetPlugin;
-use bevy::pbr::wireframe::{WireframePlugin, WireframeConfig};
 // Crate engine modules
-use crate::engine::camera::viewport_camera::{ViewportCamera, camera_controller};
+use crate::engine::camera::viewport_camera::camera_controller;
 use crate::engine::loading::point_cloud_creator::create_point_cloud_when_ready;
 use crate::engine::loading::texture_config::configure_loaded_textures;
 use crate::engine::scene::gizmos::{update_direction_gizmo, update_mouse_intersection_gizmo};
@@ -14,21 +14,20 @@ use crate::engine::scene::grid::GridCreated;
 use crate::engine::systems::debug_pipeline::debug_pipeline_state;
 use crate::engine::systems::fps_tracking::fps_notification_system;
 use crate::engine::{
-    compute_classification::{
+    compute::compute_classification::{
         ComputeClassificationPlugin, ComputeClassificationState, run_classification_compute,
     },
-    edl_compute_depth::{EDLComputePlugin, EDLRenderState, run_edl_compute},
-    edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
-    // gizmos::{update_direction_gizmo, update_mouse_intersection_gizmo},
-    // grid::GridCreated,
-    point_cloud_render_pipeline::{PointCloudRenderPlugin, PointCloudRenderable},
-    render_mode::{RenderModeState, render_mode_system},
+    compute::edl_compute_depth::{EDLComputePlugin, EDLRenderState, run_edl_compute},
+    render::edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
+    render::pipeline::point_cloud_render_pipeline::{PointCloudRenderPlugin, PointCloudRenderable},
+    systems::render_mode::{RenderModeState, render_mode_system},
 };
 // Crate tools modules
 use crate::engine::core::app_state::{AppState, PipelineDebugState};
 use crate::engine::loading::manifest_loader::{ManifestLoader, load_bounds_system, start_loading};
 use crate::engine::loading::texture_loader::check_texture_loading;
 use crate::tools::{
+    asset_manager::AssetManagerUiPlugin,
     class_selection::{
         ClassSelectionState, SelectionBuffer, handle_class_selection, update_selection_buffer,
     },
@@ -39,9 +38,6 @@ use crate::tools::{
     tool_manager::{
         PolygonActionEvent, ToolManager, ToolSelectionEvent, handle_polygon_action_events,
         handle_tool_keyboard_shortcuts, handle_tool_selection_events,
-    },
-    asset_manager::{
-        AssetManagerUiPlugin,
     },
 };
 // Create Web RPC modules
@@ -62,12 +58,15 @@ use crate::engine::render::extraction::{
     app_state::extract_app_state, camera_phases::extract_camera_phases,
     render_state::extract_point_cloud_render_state, scene_manifest::extract_scene_manifest,
 };
+use crate::engine::render::instanced_render_plugin::InstancedAssetRenderPlugin;
+use crate::tools::asset_manager::PlacedAssetInstances;
 pub fn create_app() -> App {
     let mut app = App::new();
 
     app.add_plugins(create_default_plugins())
         .init_state::<AppState>()
         .add_plugins(PointCloudRenderPlugin)
+        .add_plugins(InstancedAssetRenderPlugin)
         .init_resource::<PipelineDebugState>()
         .add_plugins(ExtractResourcePlugin::<PipelineDebugState>::default())
         .add_plugins(bevy::render::extract_component::ExtractComponentPlugin::<
@@ -82,14 +81,12 @@ pub fn create_app() -> App {
         .add_plugins(EDLComputePlugin)
         .add_plugins(EDLPostProcessPlugin)
         .add_plugins(WebRpcPlugin)
-
         .add_plugins(WireframePlugin::default())
         .insert_resource(WireframeConfig {
             global: false,
             default_color: Color::WHITE,
         });
 
-    
     // Plugin for asset manager UI panel
     app.add_plugins(AssetManagerUiPlugin);
 
@@ -102,6 +99,7 @@ pub fn create_app() -> App {
         .init_resource::<PolygonCounter>()
         .init_resource::<PolygonTool>()
         .init_resource::<RenderModeState>()
+        .init_resource::<PlacedAssetInstances>()
         .init_resource::<GridCreated>()
         .init_resource::<ToolManager>()
         .add_event::<ToolSelectionEvent>()
@@ -123,6 +121,7 @@ pub fn create_app() -> App {
                 extract_point_cloud_render_state,
                 extract_camera_phases,
                 extract_scene_manifest,
+                // extract_placed_assets,
             ),
         );
 

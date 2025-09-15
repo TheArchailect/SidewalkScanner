@@ -1,5 +1,5 @@
 use crate::constants::path::RELATIVE_MANIFEST_PATH;
-use crate::engine::camera::viewport_camera::{ViewportCamera, camera_controller};
+use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::loading::progress::LoadingProgress;
 use crate::load_unified_textures;
 use bevy::prelude::*;

@@ -2,7 +2,7 @@ use crate::RenderModeState;
 use crate::engine::assets::bounds::BoundsData;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
-use crate::engine::render_mode::RenderMode;
+use crate::engine::systems::render_mode::RenderMode;
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
 use bevy::prelude::*;
@@ -114,11 +114,11 @@ pub fn run_classification_compute(
     );
 
     state.should_recompute = false;
-    println!(
-        "GPU classification updated: {} polygons, mode: {:?}",
-        classification_data.polygons.len(),
-        render_mode.current_mode
-    );
+    // println!(
+    //     "GPU classification updated: {} polygons, mode: {:?}",
+    //     classification_data.polygons.len(),
+    //     render_mode.current_mode
+    // );
 }
 
 fn initialise_compute_pipeline(

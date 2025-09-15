@@ -1,4 +1,4 @@
-use crate::engine::point_cloud_render_pipeline::PointCloudRenderable;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderable;
 use bevy::prelude::*;
 
 use crate::engine::core::app_state::PipelineDebugState;
@@ -11,7 +11,7 @@ pub fn debug_pipeline_state(
     if keyboard.just_pressed(KeyCode::F1) {
         let pc_entities = point_cloud_query.iter().count();
 
-        println!("=== PIPELINE DEBUG STATE ===");
+        println!("=== CUSTOM PHASE DEBUG STATE ===");
         println!("Point cloud entities in main world: {}", pc_entities);
         println!(
             "Entities queued for rendering: {}",

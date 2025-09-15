@@ -64,7 +64,7 @@ pub fn handle_class_selection(
 ) {
     if keyboard.just_pressed(KeyCode::KeyS) {
         selection_state.is_selecting = true;
-        println!("Click to select");
+        // println!("Click to select");
     }
 
     if keyboard.just_pressed(KeyCode::Escape) {

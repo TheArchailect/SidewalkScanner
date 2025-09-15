@@ -1,7 +1,9 @@
+use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
-use crate::engine::point_cloud_render_pipeline::PointCloudRenderable;
+use crate::engine::mesh::point_index_mesh::create_point_index_mesh;
+use crate::engine::render::instanced_render_plugin::{InstanceData, InstancedAssetData};
 use bevy::input::mouse::MouseWheel;
 use bevy::math::primitives::Cuboid;
 use bevy::pbr::wireframe::{Wireframe, WireframeColor};
@@ -10,6 +12,7 @@ use bevy::prelude::{Mesh3d, MeshMaterial3d};
 use bevy::render::alpha::AlphaMode;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::mesh::Mesh;
+use bevy::render::view::NoFrustumCulling;
 use bevy::window::PrimaryWindow;
 
 #[derive(Component, Clone, ExtractComponent)]
@@ -29,7 +32,7 @@ pub struct AssetManagerUiPlugin;
 impl Plugin for AssetManagerUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AssetManagerUiState>()
-            .init_resource::<PlaceCubeState>()
+            .init_resource::<PlaceAssetBoundState>()
             .insert_resource(RotationSettings::default())
             .insert_resource(SelectionLock::default())
             .add_systems(Startup, spawn_asset_manager_ui)
@@ -72,16 +75,15 @@ impl Default for AssetManagerUiState {
 }
 
 #[derive(Resource)]
-struct PlaceCubeState {
+struct PlaceAssetBoundState {
     active: bool,
-    cube_size: f32,
     selected_asset_name: Option<String>,
 }
-impl Default for PlaceCubeState {
+
+impl Default for PlaceAssetBoundState {
     fn default() -> Self {
         Self {
             active: false,
-            cube_size: 1.0,
             selected_asset_name: None,
         }
     }
@@ -90,15 +92,11 @@ impl Default for PlaceCubeState {
 #[derive(Resource)]
 struct RotationSettings {
     speed: f32,
-    snap_deg: f32,
 }
 
 impl Default for RotationSettings {
     fn default() -> Self {
-        Self {
-            speed: 0.18,
-            snap_deg: 15.0,
-        }
+        Self { speed: 0.18 }
     }
 }
 
@@ -244,7 +242,6 @@ fn spawn_asset_manager_ui(mut commands: Commands, state: Res<AssetManagerUiState
                         });
                 });
 
-            // Body
             parent
                 .spawn((
                     AssetManagerBody,
@@ -404,14 +401,12 @@ fn apply_collapse_state(
     }
 }
 
-// TODO: FIX place_cube_button_interaction & reflect_place_cube_button logic for highlight colours
-
 fn place_cube_button_interaction(
     mut q: Query<
         (&Interaction, &mut BackgroundColor),
         (Changed<Interaction>, With<Button>, With<PlaceCubeButton>),
     >,
-    mut place: ResMut<PlaceCubeState>,
+    mut place: ResMut<PlaceAssetBoundState>,
 ) {
     for (interaction, mut bg) in &mut q {
         match *interaction {
@@ -432,7 +427,7 @@ fn place_cube_button_interaction(
 }
 
 fn reflect_place_cube_button(
-    place: Res<PlaceCubeState>,
+    place: Res<PlaceAssetBoundState>,
     mut q: Query<&mut BackgroundColor, With<PlaceCubeButton>>,
 ) {
     if !place.is_changed() {
@@ -455,13 +450,22 @@ fn clear_bounds_button_interaction(
     >,
     mut commands: Commands,
     to_clear: Query<Entity, With<PlacedBounds>>,
+    existing_instances: Query<Entity, With<InstancedAssetData>>,
+    mut placed_assets: ResMut<PlacedAssetInstances>,
 ) {
     for (interaction, mut bg) in &mut q {
         match *interaction {
             Interaction::Pressed => {
+                // Clear wireframes
                 for e in &to_clear {
                     commands.entity(e).despawn();
                 }
+                // Clear instanced renderer
+                for e in &existing_instances {
+                    commands.entity(e).despawn();
+                }
+                // Clear resource
+                placed_assets.instances.clear();
                 *bg = BackgroundColor(Color::srgb(0.20, 0.12, 0.12));
             }
             Interaction::Hovered => *bg = BackgroundColor(Color::srgb(0.34, 0.14, 0.14)),
@@ -475,7 +479,7 @@ fn asset_selection_hotkeys(
     kb: Res<ButtonInput<KeyCode>>,
     manifests: Res<Assets<SceneManifest>>,
     assets: Res<PointCloudAssets>,
-    mut place: ResMut<PlaceCubeState>,
+    mut place: ResMut<PlaceAssetBoundState>,
 ) {
     let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) else {
         return;
@@ -525,7 +529,7 @@ fn asset_selection_hotkeys(
 
 // Change selected asset labels in UI
 fn reflect_selected_asset_label(
-    place: Res<PlaceCubeState>,
+    place: Res<PlaceAssetBoundState>,
     manifests: Res<Assets<SceneManifest>>,
     assets: Res<PointCloudAssets>,
     mut q: Query<&mut Text, With<PlaceCubeLabel>>,
@@ -559,19 +563,93 @@ fn reflect_selected_asset_label(
     }
 }
 
-// Spawn wireframe cuboids, assets loaded from manifest
+fn update_instance_data(
+    instance_data: &mut InstancedAssetData,
+    instances: &[PlacedAssetInstance],
+    asset_meta: &AssetDefinition,
+) {
+    let new_data: Vec<InstanceData> = instances
+        .iter()
+        .filter_map(|placed| {
+            Some(InstanceData {
+                position: placed.transform.translation.to_array(),
+                _padding1: 0.0,
+                rotation: [
+                    placed.transform.rotation.x,
+                    placed.transform.rotation.y,
+                    placed.transform.rotation.z,
+                    placed.transform.rotation.w,
+                ],
+                uv_bounds: placed.uv_bounds.to_array(),
+                point_count: asset_meta.point_count as f32,
+                _padding2: [0.0; 3],
+            })
+        })
+        .collect();
+
+    instance_data.0 = new_data;
+}
+
+// Helper function to create new instanced renderer
+fn create_new_instanced_renderer(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    instances: &[PlacedAssetInstance],
+    asset_meta: &AssetDefinition,
+) {
+    if instances.is_empty() {
+        return;
+    }
+
+    let instance_data: Vec<InstanceData> = instances
+        .iter()
+        .filter_map(|placed| {
+            Some(InstanceData {
+                position: placed.transform.translation.to_array(),
+                _padding1: 0.0,
+                rotation: [
+                    placed.transform.rotation.x,
+                    placed.transform.rotation.y,
+                    placed.transform.rotation.z,
+                    placed.transform.rotation.w,
+                ],
+                uv_bounds: placed.uv_bounds.to_array(),
+                point_count: asset_meta.point_count as f32,
+                _padding2: [0.0; 3],
+            })
+        })
+        .collect();
+
+    if !instance_data.is_empty() {
+        let max_points = asset_meta.point_count;
+
+        commands.spawn((
+            Mesh3d(meshes.add(create_point_index_mesh(max_points))),
+            InstancedAssetData(instance_data),
+            // Transform should be handled by Bevy's transform system
+            Transform::IDENTITY, // Base transform
+            NoFrustumCulling,
+            bevy::render::view::NoIndirectDrawing,
+            Name::new("InstancedAssetRenderer"),
+        ));
+    }
+}
+
+// Optimized placement function
 fn place_cube_on_world_click(
     buttons: Res<ButtonInput<MouseButton>>,
-    place: Res<PlaceCubeState>,
+    place: Res<PlaceAssetBoundState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    mut maps_camera: Option<ResMut<ViewportCamera>>,
+    maps_camera: Option<ResMut<ViewportCamera>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut placed_assets: ResMut<PlacedAssetInstances>,
+    mut existing_instances: Query<&mut InstancedAssetData>,
 ) {
     if !place.active || !buttons.just_pressed(MouseButton::Left) {
         return;
@@ -612,7 +690,7 @@ fn place_cube_on_world_click(
         return;
     };
 
-    // Gets asset currently selected or defaults to first asset
+    // Get asset currently selected or defaults to first asset
     let picked = if let Some(ref name) = place.selected_asset_name {
         manifest
             .asset_atlas
@@ -628,7 +706,7 @@ fn place_cube_on_world_click(
         return;
     };
 
-    // Locals bounds to determine size
+    // Calculate bounds size
     let lb = &asset_meta.local_bounds;
     let mut sx = (lb.max_x - lb.min_x) as f32;
     let mut sy = (lb.max_y - lb.min_y) as f32;
@@ -647,8 +725,7 @@ fn place_cube_on_world_click(
     }
     let size = Vec3::new(sx, sy, sz);
 
-    // Uses center of bounds for placement
-    // Adjusts Y to sit on ground plane by half height
+    // Position on ground
     let center = Vec3::new(hit.x, hit.y + size.y * 0.5, hit.z);
     let transform = Transform::from_translation(center);
 
@@ -661,14 +738,24 @@ fn place_cube_on_world_click(
 
     let mat = materials.add(StandardMaterial {
         base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
-        alpha_mode: AlphaMode::Blend, // change for transparency
+        alpha_mode: AlphaMode::Blend,
         unlit: true,
         emissive: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
         perceptual_roughness: 1.0,
         ..default()
     });
 
-    // Spawn wireframe
+    // Create placed asset instance
+    let placed_instance = PlacedAssetInstance {
+        asset_name: asset_meta.name.clone(),
+        transform,
+        uv_bounds,
+    };
+
+    // Add to global list
+    placed_assets.instances.push(placed_instance.clone());
+
+    // Spawn wireframe bounds
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::from_size(size))),
         MeshMaterial3d(mat),
@@ -677,19 +764,24 @@ fn place_cube_on_world_click(
         WireframeColor {
             color: Color::WHITE,
         },
-        PlacedAssetInstance {
-            asset_name: asset_meta.name.clone(),
-            transform,
-            uv_bounds,
-        },
-        // Mark for point cloud rendering
-        PointCloudRenderable {
-            point_count: asset_meta.point_count as u32,
-        },
+        placed_instance.clone(),
         PlacedBounds,
         BoundsSize(size),
         Name::new(format!("{}_bounds_wire", asset_meta.name)),
     ));
+
+    // Update existing instance data instead of recreating
+    if let Ok(mut instance_data) = existing_instances.single_mut() {
+        update_instance_data(&mut instance_data, &placed_assets.instances, asset_meta);
+    } else {
+        // Only create if none exists
+        create_new_instanced_renderer(
+            &mut commands,
+            &mut meshes,
+            &placed_assets.instances,
+            asset_meta,
+        );
+    }
 
     info!("Placed bounds for '{}' at {:?}", asset_meta.name, center);
 }
@@ -707,13 +799,13 @@ fn toggle_select_on_click(
         return;
     }
 
-    let Ok(window) = windows.get_single() else {
+    let Ok(window) = windows.single() else {
         return;
     };
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    let Ok((cam_xf, camera)) = cameras.get_single() else {
+    let Ok((cam_xf, camera)) = cameras.single() else {
         return;
     };
 
@@ -758,11 +850,17 @@ fn toggle_select_on_click(
     }
 }
 
-// Rotate selected bounds on mouse wheel scroll
 fn rotate_active_bounds_on_scroll(
     mut wheel: EventReader<MouseWheel>,
-    mut q: Query<&mut Transform, (With<ActiveRotating>, With<Selected>)>,
+    mut q: Query<
+        (&mut Transform, &mut PlacedAssetInstance),
+        (With<ActiveRotating>, With<Selected>),
+    >,
     settings: Res<RotationSettings>,
+    mut placed_assets: ResMut<PlacedAssetInstances>,
+    mut existing_instances: Query<&mut InstancedAssetData>,
+    manifests: Res<Assets<SceneManifest>>,
+    assets: Res<PointCloudAssets>,
 ) {
     if q.is_empty() {
         return;
@@ -776,10 +874,36 @@ fn rotate_active_bounds_on_scroll(
         return;
     }
 
-    let mut angle = delta * settings.speed;
+    // Update both the entity transform AND the PlacedAssetInstance transform
+    for (mut transform, mut placed_instance) in &mut q {
+        let angle = delta * settings.speed;
+        transform.rotate(Quat::from_axis_angle(Vec3::Y, angle));
+        placed_instance.transform = *transform; // Keep them in sync
 
-    for mut t in &mut q {
-        t.rotate(Quat::from_axis_angle(Vec3::Y, angle));
+        // Update the global instance list as well
+        if let Some(global_instance) = placed_assets.instances.iter_mut().find(|inst| {
+            inst.asset_name == placed_instance.asset_name
+                && (inst
+                    .transform
+                    .translation
+                    .distance(placed_instance.transform.translation)
+                    < 0.1)
+        }) {
+            global_instance.transform = *transform;
+        }
+    }
+
+    // Update the instanced renderer if it exists
+    if let Ok(mut instance_data) = existing_instances.single_mut() {
+        if let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) {
+            if let Some(asset_meta) = manifest
+                .asset_atlas
+                .as_ref()
+                .and_then(|aa| aa.assets.first())
+            {
+                update_instance_data(&mut instance_data, &placed_assets.instances, asset_meta);
+            }
+        }
     }
 }
 

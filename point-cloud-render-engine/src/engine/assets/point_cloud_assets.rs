@@ -51,23 +51,4 @@ impl PointCloudAssets {
         let manifest = manifests.get(manifest_handle)?;
         Some(manifest.to_point_cloud_bounds())
     }
-
-    /// Check if manifest has been loaded and assets are ready for rendering.
-    pub fn is_manifest_loaded(&self, manifests: &Assets<SceneManifest>) -> bool {
-        if let Some(handle) = &self.manifest {
-            manifests.get(handle).is_some()
-        } else {
-            false
-        }
-    }
-
-    /// Get terrain point count from manifest for mesh generation.
-    /// Returns 0 if manifest not loaded yet.
-    pub fn terrain_point_count(&self, manifests: &Assets<SceneManifest>) -> usize {
-        self.manifest
-            .as_ref()
-            .and_then(|h| manifests.get(h))
-            .map(|m| m.terrain_point_count())
-            .unwrap_or(0)
-    }
 }
