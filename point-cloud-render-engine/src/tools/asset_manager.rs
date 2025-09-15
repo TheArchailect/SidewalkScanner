@@ -1,19 +1,12 @@
-use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
-use bevy::pbr::wireframe::{Wireframe, WireframeColor};
-use bevy::prelude::{Mesh3d, MeshMaterial3d};
-use bevy::math::primitives::Cuboid;
-use bevy::render::mesh::Mesh;
-use bevy::render::alpha::AlphaMode;
-use bevy::input::mouse::MouseWheel;
-use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::point_cloud_render_pipeline::PointCloudRenderable;
+use bevy::input::mouse::MouseWheel;
 use bevy::math::primitives::Cuboid;
 use bevy::pbr::wireframe::{Wireframe, WireframeColor};
 use bevy::prelude::*;
+use bevy::prelude::{Mesh3d, MeshMaterial3d};
 use bevy::render::alpha::AlphaMode;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::mesh::Mesh;
@@ -52,9 +45,7 @@ impl Plugin for AssetManagerUiPlugin {
                     // Asset selection number keys (1-9)
                     asset_selection_hotkeys,
                     reflect_selected_asset_label,
-
                     place_cube_on_world_click,
-
                     // Bounds selection/rotation
                     toggle_select_on_click,
                     rotate_active_bounds_on_scroll,
@@ -104,7 +95,10 @@ struct RotationSettings {
 
 impl Default for RotationSettings {
     fn default() -> Self {
-        Self { speed: 0.18, snap_deg: 15.0 }
+        Self {
+            speed: 0.18,
+            snap_deg: 15.0,
+        }
     }
 }
 
@@ -113,23 +107,34 @@ pub struct SelectionLock {
     pub active: bool,
 }
 
-
-#[derive(Component)] struct AssetManagerRoot;
-#[derive(Component)] struct AssetManagerBody;
-#[derive(Component)] struct HeaderNode;
-#[derive(Component)] struct TitleText;
-#[derive(Component)] struct CollapseButton;
-#[derive(Component)] struct CollapseLabel;
-#[derive(Component)] struct PlaceCubeButton;
-#[derive(Component)] struct PlaceCubeLabel;
-#[derive(Component)] struct ClearBoundsButton;
+#[derive(Component)]
+struct AssetManagerRoot;
+#[derive(Component)]
+struct AssetManagerBody;
+#[derive(Component)]
+struct HeaderNode;
+#[derive(Component)]
+struct TitleText;
+#[derive(Component)]
+struct CollapseButton;
+#[derive(Component)]
+struct CollapseLabel;
+#[derive(Component)]
+struct PlaceCubeButton;
+#[derive(Component)]
+struct PlaceCubeLabel;
+#[derive(Component)]
+struct ClearBoundsButton;
 
 // Marker components for placed bounds/wireframe entities
-#[derive(Component)] pub struct PlacedBounds;    
-#[derive(Component)] struct ActiveRotating;        
-#[derive(Component)] struct Selected;             
-#[derive(Component)] struct BoundsSize(Vec3);       
-
+#[derive(Component)]
+pub struct PlacedBounds;
+#[derive(Component)]
+struct ActiveRotating;
+#[derive(Component)]
+struct Selected;
+#[derive(Component)]
+struct BoundsSize(Vec3);
 
 fn spawn_asset_manager_ui(mut commands: Commands, state: Res<AssetManagerUiState>) {
     let width = if state.collapsed {
@@ -698,15 +703,25 @@ fn toggle_select_on_click(
     q_bounds: Query<(Entity, &GlobalTransform, &BoundsSize, Option<&Selected>), With<PlacedBounds>>,
     mut commands: Commands,
 ) {
-    if !buttons.just_pressed(MouseButton::Left) { return; }
+    if !buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
 
-    let Ok(window) = windows.get_single() else { return; };
-    let Some(cursor_pos) = window.cursor_position() else { return; };
-    let Ok((cam_xf, camera)) = cameras.get_single() else { return; };
+    let Ok(window) = windows.get_single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok((cam_xf, camera)) = cameras.get_single() else {
+        return;
+    };
 
-    let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) else { return; };
+    let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) else {
+        return;
+    };
     let origin = ray.origin;
-    let dir = ray.direction.as_vec3();;
+    let dir = ray.direction.as_vec3();
 
     // Find nearest hit among bounds
     let mut best: Option<(Entity, f32, bool)> = None; // (entity, distance t, was_selected)
@@ -726,15 +741,19 @@ fn toggle_select_on_click(
             if sel.is_some() {
                 commands.entity(e).remove::<Selected>();
                 commands.entity(e).remove::<ActiveRotating>();
-                commands.entity(e).insert(WireframeColor { color: Color::WHITE });
+                commands.entity(e).insert(WireframeColor {
+                    color: Color::WHITE,
+                });
             }
         }
 
-        // Deselect 
+        // Deselect
         if !was_selected {
             commands.entity(hit_e).insert(Selected);
             commands.entity(hit_e).insert(ActiveRotating);
-            commands.entity(hit_e).insert(WireframeColor { color: Color::srgb(1.0, 1.0, 0.0) });
+            commands.entity(hit_e).insert(WireframeColor {
+                color: Color::srgb(1.0, 1.0, 0.0),
+            });
         }
     }
 }
@@ -745,13 +764,17 @@ fn rotate_active_bounds_on_scroll(
     mut q: Query<&mut Transform, (With<ActiveRotating>, With<Selected>)>,
     settings: Res<RotationSettings>,
 ) {
-    if q.is_empty() { return; }
+    if q.is_empty() {
+        return;
+    }
 
     let mut delta = 0.0f32;
     for ev in wheel.read() {
         delta += ev.y as f32;
     }
-    if delta.abs() < f32::EPSILON { return; }
+    if delta.abs() < f32::EPSILON {
+        return;
+    }
 
     let mut angle = delta * settings.speed;
 
@@ -760,13 +783,9 @@ fn rotate_active_bounds_on_scroll(
     }
 }
 
-fn reflect_selection_lock(
-    q_selected: Query<(), With<Selected>>,
-    mut lock: ResMut<SelectionLock>,
-) {
+fn reflect_selection_lock(q_selected: Query<(), With<Selected>>, mut lock: ResMut<SelectionLock>) {
     lock.active = !q_selected.is_empty();
 }
-
 
 fn ray_hits_obb(origin: Vec3, dir: Vec3, xf: GlobalTransform, size: Vec3) -> Option<f32> {
     // Inverts box transform
@@ -782,38 +801,69 @@ fn ray_hits_obb(origin: Vec3, dir: Vec3, xf: GlobalTransform, size: Vec3) -> Opt
 // Slab method for ray-AABB intersection
 // Returns Some t (how far along the ray), where ray hits AABB, none if no hit
 fn ray_aabb_hit_t(ray_origin: Vec3, ray_direction: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
-
     // Inverse direction
     let inv = Vec3::new(
-        if ray_direction.x != 0.0 { 1.0 / ray_direction.x } else { f32::INFINITY },
-        if ray_direction.y != 0.0 { 1.0 / ray_direction.y } else { f32::INFINITY },
-        if ray_direction.z != 0.0 { 1.0 / ray_direction.z } else { f32::INFINITY },
+        if ray_direction.x != 0.0 {
+            1.0 / ray_direction.x
+        } else {
+            f32::INFINITY
+        },
+        if ray_direction.y != 0.0 {
+            1.0 / ray_direction.y
+        } else {
+            f32::INFINITY
+        },
+        if ray_direction.z != 0.0 {
+            1.0 / ray_direction.z
+        } else {
+            f32::INFINITY
+        },
     );
 
     // X slab intersection
     let mut tmin = (min.x - ray_origin.x) * inv.x;
     let mut tmax = (max.x - ray_origin.x) * inv.x;
-    if tmin > tmax { std::mem::swap(&mut tmin, &mut tmax); }
+    if tmin > tmax {
+        std::mem::swap(&mut tmin, &mut tmax);
+    }
 
     // Y slab intersection
     let mut tymin = (min.y - ray_origin.y) * inv.y;
     let mut tymax = (max.y - ray_origin.y) * inv.y;
-    if tymin > tymax { std::mem::swap(&mut tymin, &mut tymax); }
+    if tymin > tymax {
+        std::mem::swap(&mut tymin, &mut tymax);
+    }
 
-    if (tmin > tymax) || (tymin > tmax) { return None; }
-    if tymin > tmin { tmin = tymin; }
-    if tymax < tmax { tmax = tymax; }
+    if (tmin > tymax) || (tymin > tmax) {
+        return None;
+    }
+    if tymin > tmin {
+        tmin = tymin;
+    }
+    if tymax < tmax {
+        tmax = tymax;
+    }
 
     // Z slab intersection
     let mut tzmin = (min.z - ray_origin.z) * inv.z;
     let mut tzmax = (max.z - ray_origin.z) * inv.z;
-    if tzmin > tzmax { std::mem::swap(&mut tzmin, &mut tzmax); }
+    if tzmin > tzmax {
+        std::mem::swap(&mut tzmin, &mut tzmax);
+    }
 
-    if (tmin > tzmax) || (tzmin > tmax) { return None; }
-    if tzmin > tmin { tmin = tzmin; }
-    if tzmax < tmax { tmax = tzmax; }
+    if (tmin > tzmax) || (tzmin > tmax) {
+        return None;
+    }
+    if tzmin > tmin {
+        tmin = tzmin;
+    }
+    if tzmax < tmax {
+        tmax = tzmax;
+    }
 
     // Check if behind ray
-    if tmax < 0.0 { return None; }   
+    if tmax < 0.0 {
+        return None;
+    }
     Some(if tmin >= 0.0 { tmin } else { tmax })
 }
