@@ -52,18 +52,30 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     }
     out.quad_pos = quad_pos;
 
-    let points_per_side = u32(sqrt(vertex.i_point_count_pad.x));
-    if points_per_side == 0u {
+    let total_points = u32(vertex.i_point_count_pad.x);
+    if total_points == 0u {
         out.clip_position = vec4<f32>(0.0, 0.0, -1.0, 1.0);
         return out;
     }
 
-    let atlas_x = point_index % points_per_side;
-    let atlas_y = point_index / points_per_side;
+    // Calculate UV bounds size in pixels (assuming 2048x2048 atlas from manifest)
+    let uv_size = vertex.i_uv_bounds.zw - vertex.i_uv_bounds.xy;
+    let atlas_size = 2048.0;
+    let region_width = u32(uv_size.x * atlas_size);
+    let region_height = u32(uv_size.y * atlas_size);
 
+    // Ensure we don't have zero dimensions
+    let safe_region_width = max(region_width, 1u);
+    let safe_region_height = max(region_height, 1u);
+
+    // Convert linear point index to 2D coordinates within the region
+    let atlas_x = point_index % safe_region_width;
+    let atlas_y = point_index / safe_region_width;
+
+    // Convert to normalized UV within the region
     let local_uv = vec2<f32>(
-        (f32(atlas_x) + 0.5) / f32(points_per_side),
-        (f32(atlas_y) + 0.5) / f32(points_per_side)
+        (f32(atlas_x) + 0.5) / f32(safe_region_width),
+        (f32(atlas_y) + 0.5) / f32(safe_region_height)
     );
 
     let atlas_uv = mix(vertex.i_uv_bounds.xy, vertex.i_uv_bounds.zw, local_uv);

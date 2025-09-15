@@ -783,7 +783,7 @@ fn place_cube_on_world_click(
         );
     }
 
-    info!("Placed bounds for '{}' at {:?}", asset_meta.name, center);
+    // info!("Placed bounds for '{}' at {:?}", asset_meta.name, center);
 }
 
 // Bounds/wireframe selection system
