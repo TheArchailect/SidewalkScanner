@@ -2,6 +2,7 @@ use crate::engine::assets::bounds::PointCloudBounds;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::scene::heightmap::sample_heightmap_bilinear;
+use crate::tools::asset_manager::SelectionLock;
 use bevy::math::EulerRot;
 use bevy::input::mouse::MouseScrollUnit;
 use bevy::{
@@ -275,7 +276,15 @@ pub fn camera_controller(
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
+    lock: Option<Res<SelectionLock>>,
 ) {
+    // lock for rotating bounds
+    if let Some(lock) = lock {
+        if lock.active {
+            return; // skip zoom while a bound is selected
+        }
+    }
+
     if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
         // Update cursor position
         for cursor in cursor_moved.read() {

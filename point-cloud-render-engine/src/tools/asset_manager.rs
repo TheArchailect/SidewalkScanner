@@ -1,3 +1,15 @@
+<<<<<<< HEAD
+=======
+use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
+use bevy::pbr::wireframe::{Wireframe, WireframeColor};
+use bevy::prelude::{Mesh3d, MeshMaterial3d};
+use bevy::math::primitives::Cuboid;
+use bevy::render::mesh::Mesh;
+use bevy::render::alpha::AlphaMode;
+use bevy::input::mouse::MouseWheel;
+use crate::engine::camera::viewport_camera::ViewportCamera;
+>>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -28,6 +40,8 @@ impl Plugin for AssetManagerUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AssetManagerUiState>()
             .init_resource::<PlaceCubeState>()
+            .insert_resource(RotationSettings::default())
+            .insert_resource(SelectionLock::default())
             .add_systems(Startup, spawn_asset_manager_ui)
             .add_systems(
                 Update,
@@ -41,7 +55,17 @@ impl Plugin for AssetManagerUiPlugin {
                     // Asset selection number keys (1-9)
                     asset_selection_hotkeys,
                     reflect_selected_asset_label,
+<<<<<<< HEAD
                     place_cube_on_world_click,
+=======
+
+                    place_cube_on_world_click,
+
+                    // Bounds selection/rotation
+                    toggle_select_on_click,
+                    rotate_active_bounds_on_scroll,
+                    reflect_selection_lock,
+>>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
                 ),
             );
     }
@@ -79,6 +103,7 @@ impl Default for PlaceCubeState {
     }
 }
 
+<<<<<<< HEAD
 #[derive(Component)]
 struct AssetManagerRoot;
 #[derive(Component)]
@@ -99,6 +124,42 @@ struct PlaceCubeLabel;
 struct ClearBoundsButton;
 #[derive(Component)]
 struct PlacedBounds;
+=======
+#[derive(Resource)]
+struct RotationSettings {
+    speed: f32,
+    snap_deg: f32,
+}
+
+impl Default for RotationSettings {
+    fn default() -> Self {
+        Self { speed: 0.18, snap_deg: 15.0 }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct SelectionLock {
+    pub active: bool,
+}
+
+
+#[derive(Component)] struct AssetManagerRoot;
+#[derive(Component)] struct AssetManagerBody;
+#[derive(Component)] struct HeaderNode;
+#[derive(Component)] struct TitleText;
+#[derive(Component)] struct CollapseButton;
+#[derive(Component)] struct CollapseLabel;
+#[derive(Component)] struct PlaceCubeButton;
+#[derive(Component)] struct PlaceCubeLabel;
+#[derive(Component)] struct ClearBoundsButton;
+
+// Marker components for placed bounds/wireframe entities
+#[derive(Component)] pub struct PlacedBounds;    
+#[derive(Component)] struct ActiveRotating;        
+#[derive(Component)] struct Selected;             
+#[derive(Component)] struct BoundsSize(Vec3);       
+
+>>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
 
 fn spawn_asset_manager_ui(mut commands: Commands, state: Res<AssetManagerUiState>) {
     let width = if state.collapsed {
@@ -651,8 +712,141 @@ fn place_cube_on_world_click(
             point_count: asset_meta.point_count as u32,
         },
         PlacedBounds,
+        BoundsSize(size),
         Name::new(format!("{}_bounds_wire", asset_meta.name)),
     ));
 
     info!("Placed bounds for '{}' at {:?}", asset_meta.name, center);
 }
+<<<<<<< HEAD
+=======
+
+// Bounds/wireframe selection system
+// Click to select/deselect, only one selected at a time
+fn toggle_select_on_click(
+    buttons: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    q_bounds: Query<(Entity, &GlobalTransform, &BoundsSize, Option<&Selected>), With<PlacedBounds>>,
+    mut commands: Commands,
+) {
+    if !buttons.just_pressed(MouseButton::Left) { return; }
+
+    let Ok(window) = windows.get_single() else { return; };
+    let Some(cursor_pos) = window.cursor_position() else { return; };
+    let Ok((cam_xf, camera)) = cameras.get_single() else { return; };
+
+    let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) else { return; };
+    let origin = ray.origin;
+    let dir = ray.direction.as_vec3();;
+
+    // Find nearest hit among bounds
+    let mut best: Option<(Entity, f32, bool)> = None; // (entity, distance t, was_selected)
+
+    for (e, xf, BoundsSize(size), selected) in &q_bounds {
+        if let Some(t) = ray_hits_obb(origin, dir, *xf, *size) {
+            if t > 0.0 && (best.is_none() || t < best.unwrap().1) {
+                best = Some((e, t, selected.is_some()));
+            }
+        }
+    }
+
+    // Toggle selection
+    if let Some((hit_e, _t, was_selected)) = best {
+        // Deselect all
+        for (e, _, _, sel) in &q_bounds {
+            if sel.is_some() {
+                commands.entity(e).remove::<Selected>();
+                commands.entity(e).remove::<ActiveRotating>();
+                commands.entity(e).insert(WireframeColor { color: Color::WHITE });
+            }
+        }
+
+        // Deselect 
+        if !was_selected {
+            commands.entity(hit_e).insert(Selected);
+            commands.entity(hit_e).insert(ActiveRotating);
+            commands.entity(hit_e).insert(WireframeColor { color: Color::srgb(1.0, 1.0, 0.0) });
+        }
+    }
+}
+
+// Rotate selected bounds on mouse wheel scroll
+fn rotate_active_bounds_on_scroll(
+    mut wheel: EventReader<MouseWheel>,
+    mut q: Query<&mut Transform, (With<ActiveRotating>, With<Selected>)>,
+    settings: Res<RotationSettings>,
+) {
+    if q.is_empty() { return; }
+
+    let mut delta = 0.0f32;
+    for ev in wheel.read() {
+        delta += ev.y as f32;
+    }
+    if delta.abs() < f32::EPSILON { return; }
+
+    let mut angle = delta * settings.speed;
+
+    for mut t in &mut q {
+        t.rotate(Quat::from_axis_angle(Vec3::Y, angle));
+    }
+}
+
+fn reflect_selection_lock(
+    q_selected: Query<(), With<Selected>>,
+    mut lock: ResMut<SelectionLock>,
+) {
+    lock.active = !q_selected.is_empty();
+}
+
+
+fn ray_hits_obb(origin: Vec3, dir: Vec3, xf: GlobalTransform, size: Vec3) -> Option<f32> {
+    // Inverts box transform
+    let inv = xf.compute_matrix().inverse();
+    // Transforms ray into local space of box
+    let o_local = inv.transform_point3(origin);
+    let d_local = inv.transform_vector3(dir);
+    // Half extents
+    let he = size * 0.5;
+    ray_aabb_hit_t(o_local, d_local, -he, he)
+}
+
+// Slab method for ray-AABB intersection
+// Returns Some t (how far along the ray), where ray hits AABB, none if no hit
+fn ray_aabb_hit_t(ray_origin: Vec3, ray_direction: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
+
+    // Inverse direction
+    let inv = Vec3::new(
+        if ray_direction.x != 0.0 { 1.0 / ray_direction.x } else { f32::INFINITY },
+        if ray_direction.y != 0.0 { 1.0 / ray_direction.y } else { f32::INFINITY },
+        if ray_direction.z != 0.0 { 1.0 / ray_direction.z } else { f32::INFINITY },
+    );
+
+    // X slab intersection
+    let mut tmin = (min.x - ray_origin.x) * inv.x;
+    let mut tmax = (max.x - ray_origin.x) * inv.x;
+    if tmin > tmax { std::mem::swap(&mut tmin, &mut tmax); }
+
+    // Y slab intersection
+    let mut tymin = (min.y - ray_origin.y) * inv.y;
+    let mut tymax = (max.y - ray_origin.y) * inv.y;
+    if tymin > tymax { std::mem::swap(&mut tymin, &mut tymax); }
+
+    if (tmin > tymax) || (tymin > tmax) { return None; }
+    if tymin > tmin { tmin = tymin; }
+    if tymax < tmax { tmax = tymax; }
+
+    // Z slab intersection
+    let mut tzmin = (min.z - ray_origin.z) * inv.z;
+    let mut tzmax = (max.z - ray_origin.z) * inv.z;
+    if tzmin > tzmax { std::mem::swap(&mut tzmin, &mut tzmax); }
+
+    if (tmin > tzmax) || (tzmin > tmax) { return None; }
+    if tzmin > tmin { tmin = tzmin; }
+    if tzmax < tmax { tmax = tzmax; }
+
+    // Check if behind ray
+    if tmax < 0.0 { return None; }   
+    Some(if tmin >= 0.0 { tmin } else { tmax })
+}
+>>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
