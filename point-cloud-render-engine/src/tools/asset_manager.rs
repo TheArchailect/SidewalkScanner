@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::pbr::wireframe::{Wireframe, WireframeColor};
@@ -9,7 +7,6 @@ use bevy::render::mesh::Mesh;
 use bevy::render::alpha::AlphaMode;
 use bevy::input::mouse::MouseWheel;
 use crate::engine::camera::viewport_camera::ViewportCamera;
->>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -55,9 +52,6 @@ impl Plugin for AssetManagerUiPlugin {
                     // Asset selection number keys (1-9)
                     asset_selection_hotkeys,
                     reflect_selected_asset_label,
-<<<<<<< HEAD
-                    place_cube_on_world_click,
-=======
 
                     place_cube_on_world_click,
 
@@ -65,7 +59,6 @@ impl Plugin for AssetManagerUiPlugin {
                     toggle_select_on_click,
                     rotate_active_bounds_on_scroll,
                     reflect_selection_lock,
->>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
                 ),
             );
     }
@@ -103,28 +96,6 @@ impl Default for PlaceCubeState {
     }
 }
 
-<<<<<<< HEAD
-#[derive(Component)]
-struct AssetManagerRoot;
-#[derive(Component)]
-struct AssetManagerBody;
-#[derive(Component)]
-struct HeaderNode;
-#[derive(Component)]
-struct TitleText;
-#[derive(Component)]
-struct CollapseButton;
-#[derive(Component)]
-struct CollapseLabel;
-#[derive(Component)]
-struct PlaceCubeButton;
-#[derive(Component)]
-struct PlaceCubeLabel;
-#[derive(Component)]
-struct ClearBoundsButton;
-#[derive(Component)]
-struct PlacedBounds;
-=======
 #[derive(Resource)]
 struct RotationSettings {
     speed: f32,
@@ -159,7 +130,6 @@ pub struct SelectionLock {
 #[derive(Component)] struct Selected;             
 #[derive(Component)] struct BoundsSize(Vec3);       
 
->>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
 
 fn spawn_asset_manager_ui(mut commands: Commands, state: Res<AssetManagerUiState>) {
     let width = if state.collapsed {
@@ -718,8 +688,6 @@ fn place_cube_on_world_click(
 
     info!("Placed bounds for '{}' at {:?}", asset_meta.name, center);
 }
-<<<<<<< HEAD
-=======
 
 // Bounds/wireframe selection system
 // Click to select/deselect, only one selected at a time
@@ -849,4 +817,3 @@ fn ray_aabb_hit_t(ray_origin: Vec3, ray_direction: Vec3, min: Vec3, max: Vec3) -
     if tmax < 0.0 { return None; }   
     Some(if tmin >= 0.0 { tmin } else { tmax })
 }
->>>>>>> ce968a1b1981d3033784c6ca8c06de5ec7cef752
