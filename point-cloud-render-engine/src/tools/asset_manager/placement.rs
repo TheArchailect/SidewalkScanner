@@ -137,6 +137,7 @@ pub fn place_cube_on_world_click(
     };
     placed_assets.instances.push(placed_instance.clone());
 
+    //  Disabled for now to compile for the browser, since POLYGON_MODE_LINE mode isn't supported on WebGPU
     // // Spawn wireframe cuboid (AABB)
     // commands.spawn((
     //     Mesh3d(meshes.add(Cuboid::from_size(size))), // cube mesh
