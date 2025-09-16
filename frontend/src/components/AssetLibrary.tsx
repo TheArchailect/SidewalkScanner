@@ -1,13 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, RefObject } from "react";
 
-const AssetLibrary = ({ isVisible, onClose, canvasRef }) => {
-  const [assetViewMode, setAssetViewMode] = useState("grid");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+interface AssetLibraryProps {
+  isVisible: boolean;
+  onClose: () => void;
+  canvasRef: RefObject<HTMLElement>;
+}
 
-  const returnFocusToCanvas = () => {
+interface AssetCategory {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface Asset {
+  id: string;
+  name: string;
+  category: string;
+  type: string;
+}
+
+type ViewMode = "grid" | "list";
+
+const AssetLibrary: React.FC<AssetLibraryProps> = ({
+  isVisible,
+  onClose,
+  canvasRef,
+}) => {
+  const [assetViewMode, setAssetViewMode] = useState<ViewMode>("grid");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const returnFocusToCanvas = (): void => {
     setTimeout(() => {
       if (canvasRef.current) {
         canvasRef.current.focus();
@@ -15,14 +40,14 @@ const AssetLibrary = ({ isVisible, onClose, canvasRef }) => {
     }, 100);
   };
 
-  const assetCategories = [
+  const assetCategories: AssetCategory[] = [
     { id: "all", name: "All Assets", count: 10 },
     { id: "vehicles", name: "Vehicles", count: 2 },
     { id: "street_furniture", name: "Street Furniture", count: 4 },
     { id: "vegetation", name: "Vegetation", count: 4 },
   ];
 
-  const mockAssets = [
+  const mockAssets: Asset[] = [
     // Vehicles
     {
       id: "vehicle-001",

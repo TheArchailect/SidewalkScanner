@@ -755,20 +755,20 @@ fn place_cube_on_world_click(
     // Add to global list
     placed_assets.instances.push(placed_instance.clone());
 
-    // Spawn wireframe bounds
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::from_size(size))),
-        MeshMaterial3d(mat),
-        Transform::from_translation(center),
-        Wireframe,
-        WireframeColor {
-            color: Color::WHITE,
-        },
-        placed_instance.clone(),
-        PlacedBounds,
-        BoundsSize(size),
-        Name::new(format!("{}_bounds_wire", asset_meta.name)),
-    ));
+    // // Spawn wireframe bounds
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Cuboid::from_size(size))),
+    //     MeshMaterial3d(mat),
+    //     Transform::from_translation(center),
+    //     Wireframe,
+    //     WireframeColor {
+    //         color: Color::WHITE,
+    //     },
+    //     placed_instance.clone(),
+    //     PlacedBounds,
+    //     BoundsSize(size),
+    //     Name::new(format!("{}_bounds_wire", asset_meta.name)),
+    // ));
 
     // Update existing instance data instead of recreating
     if let Ok(mut instance_data) = existing_instances.single_mut() {
@@ -896,11 +896,20 @@ fn rotate_active_bounds_on_scroll(
     // Update the instanced renderer if it exists
     if let Ok(mut instance_data) = existing_instances.single_mut() {
         if let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) {
-            if let Some(asset_meta) = manifest
-                .asset_atlas
-                .as_ref()
-                .and_then(|aa| aa.assets.first())
-            {
+            // if let Some(asset_meta) = manifest
+            //     .asset_atlas
+            //     .as_ref()
+            //     .and_then(|aa| aa.assets.first())
+            // {
+            //     update_instance_data(&mut instance_data, &placed_assets.instances, asset_meta);
+            // }
+
+            if let Some(asset_meta) = placed_assets.instances.first().and_then(|inst| {
+                manifest
+                    .asset_atlas
+                    .as_ref()
+                    .and_then(|aa| aa.assets.iter().find(|a| a.name == inst.asset_name))
+            }) {
                 update_instance_data(&mut instance_data, &placed_assets.instances, asset_meta);
             }
         }

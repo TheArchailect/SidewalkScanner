@@ -59,7 +59,9 @@ use crate::engine::render::extraction::{
     render_state::extract_point_cloud_render_state, scene_manifest::extract_scene_manifest,
 };
 use crate::engine::render::instanced_render_plugin::InstancedAssetRenderPlugin;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderState;
 use crate::tools::asset_manager::PlacedAssetInstances;
+
 pub fn create_app() -> App {
     let mut app = App::new();
 
@@ -130,6 +132,7 @@ pub fn create_app() -> App {
             .init_resource::<PolygonClassificationData>()
             .init_resource::<PointCloudAssets>()
             .init_resource::<RenderModeState>()
+            .init_resource::<PointCloudRenderState>()
             .init_resource::<ClassSelectionState>()
             .init_resource::<EDLRenderState>()
             .init_resource::<SelectionBuffer>()
