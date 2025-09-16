@@ -4,6 +4,8 @@ use super::state::*;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::render::instanced_render_plugin::InstancedAssetData;
+use super::interactions::ScrollCapture;
+
 
 // Rotates any actively selected bounds on mouse wheel scroll
 pub fn rotate_active_bounds_on_scroll(
@@ -14,12 +16,15 @@ pub fn rotate_active_bounds_on_scroll(
     mut existing_instances: Query<&mut InstancedAssetData>,
     manifests: Res<Assets<SceneManifest>>,
     assets: Res<PointCloudAssets>,
+    mut cap: ResMut<ScrollCapture>,
 ) {
     if q.is_empty() { return; }
 
     let mut delta = 0.0f32;
     for ev in wheel.read() { delta += ev.y as f32; }
     if delta.abs() < f32::EPSILON { return; }
+
+    cap.lock_zoom_this_frame = true;
 
     for (mut transform, mut placed_instance) in &mut q {
         let angle = delta * settings.speed;
@@ -57,3 +62,4 @@ pub fn rotate_active_bounds_on_scroll(
         }
     }
 }
+

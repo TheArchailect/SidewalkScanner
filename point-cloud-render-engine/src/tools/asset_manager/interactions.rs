@@ -1,6 +1,15 @@
 use bevy::prelude::*;
 use super::state::*;
 
+#[derive(Resource, Default)]
+pub struct ScrollCapture {
+    pub lock_zoom_this_frame: bool,
+}
+
+pub fn reset_scroll_capture(mut cap: ResMut<ScrollCapture>) {
+    cap.lock_zoom_this_frame = false;
+}
+
 // Handles interactions for the Asset Manager UI buttons
 // Chevron icon toggles collapse state
 pub fn collapse_button_interaction(
@@ -53,3 +62,4 @@ pub fn clear_bounds_button_interaction(
         }
     }
 }
+
