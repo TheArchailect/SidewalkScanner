@@ -2,9 +2,12 @@ import { useState, useEffect } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
+import PolygonOp from "../components/PolygonOp";
 const ScannerApp = () => {
   const [selectedTool, setSelectedTool] = useState("polygon");
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+  const [showPoloygonOp, setShowPolygonOp] = useState(false);
+  const [showPolyOpReclassify, setPolyOpReclassify] = useState(false);
 
   // Use the RPC hook
   const { fps, isConnected, selectTool, onNotification, canvasRef } =
@@ -32,7 +35,7 @@ const ScannerApp = () => {
     } else {
       setSelectedTool(toolId);
     }
-
+    
     // Send tool selection to Bevy via RPC
     try {
       await selectTool(toolId);
@@ -96,7 +99,17 @@ const ScannerApp = () => {
             gap: "16px",
           }}
         >
-          <span style={{ color: "#00ff88" }}>
+          <div>
+            <select>
+              <option value="render" selected>Render Mode</option>
+              <option value="rgb">RGB</option>
+              <option value="unmodified">Unmodified</option>
+              <option value="modified">Modified</option>
+            </select>
+          </div>
+
+          <span style={{ color: "#00ff88"
+           }}>
             {fps > 0 ? `${fps.toFixed(1)} fps` : "--"}
           </span>
         </div>
@@ -111,6 +124,11 @@ const ScannerApp = () => {
 
       {/* Asset Library Panel */}
       <AssetLibrary isVisible={showAssetLibrary} canvasRef={canvasRef} />
+
+      {/* Polygon Operations Panel */}
+      <PolygonOp isVisible={showPoloygonOp} canvasRef={canvasRef} />
+      <PolygonOp isVisible={showPolyOpReclassify} canvasRef={canvasRef} />
+      
     </div>
   );
 };

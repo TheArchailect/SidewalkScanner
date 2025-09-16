@@ -20,6 +20,7 @@ const AssetLibrary = ({ isVisible, onClose, canvasRef }) => {
     { id: "vehicles", name: "Vehicles", count: 2 },
     { id: "street_furniture", name: "Street Furniture", count: 4 },
     { id: "vegetation", name: "Vegetation", count: 4 },
+    { id: "surfaces", name: "Surfaces", count: 3 },
   ];
 
   const mockAssets = [

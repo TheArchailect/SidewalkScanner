@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, use } from "react";
 
 export const useWebRpc = () => {
   const [fps, setFps] = useState(0);
+  const [renderMode, setRenderMode] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const canvasRef = useRef(null);
   const requestIdCounter = useRef(1);
@@ -173,9 +174,19 @@ export const useWebRpc = () => {
     }
   }, [sendRequest]);
 
+  /*const getRenderMode = useCallback (async () => {
+    try {
+      const result = await sendRequest("get_renderMode");
+      return result.renderMode
+    } catch (error) {
+      return 0;
+    }
+  })*/
+
   return {
     // State
     fps,
+    //renderMode,
     isConnected,
 
     // Generic RPC methods
@@ -186,6 +197,7 @@ export const useWebRpc = () => {
     // Specific helpers
     selectTool,
     getFps,
+    //getRenderMode,
 
     // Canvas ref
     canvasRef,
