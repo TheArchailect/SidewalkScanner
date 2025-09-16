@@ -50,3 +50,21 @@ pub fn toggle_select_on_click(
 pub fn reflect_selection_lock(q_selected: Query<(), With<Selected>>, mut lock: ResMut<SelectionLock>) {
     lock.active = !q_selected.is_empty();
 }
+
+// Deselect all on Escape key press
+pub fn deselect_on_escape(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    q_bounds: Query<(Entity, Option<&Selected>), With<PlacedBounds>>,
+    mut commands: Commands,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        for (e, sel) in &q_bounds {
+            if sel.is_some() {
+                commands.entity(e).remove::<Selected>();
+                commands.entity(e).remove::<ActiveRotating>();
+                commands.entity(e).insert(bevy::pbr::wireframe::WireframeColor { color: Color::WHITE });
+            }
+        }
+    }
+}
+

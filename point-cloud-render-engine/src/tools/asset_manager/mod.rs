@@ -30,10 +30,13 @@ use interactions::{
     collapse_button_interaction,
     place_cube_button_interaction,
     clear_bounds_button_interaction,
+    reset_scroll_capture,
+    ScrollCapture,
 };
 use placement::place_cube_on_world_click;
-use selection::{toggle_select_on_click, reflect_selection_lock};
+use selection::{toggle_select_on_click, reflect_selection_lock, deselect_on_escape};
 use rotation::rotate_active_bounds_on_scroll;
+
 
 // Registers the Asset Manager panel, resources, and systems.
 pub struct AssetManagerUiPlugin;
@@ -47,6 +50,7 @@ impl Plugin for AssetManagerUiPlugin {
             .init_resource::<RotationSettings>()
             .init_resource::<SelectionLock>()
             .init_resource::<PlacedAssetInstances>()
+            .init_resource::<ScrollCapture>()
             // UI
             .add_systems(Startup, spawn_asset_manager_ui)
             .add_systems(
@@ -64,8 +68,11 @@ impl Plugin for AssetManagerUiPlugin {
                     toggle_select_on_click,
                     rotate_active_bounds_on_scroll,
                     reflect_selection_lock,
+                    deselect_on_escape,
+                    reset_scroll_capture,
                 ),
             );
     }
 }
+
 

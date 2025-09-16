@@ -341,6 +341,13 @@ pub fn discover_asset_files(asset_dir: &Path) -> Result<Vec<AssetCandidate>, Atl
         }
     }
 
+    candidates.sort_by(|a, b| a.name.cmp(&b.name));
+
+    println!("Asset processing order:");
+    for (i, candidate) in candidates.iter().enumerate() {
+        println!("  {}: {}", i, candidate.name);
+    }
+
     Ok(candidates)
 }
 
