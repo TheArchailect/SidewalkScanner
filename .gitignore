@@ -64,7 +64,7 @@ lerna-debug.log*
 # Asset files
 point-cloud-render-engine/assets/pre_processor_data/*
 assets/*
-frontend/public/*
+frontend/public/renderer/*
 # Data files
 *.bin
 *.dds
