@@ -6,7 +6,7 @@ const ToolPalette = ({
   onToolSelect,
   isConnected,
 }) => {
-  const tools = [{ id: "polygon" }, { id: "knife" }, { id: "assets" }];
+  const tools = [{ id: "polygon" }, { id: "measure" }, { id: "assets" }];
 
   return (
     <div
