@@ -1,10 +1,6 @@
-<<<<<<< HEAD
-import { useState, useEffect, useCallback, useRef, use } from "react";
-=======
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
->>>>>>> feature_asset_library_native
 
 export const useWebRpc = () => {
   const [fps, setFps] = useState(0);
