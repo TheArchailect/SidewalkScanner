@@ -122,17 +122,7 @@ const ScannerApp = () => {
             gap: "16px",
           }}
         >
-          <div>
-            <select>
-              <option value="render" selected>Render Mode</option>
-              <option value="rgb">RGB</option>
-              <option value="unmodified">Unmodified</option>
-              <option value="modified">Modified</option>
-            </select>
-          </div>
-
-          <span style={{ color: "#00ff88"
-           }}>
+          <span style={{ color: "#00ff88" }}>
             {fps > 0 ? `${fps.toFixed(1)} fps` : "--"}
           </span>
         </div>

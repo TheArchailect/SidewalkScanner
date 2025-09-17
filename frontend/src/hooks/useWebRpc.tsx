@@ -2,35 +2,106 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
+// Type definitions
+interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  method: string;
+  params?: Record<string, any>;
+  id: number;
+}
+
+interface JsonRpcNotification {
+  jsonrpc: "2.0";
+  method: string;
+  params?: Record<string, any>;
+}
+
+interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
+interface JsonRpcMessage {
+  jsonrpc: "2.0";
+  method?: string;
+  params?: Record<string, any>;
+  id?: number;
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
+interface PendingRequest {
+  resolve: (value: any) => void;
+  reject: (reason: any) => void;
+}
+
+interface Asset {
+  id: string;
+  name: string;
+  category?: string;
+  [key: string]: any;
+}
+
+interface AssetCategory {
+  id: string;
+  name: string;
+  [key: string]: any;
+}
+
+interface Position3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
+interface PlacedAsset {
+  id: number;
+  asset: Asset;
+  position: Position3D;
+  [key: string]: any;
+}
+
+interface NotificationHandler {
+  (params?: Record<string, any>): void;
+}
+
 export const useWebRpc = () => {
-  const [fps, setFps] = useState(0);
-  const [renderMode, setRenderMode] = useState("");
-  const [isConnected, setIsConnected] = useState(false);
-  const [availableAssets, setAvailableAssets] = useState([]);
-  const [assetCategories, setAssetCategories] = useState([]);
-  const [selectedAsset, setSelectedAsset] = useState([]);
-  const [placedAssets, setPlacedAssets] = useState([]);
-  const canvasRef = useRef(null);
-  const requestIdCounter = useRef(1);
-  const pendingRequests = useRef(new Map());
-  const notificationHandlers = useRef(new Map());
+  const [fps, setFps] = useState<number>(0);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
+  const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [placedAssets, setPlacedAssets] = useState<PlacedAsset[]>([]);
+
+  const canvasRef = useRef<HTMLIFrameElement>(null);
+  const requestIdCounter = useRef<number>(1);
+  const pendingRequests = useRef<Map<number, PendingRequest>>(new Map());
+  const notificationHandlers = useRef<Map<string, NotificationHandler>>(new Map());
 
   // Generate unique request ID
-  const generateRequestId = useCallback(() => {
+  const generateRequestId = useCallback((): number => {
     return requestIdCounter.current++;
   }, []);
 
   // Send JSON-RPC request (expects response)
   const sendRequest = useCallback(
-    (method, params = {}) => {
-      return new Promise((resolve, reject) => {
+    <T = any>(method: string, params: Record<string, any> = {}): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
         if (!canvasRef.current?.contentWindow) {
           reject(new Error("Canvas not ready"));
           return;
         }
 
         const id = generateRequestId();
-        const request = {
+        const request: JsonRpcRequest = {
           jsonrpc: "2.0",
           method,
           params,
@@ -39,7 +110,7 @@ export const useWebRpc = () => {
 
         // Store pending request
         pendingRequests.current.set(id, { resolve, reject });
-        
+
         // Send to WASM
         try {
           canvasRef.current.contentWindow.postMessage(
@@ -56,12 +127,12 @@ export const useWebRpc = () => {
   );
 
   // Send JSON-RPC notification (no response expected)
-  const sendNotification = useCallback((method, params = {}) => {
+  const sendNotification = useCallback((method: string, params: Record<string, any> = {}): void => {
     if (!canvasRef.current?.contentWindow) {
       return;
     }
 
-    const notification = {
+    const notification: JsonRpcNotification = {
       jsonrpc: "2.0",
       method,
       params,
@@ -78,13 +149,13 @@ export const useWebRpc = () => {
   }, []);
 
   // Register handler for incoming notifications
-  const onNotification = useCallback((method, handler) => {
+  const onNotification = useCallback((method: string, handler: NotificationHandler): void => {
     notificationHandlers.current.set(method, handler);
   }, []);
 
   // Handle incoming messages from Bevy
   useEffect(() => {
-    const handleMessage = (event) => {
+    const handleMessage = (event: MessageEvent): void => {
       // Ensure message is from our iframe
       if (
         canvasRef.current &&
@@ -94,10 +165,10 @@ export const useWebRpc = () => {
       }
 
       try {
-        const message = JSON.parse(event.data);
+        const message: JsonRpcMessage = JSON.parse(event.data as string);
 
         if (message.method === "debug_message") {
-          // console.log("[RUST DEBUG]", message.params.message);
+          // console.log("[RUST DEBUG]", message.params?.message);
         }
 
         // Handle JSON-RPC response
@@ -121,7 +192,7 @@ export const useWebRpc = () => {
         else if (message.jsonrpc === "2.0" && message.method) {
           // Built-in handlers
           if (message.method === "fps_update") {
-            setFps(message.params.fps || 0);
+            setFps(message.params?.fps || 0);
           }
 
           // Custom handlers
@@ -141,7 +212,7 @@ export const useWebRpc = () => {
 
   // Monitor iframe connection state
   useEffect(() => {
-    const checkConnection = () => {
+    const checkConnection = (): void => {
       if (canvasRef.current?.contentWindow) {
         setIsConnected(true);
         // Request initial FPS when connected
@@ -159,7 +230,7 @@ export const useWebRpc = () => {
 
   // Specific method helpers
   const selectTool = useCallback(
-    async (tool) => {
+    async (tool: string): Promise<any> => {
       try {
         const result = await sendRequest("tool_selection", { tool });
         return result;
@@ -172,7 +243,7 @@ export const useWebRpc = () => {
   );
 
   const setRenderMode = useCallback(
-    async (mode) => {
+    async (mode: string): Promise<void> => {
       try {
         // Send as notification since it's a setting change
         sendNotification("render_mode_changed", { mode });
@@ -185,9 +256,9 @@ export const useWebRpc = () => {
     [sendNotification],
   );
 
-  const getFps = useCallback(async () => {
+  const getFps = useCallback(async (): Promise<number> => {
     try {
-      const result = await sendRequest("get_fps");
+      const result = await sendRequest<{ fps: number }>("get_fps");
       return result.fps;
     } catch (error) {
       return 0;
@@ -196,69 +267,79 @@ export const useWebRpc = () => {
 
   // Selects an asset by ID and updates local state
   const selectAsset = useCallback(
-    async (assetId) => {
+    async (assetId: string): Promise<Asset | undefined> => {
       try {
-        const result = await sendRequest("select_asset", {asset_id: assetId})
+        const result = await sendRequest<Asset>("select_asset", { asset_id: assetId });
         if (result) {
-          setSelectedAsset(result)
+          setSelectedAsset(result);
         }
-        return result
+        return result;
       } catch (error) {
-        console.error("Asset selection failed:", error)
+        console.error("Asset selection failed:", error);
       }
-    }, [sendRequest]);
+    },
+    [sendRequest],
+  );
 
   // Fetches all available assets from Bevy and updates state
-  const getAvailableAssets = useCallback(async () => {
+  const getAvailableAssets = useCallback(async (): Promise<Asset[] | undefined> => {
     try {
-      const result = await sendRequest("get_available_assets")
-      const assets = result || [] 
-      setAvailableAssets(assets)
-      return assets
+      const result = await sendRequest<Asset[]>("get_available_assets");
+      const assets = result || [];
+      setAvailableAssets(assets);
+      return assets;
     } catch (error) {
-      console.error("Failed to get available assets:", error)
+      console.error("Failed to get available assets:", error);
     }
   }, [sendRequest]);
 
-  // Fetches categories 
-  const getAssetCategories = useCallback(async () => {
+  // Fetches categories
+  const getAssetCategories = useCallback(async (): Promise<void> => {
     try {
-      const result = await sendRequest("get_asset_category")
-      const categories = result || []
-      setAssetCategories(categories)
+      const result = await sendRequest<AssetCategory[]>("get_asset_category");
+      const categories = result || [];
+      setAssetCategories(categories);
     } catch (error) {
-      console.error("Failed to get asset categories:", error)
+      console.error("Failed to get asset categories:", error);
     }
   }, [sendRequest]);
 
   // Places the current selected asset at the specific 3D coordinates
   const placeAssetAtPosition = useCallback(
-    async (x, y, z) => {
+    async (x: number, y: number, z: number): Promise<any> => {
       try {
-        const result = await sendRequest("place_asset_at_position", { x, y, z })
-        if (result && selectedAsset) {    // Use the current selected asset
-          const placedAsset = {
+        const result = await sendRequest("place_asset_at_position", {
+          x,
+          y,
+          z,
+        });
+        if (result && selectedAsset) {
+          // Use the current selected asset
+          const placedAsset: PlacedAsset = {
             id: Date.now(), // temporary ID
-            asset: selectedAsset,         // selected asset
+            asset: selectedAsset, // selected asset
             position: { x, y, z },
             ...result,
-          }
-          setPlacedAssets((prev) => [...prev, placedAsset])
+          };
+          setPlacedAssets((prev) => [...prev, placedAsset]);
         }
-        return result
+        return result;
       } catch (error) {
-        console.error("Failed to place asset at position:", error)
-        throw error
+        console.error("Failed to place asset at position:", error);
+        throw error;
       }
     },
     [sendRequest, selectedAsset],
-  )
+  );
 
   return {
     // State
     fps,
-    //renderMode,
     isConnected,
+    availableAssets,
+    assetCategories,
+    selectedAsset,
+    placedAssets,
 
     // Generic RPC methods
     sendRequest,
@@ -267,9 +348,8 @@ export const useWebRpc = () => {
 
     // Specific helpers
     selectTool,
-    setRenderMode, // Added render mode method to exports
+    setRenderMode,
     getFps,
-
     selectAsset,
     getAvailableAssets,
     getAssetCategories,
