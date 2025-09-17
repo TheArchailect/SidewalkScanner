@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
@@ -28,22 +28,6 @@ const ScannerApp: React.FC = () => {
   useEffect(() => {
     console.log("[ScannerApp] canvasRef current:", canvasRef.current);
   }, [canvasRef.current]);
-
-  const handleClearTool = useCallback(() => {
-    clearTool()
-      .catch(console.error)
-      .finally(() => {
-        setSelectedTool(null);
-        setShowAssetLibrary(false);
-        setShowPolygonPanel(false);
-        setTimeout(() => {
-          const win = canvasRef.current?.contentWindow;
-          try {
-            win?.focus();
-          } catch {}
-        }, 0);
-      });
-  }, [clearTool]);
 
   // Listen for tool state changes from Bevy
   useEffect(() => {
@@ -110,23 +94,68 @@ const ScannerApp: React.FC = () => {
     }
   };
 
-  // Global Escape
+  // Drop any current selection focus to iframe.
+  const refocusCanvas = () => {
+    try {
+      const sel = window.getSelection?.();
+      sel?.removeAllRanges();
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    } catch {}
+    // Do it twice across frames to cover reflows/rerenders.
+    const focusNow = () => canvasRef.current?.focus();
+    requestAnimationFrame(() => {
+      focusNow();
+      setTimeout(focusNow, 0);
+    });
+  };
+
+  // Global key handling for A/D and Escape
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Esc") {
+    const swallow = (e: KeyboardEvent) => {
+      const k = e.key;
+
+      if (k === "a" || k === "A" || k === "d" || k === "D") {
         e.preventDefault();
         e.stopPropagation();
-        handleClearTool();
+        (e as any).stopImmediatePropagation?.();
+        refocusCanvas();
+        return true;
       }
+
+      if (k === "Escape" || k === "Esc") {
+        e.preventDefault();
+        e.stopPropagation();
+        (e as any).stopImmediatePropagation?.();
+
+        refocusCanvas();
+
+        clearTool()
+          .catch(console.error)
+          .finally(() => {
+            setSelectedTool(null);
+            setShowAssetLibrary(false);
+            setShowPolygonPanel(false);
+            refocusCanvas();
+          });
+        return true;
+      }
+      return false;
     };
 
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    document.addEventListener("keydown", onKeyDown, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
-      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+    const onKeyDown = (e: KeyboardEvent) => {
+      swallow(e);
     };
-  }, [handleClearTool]);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (swallow(e)) refocusCanvas();
+    };
+
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    document.addEventListener("keyup", onKeyUp, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+      document.removeEventListener("keyup", onKeyUp as any, { capture: true } as any);
+    };
+  }, [clearTool]);
 
   return (
     <div
@@ -137,12 +166,15 @@ const ScannerApp: React.FC = () => {
         width: "100vw",
         height: "100vh",
         background: "#000",
+        userSelect: "none",       
+        WebkitUserSelect: "none" as any,
+        caretColor: "transparent",  
       }}
     >
       {/* WASM Canvas - Full Screen */}
       <iframe
         ref={canvasRef}
-        tabIndex={-1}
+        tabIndex={-1} 
         src="./renderer/SidewalkScanner.html"
         style={{
           position: "absolute",
@@ -181,6 +213,7 @@ const ScannerApp: React.FC = () => {
             display: "flex",
             alignItems: "end",
             gap: "16px",
+            userSelect: "none",
           }}
         >
           <span style={{ color: "#00ff88" }}>
@@ -193,6 +226,7 @@ const ScannerApp: React.FC = () => {
             display: "flex",
             alignItems: "center",
             gap: "8px",
+            userSelect: "none",
           }}
         >
           <span
@@ -208,6 +242,8 @@ const ScannerApp: React.FC = () => {
             <button
               key={mode}
               onClick={() => handleRenderModeChange(mode)}
+              onMouseDown={(e) => e.preventDefault()}
+              onFocus={(e) => e.currentTarget.blur()}
               style={{
                 padding: "4px 12px",
                 fontSize: "12px",
