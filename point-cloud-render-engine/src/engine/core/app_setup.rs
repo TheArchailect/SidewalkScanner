@@ -36,7 +36,8 @@ use crate::tools::{
         update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
     },
     tool_manager::{
-        PolygonActionEvent, ToolManager, ToolSelectionEvent, handle_polygon_action_events,
+        AssetPlacementEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
+        handle_asset_placement_events, handle_polygon_action_events,
         handle_tool_keyboard_shortcuts, handle_tool_selection_events,
     },
 };
@@ -106,6 +107,7 @@ pub fn create_app() -> App {
         .init_resource::<ToolManager>()
         .add_event::<ToolSelectionEvent>()
         .add_event::<PolygonActionEvent>()
+        .add_event::<AssetPlacementEvent>()
         .insert_resource(create_point_cloud_assets(None));
 
     // Configure render app with proper resource extraction
@@ -123,7 +125,6 @@ pub fn create_app() -> App {
                 extract_point_cloud_render_state,
                 extract_camera_phases,
                 extract_scene_manifest,
-                // extract_placed_assets,
             ),
         );
 
@@ -181,6 +182,7 @@ pub fn create_app() -> App {
         handle_tool_keyboard_shortcuts, // Native shortcuts or no-op for WASM
         handle_tool_selection_events,   // Process tool activation events
         handle_polygon_action_events,   // Process polygon action events
+        handle_asset_placement_events,  // Process asset placement events - NEW!
         // Tool-specific systems - run after tool state changes
         polygon_tool_system,
         update_polygon_preview,

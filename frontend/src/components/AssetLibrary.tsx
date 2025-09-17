@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, RefObject } from "react";
+import { useState, useEffect, RefObject } from "react";
+import { useWebRpc } from "../hooks/useWebRpc";
 
 interface AssetLibraryProps {
   isVisible: boolean;
-  onClose: () => void;
-  canvasRef: RefObject<HTMLElement>;
+  canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
 interface AssetCategory {
@@ -17,20 +17,59 @@ interface AssetCategory {
 interface Asset {
   id: string;
   name: string;
-  category: string;
-  type: string;
+  category?: string;
+  type?: string;
+  point_count?: number;
+  uv_bounds?: {
+    uv_min: number[];
+    uv_max: number[];
+  };
+  local_bounds?: {
+    min_x: number;
+    min_y: number;
+    min_z: number;
+    max_x: number;
+    max_y: number;
+    max_z: number;
+  };
 }
 
 type ViewMode = "grid" | "list";
 
 const AssetLibrary: React.FC<AssetLibraryProps> = ({
   isVisible,
-  onClose,
   canvasRef,
 }) => {
+  const {
+    availableAssets,
+    selectedAsset,
+    selectAsset,
+    getAvailableAssets,
+    selectTool,
+  } = useWebRpc(canvasRef);
+
   const [assetViewMode, setAssetViewMode] = useState<ViewMode>("grid");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isVisible) {
+      loadAssetData();
+      selectTool("assets").catch(console.error);
+    }
+  }, [isVisible]);
+
+  const loadAssetData = async () => {
+    setIsLoading(true);
+    try {
+      await getAvailableAssets();
+    } catch (error) {
+      console.error("Failed to load asset data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const returnFocusToCanvas = (): void => {
     setTimeout(() => {
@@ -40,88 +79,54 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
     }, 100);
   };
 
-  const assetCategories: AssetCategory[] = [
-    { id: "all", name: "All Assets", count: 10 },
-    { id: "vehicles", name: "Vehicles", count: 2 },
-    { id: "street_furniture", name: "Street Furniture", count: 4 },
-    { id: "vegetation", name: "Vegetation", count: 4 },
-    { id: "surfaces", name: "Surfaces", count: 3 },
-  ];
+  const handleAssetSelection = async (asset: Asset) => {
+    try {
+      await selectAsset(asset.id);
+      returnFocusToCanvas();
+    } catch (error) {
+      console.error("Failed to select asset:", error);
+    }
+  };
 
-  const mockAssets: Asset[] = [
-    // Vehicles
-    {
-      id: "vehicle-001",
-      name: "Maintenance Truck",
-      category: "vehicles",
-      type: "Municipal Vehicle",
-    },
-    {
-      id: "vehicle-002",
-      name: "Street Sweeper",
-      category: "vehicles",
-      type: "Cleaning Equipment",
-    },
+  // Calculate categories dynamically from assets
+  const calculateCategories = (assets: Asset[]): AssetCategory[] => {
+    const categoryMap = new Map<string, number>();
 
-    // Street Furniture
-    {
-      id: "furniture-001",
-      name: "Bus Stop Shelter",
-      category: "street_furniture",
-      type: "Public Shelter",
-    },
-    {
-      id: "furniture-002",
-      name: "Park Bench",
-      category: "street_furniture",
-      type: "Seating",
-    },
-    {
-      id: "furniture-003",
-      name: "Street Light",
-      category: "street_furniture",
-      type: "Lighting",
-    },
-    {
-      id: "furniture-004",
-      name: "Traffic Island",
-      category: "street_furniture",
-      type: "Traffic Control",
-    },
+    // Count assets by category
+    assets.forEach((asset) => {
+      const category = asset.category || "uncategorized";
+      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+    });
 
-    // Vegetation
-    {
-      id: "vegetation-001",
-      name: "River Red Gum",
-      category: "vegetation",
-      type: "Tree",
-    },
-    {
-      id: "vegetation-002",
-      name: "Lavender Garden Bed",
-      category: "vegetation",
-      type: "Garden Bed",
-    },
-    {
-      id: "vegetation-003",
-      name: "Plane Tree Avenue",
-      category: "vegetation",
-      type: "Tree Line",
-    },
-    {
-      id: "vegetation-004",
-      name: "Native Grass Verge",
-      category: "vegetation",
-      type: "Ground Cover",
-    },
-  ];
+    // Convert to category array
+    const categories: AssetCategory[] = [
+      { id: "all", name: "All Assets", count: assets.length },
+    ];
 
-  const filteredAssets = mockAssets.filter((asset) => {
+    // Add discovered categories
+    categoryMap.forEach((count, categoryId) => {
+      const categoryName =
+        categoryId.charAt(0).toUpperCase() + categoryId.slice(1);
+      categories.push({
+        id: categoryId,
+        name: categoryName,
+        count: count,
+      });
+    });
+
+    return categories;
+  };
+
+  // Use calculated categories
+  const calculatedCategories = calculateCategories(availableAssets);
+
+  const filteredAssets = availableAssets.filter((asset) => {
     const matchesCategory =
       selectedCategory === "all" || asset.category === selectedCategory;
     const matchesSearch = asset.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
+
     return matchesCategory && matchesSearch;
   });
 
@@ -164,6 +169,13 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
           }}
         >
           Asset Library
+          {isLoading && (
+            <span
+              style={{ fontSize: "10px", color: "#666", marginLeft: "8px" }}
+            >
+              Loading...
+            </span>
+          )}
         </h3>
         <div style={{ display: "flex", gap: "4px" }}>
           <button
@@ -230,6 +242,35 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
               <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
           </button>
+          <button
+            onClick={() => {
+              loadAssetData();
+              returnFocusToCanvas();
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#666",
+              padding: "4px",
+              borderRadius: "3px",
+              cursor: "pointer",
+            }}
+            title="Refresh assets"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M3 21v-5h5" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -266,7 +307,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
           gap: "6px",
         }}
       >
-        {assetCategories.map((category) => (
+        {calculatedCategories.map((category) => (
           <button
             key={category.id}
             onClick={() => {
@@ -292,6 +333,28 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         ))}
       </div>
 
+      {/* Selected Asset Info */}
+      {selectedAsset && (
+        <div
+          style={{
+            margin: "0 16px 12px",
+            padding: "8px 12px",
+            background: "rgba(0, 255, 136, 0.1)",
+            border: "1px solid rgba(0, 255, 136, 0.3)",
+            borderRadius: "4px",
+            fontSize: "11px",
+            color: "#00ff88",
+          }}
+        >
+          Selected: {selectedAsset.name}
+          {selectedAsset.point_count && (
+            <span style={{ color: "#666", marginLeft: "8px" }}>
+              ({selectedAsset.point_count.toLocaleString()} points)
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Asset Grid/List */}
       <div
         style={{
@@ -300,7 +363,20 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
           overflowY: "auto",
         }}
       >
-        {assetViewMode === "grid" ? (
+        {filteredAssets.length === 0 ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              color: "#666",
+              fontSize: "12px",
+            }}
+          >
+            {isLoading ? "Loading assets..." : "No assets found"}
+          </div>
+        ) : assetViewMode === "grid" ? (
           <div
             style={{
               display: "grid",
@@ -311,29 +387,36 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             {filteredAssets.map((asset) => (
               <div
                 key={asset.id}
-                onClick={() => {
-                  console.log("[v0] Asset selected:", asset.name);
-                  returnFocusToCanvas();
-                }}
+                onClick={() => handleAssetSelection(asset)}
                 style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  background:
+                    selectedAsset?.id === asset.id
+                      ? "rgba(0, 255, 136, 0.1)"
+                      : "rgba(255, 255, 255, 0.05)",
+                  border:
+                    selectedAsset?.id === asset.id
+                      ? "1px solid rgba(0, 255, 136, 0.3)"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: "6px",
                   padding: "8px",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background =
-                    "rgba(255, 255, 255, 0.08)";
-                  e.currentTarget.style.borderColor =
-                    "rgba(255, 255, 255, 0.15)";
+                  if (selectedAsset?.id !== asset.id) {
+                    e.currentTarget.style.background =
+                      "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.borderColor =
+                      "rgba(255, 255, 255, 0.15)";
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background =
-                    "rgba(255, 255, 255, 0.05)";
-                  e.currentTarget.style.borderColor =
-                    "rgba(255, 255, 255, 0.08)";
+                  if (selectedAsset?.id !== asset.id) {
+                    e.currentTarget.style.background =
+                      "rgba(255, 255, 255, 0.05)";
+                    e.currentTarget.style.borderColor =
+                      "rgba(255, 255, 255, 0.08)";
+                  }
                 }}
               >
                 <div
@@ -374,7 +457,9 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                     color: "#666",
                   }}
                 >
-                  {asset.type}
+                  {asset.point_count
+                    ? `${asset.point_count.toLocaleString()} points`
+                    : "Asset"}
                 </div>
               </div>
             ))}
@@ -384,13 +469,16 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             {filteredAssets.map((asset) => (
               <div
                 key={asset.id}
-                onClick={() => {
-                  console.log("[v0] Asset selected:", asset.name);
-                  returnFocusToCanvas();
-                }}
+                onClick={() => handleAssetSelection(asset)}
                 style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  background:
+                    selectedAsset?.id === asset.id
+                      ? "rgba(0, 255, 136, 0.1)"
+                      : "rgba(255, 255, 255, 0.05)",
+                  border:
+                    selectedAsset?.id === asset.id
+                      ? "1px solid rgba(0, 255, 136, 0.3)"
+                      : "1px solid rgba(255, 255, 255, 0.08)",
                   borderRadius: "4px",
                   padding: "8px 12px",
                   cursor: "pointer",
@@ -400,12 +488,16 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                   transition: "all 0.15s ease",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background =
-                    "rgba(255, 255, 255, 0.08)";
+                  if (selectedAsset?.id !== asset.id) {
+                    e.currentTarget.style.background =
+                      "rgba(255, 255, 255, 0.08)";
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background =
-                    "rgba(255, 255, 255, 0.05)";
+                  if (selectedAsset?.id !== asset.id) {
+                    e.currentTarget.style.background =
+                      "rgba(255, 255, 255, 0.05)";
+                  }
                 }}
               >
                 <div
@@ -446,7 +538,9 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                       color: "#666",
                     }}
                   >
-                    {asset.type}
+                    {asset.point_count
+                      ? `${asset.point_count.toLocaleString()} points`
+                      : "Asset"}
                   </div>
                 </div>
               </div>

@@ -1,3 +1,4 @@
+use crate::tools::asset_manager::state::PlacedBounds;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +7,8 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "lowercase")]
 pub enum ToolType {
     Polygon,
-    Knife,
+    AssetPlacement,
+    Measure,
 }
 
 impl ToolType {
@@ -14,7 +16,8 @@ impl ToolType {
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "polygon" => Some(Self::Polygon),
-            "knife" => Some(Self::Knife),
+            "assets" => Some(Self::AssetPlacement),
+            "measure" => Some(Self::Measure),
             _ => None,
         }
     }
@@ -23,7 +26,8 @@ impl ToolType {
     pub fn to_string(&self) -> &'static str {
         match self {
             Self::Polygon => "polygon",
-            Self::Knife => "knife",
+            Self::AssetPlacement => "assets",
+            Self::Measure => "measure",
         }
     }
 }
@@ -88,12 +92,29 @@ pub struct PolygonActionEvent {
     pub action: PolygonAction,
 }
 
+/// Event fired when asset placement actions are requested via RPC.
+#[derive(Event)]
+pub struct AssetPlacementEvent {
+    pub action: AssetPlacementAction,
+    pub asset_id: Option<String>,
+    pub position: Option<Vec3>,
+}
+
 /// Available polygon actions that can be triggered remotely.
 #[derive(Debug, Clone, Copy)]
 pub enum PolygonAction {
     Complete, // Finish current polygon (equivalent to Shift key).
     Clear,    // Clear current polygon (equivalent to 'O' key).
     ClearAll, // Clear all polygons (equivalent to 'I' key).
+}
+
+/// Available asset placement actions that can be triggered remotely.
+#[derive(Debug, Clone)]
+pub enum AssetPlacementAction {
+    SelectAsset,         // Select an asset for placement
+    PlaceAtPosition,     // Place selected asset at specific position
+    TogglePlacementMode, // Toggle placement mode on/off
+    ClearAllAssets,      // Clear all placed assets
 }
 
 /// Source of tool selection for debugging and conditional logic.
@@ -108,6 +129,7 @@ pub fn handle_tool_selection_events(
     mut events: EventReader<ToolSelectionEvent>,
     mut tool_manager: ResMut<ToolManager>,
     mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
+    mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
     for event in events.read() {
@@ -120,6 +142,7 @@ pub fn handle_tool_selection_events(
 
         // Deactivate all tools first to ensure clean state.
         polygon_tool.set_active(false);
+        place_asset_state.active = false;
 
         // Activate the requested tool.
         match event.tool_type {
@@ -143,15 +166,28 @@ pub fn handle_tool_selection_events(
                     }),
                 );
             }
-            ToolType::Knife => {
-                info!("Knife tool activated via {:?} (placeholder)", event.source);
+            ToolType::AssetPlacement => {
+                place_asset_state.active = true;
+
+                info!("Asset placement tool activated via {:?}", event.source);
 
                 // Send confirmation to frontend.
                 rpc_interface.send_notification(
                     "tool_state_changed",
                     serde_json::json!({
-                        "tool": "knife",
-                        "active": true
+                        "tool": "assets",
+                        "active": true,
+                        "selected_asset": place_asset_state.selected_asset_name
+                    }),
+                );
+            }
+            ToolType::Measure => {
+                // Send confirmation to frontend.
+                rpc_interface.send_notification(
+                    "tool_state_changed",
+                    serde_json::json!({
+                        "tool": "measure",
+                        "active": true,
                     }),
                 );
             }
@@ -235,6 +271,106 @@ pub fn handle_polygon_action_events(
     }
 }
 
+/// System handling asset placement actions triggered via RPC.
+pub fn handle_asset_placement_events(
+    mut events: EventReader<AssetPlacementEvent>,
+    mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
+    tool_manager: Res<ToolManager>,
+    mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+    mut commands: Commands,
+    placed_bounds: Query<Entity, With<PlacedBounds>>,
+    existing_instances: Query<
+        Entity,
+        With<crate::engine::render::instanced_render_plugin::InstancedAssetData>,
+    >,
+    mut placed_assets: ResMut<crate::tools::asset_manager::PlacedAssetInstances>,
+) {
+    for event in events.read() {
+        match &event.action {
+            AssetPlacementAction::SelectAsset => {
+                // Asset selection should work regardless of tool state
+                if let Some(asset_id) = &event.asset_id {
+                    place_asset_state.selected_asset_name = Some(asset_id.clone());
+
+                    info!("Asset selected via RPC: {}", asset_id);
+
+                    rpc_interface.send_notification(
+                        "asset_selected",
+                        serde_json::json!({
+                            "asset_id": asset_id,
+                            "success": true
+                        }),
+                    );
+                }
+            }
+            AssetPlacementAction::PlaceAtPosition => {
+                // Only process placement actions when asset placement tool is active
+                if !tool_manager.is_tool_active(ToolType::AssetPlacement) {
+                    continue;
+                }
+
+                if let Some(position) = event.position {
+                    info!("Asset placement requested at position: {:?}", position);
+
+                    rpc_interface.send_notification(
+                        "asset_placement_requested",
+                        serde_json::json!({
+                            "position": [position.x, position.y, position.z],
+                            "success": true
+                        }),
+                    );
+                }
+            }
+            AssetPlacementAction::TogglePlacementMode => {
+                // Only process toggle actions when asset placement tool is active
+                if !tool_manager.is_tool_active(ToolType::AssetPlacement) {
+                    continue;
+                }
+
+                place_asset_state.active = !place_asset_state.active;
+
+                info!("Placement mode toggled: {}", place_asset_state.active);
+
+                rpc_interface.send_notification(
+                    "placement_mode_toggled",
+                    serde_json::json!({
+                        "active": place_asset_state.active,
+                        "success": true
+                    }),
+                );
+            }
+            AssetPlacementAction::ClearAllAssets => {
+                // Only process clear actions when asset placement tool is active
+                if !tool_manager.is_tool_active(ToolType::AssetPlacement) {
+                    continue;
+                }
+
+                // Clear all placed bounds
+                for entity in &placed_bounds {
+                    commands.entity(entity).despawn();
+                }
+
+                // Clear instanced data
+                for entity in &existing_instances {
+                    commands.entity(entity).despawn();
+                }
+
+                // Clear the instances resource
+                placed_assets.instances.clear();
+
+                info!("All placed assets cleared via RPC");
+
+                rpc_interface.send_notification(
+                    "assets_cleared",
+                    serde_json::json!({
+                        "success": true
+                    }),
+                );
+            }
+        }
+    }
+}
+
 /// System handling keyboard shortcuts for tool selection (native builds only).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn handle_tool_keyboard_shortcuts(
@@ -249,9 +385,9 @@ pub fn handle_tool_keyboard_shortcuts(
         });
     }
 
-    if keyboard.just_pressed(KeyCode::KeyK) {
+    if keyboard.just_pressed(KeyCode::KeyA) {
         tool_events.send(ToolSelectionEvent {
-            tool_type: ToolType::Knife,
+            tool_type: ToolType::AssetPlacement,
             source: ToolSelectionSource::Keyboard,
         });
     }

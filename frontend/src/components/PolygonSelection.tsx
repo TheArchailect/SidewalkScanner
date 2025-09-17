@@ -5,8 +5,7 @@ import { useState, type RefObject } from "react";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
-  onClose: () => void;
-  canvasRef: RefObject<HTMLElement>;
+  canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
 interface ClassCategory {
@@ -26,7 +25,6 @@ type Operation = "hide" | "reclassify";
 
 const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   isVisible,
-  onClose,
   canvasRef,
 }) => {
   const [operation, setOperation] = useState<Operation>("hide");
@@ -103,11 +101,6 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     returnFocusToCanvas();
   };
 
-  const handleCancel = () => {
-    onClose();
-    returnFocusToCanvas();
-  };
-
   const handleApply = () => {
     const selectedItems = categories.flatMap((cat) =>
       cat.items
@@ -123,9 +116,6 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
       targetCategory: operation === "reclassify" ? targetCategory : null,
       targetItem: operation === "reclassify" ? targetItem : null,
     });
-
-    onClose();
-    returnFocusToCanvas();
   };
 
   const getSelectedCount = () => {
@@ -477,7 +467,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         }}
       >
         <button
-          onClick={handleCancel}
+          onClick={() => console.log("cancel")}
           style={{
             background: "rgba(0, 0, 0, 0.3)",
             border: "1px solid rgba(255, 255, 255, 0.1)",

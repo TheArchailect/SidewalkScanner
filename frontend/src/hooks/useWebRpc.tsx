@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, RefObject } from "react";
 
-// Type definitions
 interface JsonRpcRequest {
   jsonrpc: "2.0";
   method: string;
@@ -47,12 +46,19 @@ interface Asset {
   id: string;
   name: string;
   category?: string;
-  [key: string]: any;
-}
-
-interface AssetCategory {
-  id: string;
-  name: string;
+  point_count?: number;
+  uv_bounds?: {
+    uv_min: number[];
+    uv_max: number[];
+  };
+  local_bounds?: {
+    min_x: number;
+    min_y: number;
+    min_z: number;
+    max_x: number;
+    max_y: number;
+    max_z: number;
+  };
   [key: string]: any;
 }
 
@@ -73,18 +79,18 @@ interface NotificationHandler {
   (params?: Record<string, any>): void;
 }
 
-export const useWebRpc = () => {
+export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   const [fps, setFps] = useState<number>(0);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
-  const [assetCategories, setAssetCategories] = useState<AssetCategory[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [placedAssets, setPlacedAssets] = useState<PlacedAsset[]>([]);
 
-  const canvasRef = useRef<HTMLIFrameElement>(null);
   const requestIdCounter = useRef<number>(1);
   const pendingRequests = useRef<Map<number, PendingRequest>>(new Map());
-  const notificationHandlers = useRef<Map<string, NotificationHandler>>(new Map());
+  const notificationHandlers = useRef<Map<string, NotificationHandler>>(
+    new Map(),
+  );
 
   // Generate unique request ID
   const generateRequestId = useCallback((): number => {
@@ -93,9 +99,15 @@ export const useWebRpc = () => {
 
   // Send JSON-RPC request (expects response)
   const sendRequest = useCallback(
-    <T = any>(method: string, params: Record<string, any> = {}): Promise<T> => {
+    <T = any,>(
+      method: string,
+      params: Record<string, any> = {},
+    ): Promise<T> => {
       return new Promise<T>((resolve, reject) => {
         if (!canvasRef.current?.contentWindow) {
+          console.log(
+            `[DEBUG] ${method} failed - iframe:${!!canvasRef.current} contentWindow:${!!canvasRef.current?.contentWindow}`,
+          );
           reject(new Error("Canvas not ready"));
           return;
         }
@@ -123,35 +135,41 @@ export const useWebRpc = () => {
         }
       });
     },
-    [generateRequestId],
+    [generateRequestId, canvasRef],
   );
 
   // Send JSON-RPC notification (no response expected)
-  const sendNotification = useCallback((method: string, params: Record<string, any> = {}): void => {
-    if (!canvasRef.current?.contentWindow) {
-      return;
-    }
+  const sendNotification = useCallback(
+    (method: string, params: Record<string, any> = {}): void => {
+      if (!canvasRef.current?.contentWindow) {
+        return;
+      }
 
-    const notification: JsonRpcNotification = {
-      jsonrpc: "2.0",
-      method,
-      params,
-    };
+      const notification: JsonRpcNotification = {
+        jsonrpc: "2.0",
+        method,
+        params,
+      };
 
-    try {
-      canvasRef.current.contentWindow.postMessage(
-        JSON.stringify(notification),
-        "*",
-      );
-    } catch (error) {
-      console.error("Failed to send notification:", error);
-    }
-  }, []);
+      try {
+        canvasRef.current.contentWindow.postMessage(
+          JSON.stringify(notification),
+          "*",
+        );
+      } catch (error) {
+        console.error("Failed to send notification:", error);
+      }
+    },
+    [canvasRef],
+  );
 
   // Register handler for incoming notifications
-  const onNotification = useCallback((method: string, handler: NotificationHandler): void => {
-    notificationHandlers.current.set(method, handler);
-  }, []);
+  const onNotification = useCallback(
+    (method: string, handler: NotificationHandler): void => {
+      notificationHandlers.current.set(method, handler);
+    },
+    [],
+  );
 
   // Handle incoming messages from Bevy
   useEffect(() => {
@@ -168,7 +186,7 @@ export const useWebRpc = () => {
         const message: JsonRpcMessage = JSON.parse(event.data as string);
 
         if (message.method === "debug_message") {
-          // console.log("[RUST DEBUG]", message.params?.message);
+          // Uncomment for debugging: console.log("[RUST DEBUG]", message.params?.message);
         }
 
         // Handle JSON-RPC response
@@ -195,6 +213,15 @@ export const useWebRpc = () => {
             setFps(message.params?.fps || 0);
           }
 
+          // Asset-related notifications
+          if (message.method === "asset_selected") {
+            console.log("Asset selected:", message.params);
+          }
+
+          if (message.method === "tool_state_changed") {
+            console.log("Tool state changed:", message.params);
+          }
+
           // Custom handlers
           const handler = notificationHandlers.current.get(message.method);
           if (handler) {
@@ -208,15 +235,15 @@ export const useWebRpc = () => {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [canvasRef]);
 
   // Monitor iframe connection state
   useEffect(() => {
+    if (!canvasRef) return;
+
     const checkConnection = (): void => {
       if (canvasRef.current?.contentWindow) {
         setIsConnected(true);
-        // Request initial FPS when connected
-        sendRequest("get_fps").catch(() => {});
       } else {
         setIsConnected(false);
       }
@@ -226,7 +253,7 @@ export const useWebRpc = () => {
     checkConnection();
 
     return () => clearInterval(interval);
-  }, [sendRequest]);
+  }, [canvasRef]);
 
   // Specific method helpers
   const selectTool = useCallback(
@@ -245,9 +272,7 @@ export const useWebRpc = () => {
   const setRenderMode = useCallback(
     async (mode: string): Promise<void> => {
       try {
-        // Send as notification since it's a setting change
         sendNotification("render_mode_changed", { mode });
-        console.log(`Render mode set to: ${mode}`);
       } catch (error) {
         console.error("Render mode change failed:", error);
         throw error;
@@ -269,7 +294,9 @@ export const useWebRpc = () => {
   const selectAsset = useCallback(
     async (assetId: string): Promise<Asset | undefined> => {
       try {
-        const result = await sendRequest<Asset>("select_asset", { asset_id: assetId });
+        const result = await sendRequest<Asset>("select_asset", {
+          asset_id: assetId,
+        });
         if (result) {
           setSelectedAsset(result);
         }
@@ -282,7 +309,9 @@ export const useWebRpc = () => {
   );
 
   // Fetches all available assets from Bevy and updates state
-  const getAvailableAssets = useCallback(async (): Promise<Asset[] | undefined> => {
+  const getAvailableAssets = useCallback(async (): Promise<
+    Asset[] | undefined
+  > => {
     try {
       const result = await sendRequest<Asset[]>("get_available_assets");
       const assets = result || [];
@@ -290,17 +319,6 @@ export const useWebRpc = () => {
       return assets;
     } catch (error) {
       console.error("Failed to get available assets:", error);
-    }
-  }, [sendRequest]);
-
-  // Fetches categories
-  const getAssetCategories = useCallback(async (): Promise<void> => {
-    try {
-      const result = await sendRequest<AssetCategory[]>("get_asset_category");
-      const categories = result || [];
-      setAssetCategories(categories);
-    } catch (error) {
-      console.error("Failed to get asset categories:", error);
     }
   }, [sendRequest]);
 
@@ -314,10 +332,9 @@ export const useWebRpc = () => {
           z,
         });
         if (result && selectedAsset) {
-          // Use the current selected asset
           const placedAsset: PlacedAsset = {
-            id: Date.now(), // temporary ID
-            asset: selectedAsset, // selected asset
+            id: Date.now(),
+            asset: selectedAsset,
             position: { x, y, z },
             ...result,
           };
@@ -332,12 +349,34 @@ export const useWebRpc = () => {
     [sendRequest, selectedAsset],
   );
 
+  // Toggle asset placement mode
+  const toggleAssetPlacementMode = useCallback(async (): Promise<any> => {
+    try {
+      const result = await sendRequest("toggle_placement_mode");
+      return result;
+    } catch (error) {
+      console.error("Failed to toggle placement mode:", error);
+      throw error;
+    }
+  }, [sendRequest]);
+
+  // Clear all placed assets
+  const clearAllAssets = useCallback(async (): Promise<any> => {
+    try {
+      const result = await sendRequest("clear_all_assets");
+      setPlacedAssets([]);
+      return result;
+    } catch (error) {
+      console.error("Failed to clear all assets:", error);
+      throw error;
+    }
+  }, [sendRequest]);
+
   return {
     // State
     fps,
     isConnected,
     availableAssets,
-    assetCategories,
     selectedAsset,
     placedAssets,
 
@@ -352,10 +391,8 @@ export const useWebRpc = () => {
     getFps,
     selectAsset,
     getAvailableAssets,
-    getAssetCategories,
     placeAssetAtPosition,
-
-    // Canvas ref
-    canvasRef,
+    toggleAssetPlacementMode,
+    clearAllAssets,
   };
 };

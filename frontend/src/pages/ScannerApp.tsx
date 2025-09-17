@@ -1,38 +1,44 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
 import PolygonToolPanel from "../components/PolygonSelection";
 
-const ScannerApp = () => {
-  const [selectedTool, setSelectedTool] = useState("polygon");
-  const [showAssetLibrary, setShowAssetLibrary] = useState(false);
-  const [showPolygonPanel, setShowPolygonPanel] = useState(false);
-  const [renderMode, setRenderMode] = useState("original");
+const ScannerApp: React.FC = () => {
+  const [selectedTool, setSelectedTool] = useState<string>("polygon");
+  const [showAssetLibrary, setShowAssetLibrary] = useState<boolean>(false);
+  const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
+  const [renderMode, setRenderMode] = useState<string>("original");
 
-  // Use the RPC hook
+  // Create ref and pass to hook
+  const canvasRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Use the RPC hook with the ref
   const {
     fps,
     isConnected,
     selectTool,
     setRenderMode: sendRenderMode,
     onNotification,
-    canvasRef,
-  } = useWebRpc();
+  } = useWebRpc(canvasRef);
+
+  useEffect(() => {
+    console.log("[ScannerApp] canvasRef current:", canvasRef.current);
+  }, [canvasRef.current]);
 
   // Listen for tool state changes from Bevy
   useEffect(() => {
-    onNotification("tool_state_changed", (params) => {
+    onNotification("tool_state_changed", (params?: Record<string, any>) => {
       console.log("Tool state changed from Bevy:", params);
-      if (params.tool === "polygon" && params.active) {
+      if (params?.tool === "polygon" && params?.active) {
         setSelectedTool("polygon");
       }
     });
   }, [onNotification]);
 
-  const handleToolSelect = async (toolId) => {
+  const handleToolSelect = async (toolId: string): Promise<void> => {
     // Show asset library only when assets tool is selected
     if (toolId === "assets") {
       setShowAssetLibrary(true);
@@ -58,7 +64,7 @@ const ScannerApp = () => {
     }
   };
 
-  const handleRenderModeChange = async (mode) => {
+  const handleRenderModeChange = async (mode: string): Promise<void> => {
     setRenderMode(mode);
     try {
       await sendRenderMode(mode);
@@ -156,20 +162,22 @@ const ScannerApp = () => {
                   renderMode === mode
                     ? "rgba(0, 255, 136, 0.2)"
                     : "rgba(255, 255, 255, 0.05)",
-                color: renderMode === mode ? "#ffffff" : "#999", // Changed to white for better contrast
+                color: renderMode === mode ? "#ffffff" : "#999",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
               }}
               onMouseEnter={(e) => {
                 if (renderMode !== mode) {
-                  e.target.style.background = "rgba(255, 255, 255, 0.1)";
-                  e.target.style.color = "#ccc";
+                  (e.target as HTMLButtonElement).style.background =
+                    "rgba(255, 255, 255, 0.1)";
+                  (e.target as HTMLButtonElement).style.color = "#ccc";
                 }
               }}
               onMouseLeave={(e) => {
                 if (renderMode !== mode) {
-                  e.target.style.background = "rgba(255, 255, 255, 0.05)";
-                  e.target.style.color = "#999";
+                  (e.target as HTMLButtonElement).style.background =
+                    "rgba(255, 255, 255, 0.05)";
+                  (e.target as HTMLButtonElement).style.color = "#999";
                 }
               }}
             >

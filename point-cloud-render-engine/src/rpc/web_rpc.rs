@@ -1,5 +1,10 @@
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
-use crate::tools::tool_manager::{ToolSelectionEvent, ToolSelectionSource, ToolType};
+use crate::tools::asset_manager::PlaceAssetBoundState;
+use crate::tools::tool_manager::{
+    AssetPlacementAction, AssetPlacementEvent, ToolSelectionEvent, ToolSelectionSource, ToolType,
+};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -107,10 +112,16 @@ fn setup_message_listener(mut commands: Commands) {
         if let Ok(data) = event.data().dyn_into::<js_sys::JsString>() {
             let message_str: String = data.into();
 
-            // Attempt JSON parsing to validate RPC format before queuing.
-            if message_str.contains("jsonrpc") {
-                if let Ok(mut queue) = queue_clone.lock() {
-                    queue.push(message_str);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&message_str) {
+                if json.get("jsonrpc").is_some() {
+                    if message_str.contains("get_available_assets") {
+                        web_sys::console::log_1(
+                            &"[DEBUG] get_available_assets received and queued".into(),
+                        );
+                    }
+                    if let Ok(mut queue) = queue_clone.lock() {
+                        queue.push(message_str);
+                    }
                 }
             }
         }
@@ -164,34 +175,28 @@ fn handle_rpc_messages(
     diagnostics: Res<DiagnosticsStore>,
     mut rpc_interface: ResMut<WebRpcInterface>,
     mut tool_events: EventWriter<ToolSelectionEvent>,
+    mut asset_placement_events: EventWriter<AssetPlacementEvent>,
     mut render_state: ResMut<RenderModeState>,
+    mut place_asset_state: ResMut<PlaceAssetBoundState>,
+    assets: Res<PointCloudAssets>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     for event in events.read() {
-        // Send debug notification to frontend.
-        rpc_interface.send_notification(
-            "debug_message",
-            serde_json::json!({
-                "message": format!("Received RPC: {}", event.content)
-            }),
-        );
-
         // Parse as generic JSON first to check for 'id' field
         if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&event.content) {
             // Check if it has an 'id' field to determine if it's a request or notification
             if json_value.get("id").is_some() {
                 // Has ID field - try parsing as request
                 if let Ok(request) = serde_json::from_str::<RpcRequest>(&event.content) {
-                    info!("Processing RPC request: {}", request.method);
-                    rpc_interface.send_notification(
-                        "debug_message",
-                        serde_json::json!({
-                            "message": format!("Processing request method: {}", request.method)
-                        }),
-                    );
-
-                    if let Some(response) =
-                        handle_rpc_request(&request, &diagnostics, &mut tool_events)
-                    {
+                    if let Some(response) = handle_rpc_request(
+                        &request,
+                        &diagnostics,
+                        &mut tool_events,
+                        &mut asset_placement_events,
+                        &mut place_asset_state,
+                        &assets,
+                        &manifests,
+                    ) {
                         rpc_interface.queue_response(response);
                     }
                 } else {
@@ -200,14 +205,7 @@ fn handle_rpc_messages(
             } else {
                 // No ID field - try parsing as notification
                 if let Ok(notification) = serde_json::from_str::<RpcNotification>(&event.content) {
-                    info!("Processing RPC notification: {}", notification.method);
-                    rpc_interface.send_notification(
-                        "debug_message",
-                        serde_json::json!({
-                            "message": format!("Processing notification method: {}", notification.method)
-                        }),
-                    );
-                    handle_rpc_notification(&notification, &mut render_state, &mut rpc_interface);
+                    handle_rpc_notification(&notification, &mut render_state);
                 } else {
                     warn!("Failed to parse as RPC notification: {}", event.content);
                 }
@@ -229,6 +227,10 @@ fn handle_rpc_request(
     request: &RpcRequest,
     diagnostics: &DiagnosticsStore,
     tool_events: &mut EventWriter<ToolSelectionEvent>,
+    asset_placement_events: &mut EventWriter<AssetPlacementEvent>,
+    place_asset_state: &mut ResMut<PlaceAssetBoundState>,
+    assets: &Res<PointCloudAssets>,
+    manifests: &Res<Assets<SceneManifest>>,
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
@@ -236,6 +238,18 @@ fn handle_rpc_request(
     let result = match request.method.as_str() {
         "tool_selection" => handle_tool_selection(&request.params, tool_events),
         "get_fps" => handle_get_fps(diagnostics),
+        "get_available_assets" => handle_get_available_assets(assets, manifests),
+        "get_asset_categories" => handle_get_asset_categories(assets, manifests),
+        "select_asset" => handle_select_asset(
+            &request.params,
+            place_asset_state,
+            asset_placement_events,
+            assets,
+            manifests,
+        ),
+        "place_asset_at_position" => {
+            handle_place_asset_at_position(&request.params, asset_placement_events)
+        }
         _ => {
             warn!("Unknown RPC method: {}", request.method);
             return Some(create_error_response(
@@ -303,6 +317,226 @@ fn handle_get_fps(diagnostics: &DiagnosticsStore) -> Result<serde_json::Value, R
 
     Ok(serde_json::json!({
         "fps": fps
+    }))
+}
+
+/// Handle getting available assets from the manifest.
+fn handle_get_available_assets(
+    assets: &Res<PointCloudAssets>,
+    manifests: &Res<Assets<SceneManifest>>,
+) -> Result<serde_json::Value, RpcError> {
+    // Debug: Check if we have a manifest handle
+    if assets.manifest.is_none() {
+        return Err(RpcError::internal_error(
+            "No manifest handle found in PointCloudAssets",
+        ));
+    }
+
+    let manifest_handle = assets.manifest.as_ref().unwrap();
+
+    // Debug: Check if the manifest is loaded
+    let manifest = manifests.get(manifest_handle);
+    if manifest.is_none() {
+        return Err(RpcError::internal_error(
+            "Manifest handle exists but manifest not loaded yet",
+        ));
+    }
+
+    let manifest = manifest.unwrap();
+
+    // Debug: Check if asset_atlas exists
+    if manifest.asset_atlas.is_none() {
+        return Err(RpcError::internal_error(
+            "Manifest loaded but asset_atlas is None",
+        ));
+    }
+
+    let atlas = manifest.asset_atlas.as_ref().unwrap();
+
+    // Debug: Check how many assets we have
+    let asset_count = atlas.assets.len();
+    if asset_count == 0 {
+        return Err(RpcError::internal_error(
+            "Asset atlas exists but contains no assets",
+        ));
+    }
+
+    // Log the asset names for debugging
+    let asset_names: Vec<&String> = atlas.assets.iter().map(|a| &a.name).collect();
+    info!("Found {} assets: {:?}", asset_count, asset_names);
+
+    let asset_data: Vec<serde_json::Value> = atlas
+        .assets
+        .iter()
+        .map(|asset| {
+            serde_json::json!({
+                "id": asset.name,
+                "name": asset.name,
+                "category": "assets",
+                "point_count": asset.point_count,
+                "uv_bounds": {
+                    "uv_min": asset.uv_bounds.uv_min,
+                    "uv_max": asset.uv_bounds.uv_max
+                },
+                "local_bounds": {
+                    "min_x": asset.local_bounds.min_x,
+                    "min_y": asset.local_bounds.min_y,
+                    "min_z": asset.local_bounds.min_z,
+                    "max_x": asset.local_bounds.max_x,
+                    "max_y": asset.local_bounds.max_y,
+                    "max_z": asset.local_bounds.max_z
+                }
+            })
+        })
+        .collect();
+
+    info!("Returning {} assets to frontend", asset_data.len());
+    Ok(serde_json::json!(asset_data))
+}
+
+/// Handle getting asset categories.
+fn handle_get_asset_categories(
+    assets: &Res<PointCloudAssets>,
+    manifests: &Res<Assets<SceneManifest>>,
+) -> Result<serde_json::Value, RpcError> {
+    let manifest = assets
+        .manifest
+        .as_ref()
+        .and_then(|h| manifests.get(h))
+        .ok_or_else(|| RpcError::internal_error("Scene manifest not available"))?;
+
+    // For now, return a simple default category structure
+    // You may want to extend this based on your asset categorization needs
+    let categories = vec![
+        serde_json::json!({
+            "id": "all",
+            "name": "All Assets"
+        }),
+        serde_json::json!({
+            "id": "assets",
+            "name": "Assets"
+        }),
+    ];
+
+    Ok(serde_json::json!(categories))
+}
+
+/// Handle asset selection.
+fn handle_select_asset(
+    params: &serde_json::Value,
+    place_asset_state: &mut ResMut<PlaceAssetBoundState>,
+    asset_placement_events: &mut EventWriter<AssetPlacementEvent>,
+    assets: &Res<PointCloudAssets>,
+    manifests: &Res<Assets<SceneManifest>>,
+) -> Result<serde_json::Value, RpcError> {
+    #[derive(serde::Deserialize)]
+    struct SelectAssetParams {
+        asset_id: String,
+    }
+
+    let select_params = serde_json::from_value::<SelectAssetParams>(params.clone())
+        .map_err(|_| RpcError::invalid_params("Expected 'asset_id' parameter"))?;
+
+    // Verify the asset exists in the manifest
+    let manifest = assets
+        .manifest
+        .as_ref()
+        .and_then(|h| manifests.get(h))
+        .ok_or_else(|| RpcError::internal_error("Scene manifest not available"))?;
+
+    let asset_exists = manifest
+        .asset_atlas
+        .as_ref()
+        .map(|atlas| {
+            atlas
+                .assets
+                .iter()
+                .any(|asset| asset.name == select_params.asset_id)
+        })
+        .unwrap_or(false);
+
+    if !asset_exists {
+        return Err(RpcError::invalid_params(&format!(
+            "Asset not found: {}",
+            select_params.asset_id
+        )));
+    }
+
+    // Update the selected asset state
+    place_asset_state.selected_asset_name = Some(select_params.asset_id.clone());
+
+    // Send asset selection event
+    asset_placement_events.write(AssetPlacementEvent {
+        action: AssetPlacementAction::SelectAsset,
+        asset_id: Some(select_params.asset_id.clone()),
+        position: None,
+    });
+
+    info!("Asset selected: {}", select_params.asset_id);
+
+    // Find and return the selected asset data
+    if let Some(atlas) = manifest.asset_atlas.as_ref() {
+        if let Some(asset) = atlas
+            .assets
+            .iter()
+            .find(|a| a.name == select_params.asset_id)
+        {
+            return Ok(serde_json::json!({
+                "id": asset.name,
+                "name": asset.name,
+                "category": "assets",
+                "point_count": asset.point_count,
+                "uv_bounds": {
+                    "uv_min": asset.uv_bounds.uv_min,
+                    "uv_max": asset.uv_bounds.uv_max
+                },
+                "local_bounds": {
+                    "min_x": asset.local_bounds.min_x,
+                    "min_y": asset.local_bounds.min_y,
+                    "min_z": asset.local_bounds.min_z,
+                    "max_x": asset.local_bounds.max_x,
+                    "max_y": asset.local_bounds.max_y,
+                    "max_z": asset.local_bounds.max_z
+                }
+            }));
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "asset_id": select_params.asset_id
+    }))
+}
+
+/// Handle placing asset at specific position.
+fn handle_place_asset_at_position(
+    params: &serde_json::Value,
+    asset_placement_events: &mut EventWriter<AssetPlacementEvent>,
+) -> Result<serde_json::Value, RpcError> {
+    #[derive(serde::Deserialize)]
+    struct PlaceAssetParams {
+        x: f32,
+        y: f32,
+        z: f32,
+    }
+
+    let place_params = serde_json::from_value::<PlaceAssetParams>(params.clone())
+        .map_err(|_| RpcError::invalid_params("Expected 'x', 'y', 'z' parameters"))?;
+
+    let position = Vec3::new(place_params.x, place_params.y, place_params.z);
+
+    // Send asset placement event
+    asset_placement_events.write(AssetPlacementEvent {
+        action: AssetPlacementAction::PlaceAtPosition,
+        asset_id: None,
+        position: Some(position),
+    });
+
+    info!("Asset placement requested at position: {:?}", position);
+
+    Ok(serde_json::json!({
+        "success": true,
+        "position": [place_params.x, place_params.y, place_params.z]
     }))
 }
 
@@ -392,7 +626,6 @@ impl RpcError {
 fn handle_rpc_notification(
     notification: &RpcNotification,
     render_state: &mut ResMut<RenderModeState>,
-    rpc_interface: &mut ResMut<WebRpcInterface>,
 ) {
     match notification.method.as_str() {
         "render_mode_changed" => {
@@ -406,16 +639,7 @@ fn handle_rpc_notification(
                         return;
                     }
                 };
-
                 render_state.current_mode = new_mode;
-                info!("Render mode changed via RPC to: {:?}", new_mode);
-
-                rpc_interface.send_notification(
-                    "debug_message",
-                    serde_json::json!({
-                        "message": format!("Render mode changed to: {}", mode_str)
-                    }),
-                );
             }
         }
         _ => {
