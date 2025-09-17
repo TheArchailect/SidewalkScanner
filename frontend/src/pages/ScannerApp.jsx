@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
-import PolygonOp from "../components/PolygonOp";
+//import PolygonOp from "../components/PolygonOp";
 const ScannerApp = () => {
   const [selectedTool, setSelectedTool] = useState("polygon");
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
@@ -31,18 +31,12 @@ const ScannerApp = () => {
       setShowAssetLibrary(false);
     }
 
-<<<<<<< HEAD
     if (toolId == selectTool) {
       setSelectedTool(null);
     } else {
       setSelectedTool(toolId);
     }
     
-=======
-    // Always select the clicked tool (each tool is either on or off)
-    setSelectedTool(toolId);
-
->>>>>>> 03d927ba00f9c0e0a445def2ce55ea81ed048fd4
     // Send tool selection to Bevy via RPC
     try {
       await selectTool(toolId);
@@ -133,10 +127,10 @@ const ScannerApp = () => {
       {/* Asset Library Panel */}
       <AssetLibrary isVisible={showAssetLibrary} canvasRef={canvasRef} />
 
-      {/* Polygon Operations Panel */}
+      {/* Polygon Operations Panel 
       <PolygonOp isVisible={showPoloygonOp} canvasRef={canvasRef} />
       <PolygonOp isVisible={showPolyOpReclassify} canvasRef={canvasRef} />
-      
+      */}
     </div>
   );
 };

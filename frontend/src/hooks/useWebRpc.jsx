@@ -4,6 +4,10 @@ export const useWebRpc = () => {
   const [fps, setFps] = useState(0);
   const [renderMode, setRenderMode] = useState("");
   const [isConnected, setIsConnected] = useState(false);
+  const [availableAssets, setAvailableAssets] = useState([]);
+  const [assetCategories, setAssetCategories] = useState([]);
+  const [selectedAsset, setSelectedAsset] = useState([]);
+  const [placedAssets, setPlacedAssets] = useState([]);
   const canvasRef = useRef(null);
   const requestIdCounter = useRef(1);
   const pendingRequests = useRef(new Map());
@@ -33,7 +37,7 @@ export const useWebRpc = () => {
 
         // Store pending request
         pendingRequests.current.set(id, { resolve, reject });
-
+        
         // Send to WASM
         try {
           canvasRef.current.contentWindow.postMessage(
@@ -174,14 +178,65 @@ export const useWebRpc = () => {
     }
   }, [sendRequest]);
 
-  /*const getRenderMode = useCallback (async () => {
+  // Selects an asset by ID and updates local state
+  const selectAsset = useCallback(
+    async (assetId) => {
+      try {
+        const result = await sendRequest("select_asset", {asset_id: assetId})
+        if (result) {
+          setSelectedAsset(result)
+        }
+        return result
+      } catch (error) {
+        console.error("Asset selection failed:", error)
+      }
+    }, [sendRequest]);
+
+  // Fetches all available assets from Bevy and updates state
+  const getAvailableAssets = useCallback(async () => {
     try {
-      const result = await sendRequest("get_renderMode");
-      return result.renderMode
+      const result = await sendRequest("get_available_assets")
+      const assets = result || [] 
+      setAvailableAssets(assets)
+      return assets
     } catch (error) {
-      return 0;
+      console.error("Failed to get available assets:", error)
     }
-  })*/
+  }, [sendRequest]);
+
+  // Fetches categories 
+  const getAssetCategories = useCallback(async () => {
+    try {
+      const result = await sendRequest("get_asset_category")
+      const categories = result || []
+      setAssetCategories(categories)
+    } catch (error) {
+      console.error("Failed to get asset categories:", error)
+    }
+  }, [sendRequest]);
+
+  // Places the current selected asset at the specific 3D coordinates
+  const placeAssetAtPosition = useCallback(
+    async (x, y, z) => {
+      try {
+        const result = await sendRequest("place_asset_at_position", { x, y, z })
+        if (result && selectedAsset) {    // Use the current selected asset
+          const placedAsset = {
+            id: Date.now(), // temporary ID
+            asset: selectedAsset,         // selected asset
+            position: { x, y, z },
+            ...result,
+          }
+          setPlacedAssets((prev) => [...prev, placedAsset])
+        }
+        return result
+      } catch (error) {
+        console.error("Failed to place asset at position:", error)
+        throw error
+      }
+    },
+    [sendRequest, selectedAsset],
+  )
 
   return {
     // State
@@ -197,7 +252,11 @@ export const useWebRpc = () => {
     // Specific helpers
     selectTool,
     getFps,
-    //getRenderMode,
+
+    selectAsset,
+    getAvailableAssets,
+    getAssetCategories,
+    placeAssetAtPosition,
 
     // Canvas ref
     canvasRef,
