@@ -308,17 +308,17 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     [sendRequest],
   );
 
-  // Fetches all available assets from Bevy and updates state
   const getAvailableAssets = useCallback(async (): Promise<
     Asset[] | undefined
   > => {
     try {
       const result = await sendRequest<Asset[]>("get_available_assets");
-      const assets = result || [];
+      const assets = Array.isArray(result) ? result : [];
       setAvailableAssets(assets);
       return assets;
     } catch (error) {
       console.error("Failed to get available assets:", error);
+      setAvailableAssets([]); // Keep as empty array on error
     }
   }, [sendRequest]);
 

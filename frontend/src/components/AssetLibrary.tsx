@@ -92,6 +92,10 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
   const calculateCategories = (assets: Asset[]): AssetCategory[] => {
     const categoryMap = new Map<string, number>();
 
+    if (!Array.isArray(assets)) {
+      return [{ id: "all", name: "All Assets", count: 0 }];
+    }
+
     // Count assets by category
     assets.forEach((asset) => {
       const category = asset.category || "uncategorized";
@@ -118,15 +122,14 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
   };
 
   // Use calculated categories
-  const calculatedCategories = calculateCategories(availableAssets);
+  const calculatedCategories = calculateCategories(availableAssets || []);
 
-  const filteredAssets = availableAssets.filter((asset) => {
+  const filteredAssets = (availableAssets || []).filter((asset) => {
     const matchesCategory =
       selectedCategory === "all" || asset.category === selectedCategory;
     const matchesSearch = asset.name
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
-
     return matchesCategory && matchesSearch;
   });
 
