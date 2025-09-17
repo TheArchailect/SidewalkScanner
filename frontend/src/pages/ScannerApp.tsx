@@ -7,10 +7,10 @@ import ToolPalette from "../components/ToolPalette";
 import PolygonToolPanel from "../components/PolygonSelection";
 
 const ScannerApp: React.FC = () => {
-  const [selectedTool, setSelectedTool] = useState<string>("polygon");
+  const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [showAssetLibrary, setShowAssetLibrary] = useState<boolean>(false);
   const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
-  const [renderMode, setRenderMode] = useState<string>("original");
+  const [renderMode, setRenderMode] = useState<string>("RGB");
 
   // Create ref and pass to hook
   const canvasRef = useRef<HTMLIFrameElement | null>(null);

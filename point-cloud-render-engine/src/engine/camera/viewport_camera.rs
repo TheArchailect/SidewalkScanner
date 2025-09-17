@@ -39,7 +39,7 @@ impl ViewportCamera {
             yaw: 0.0,
             pan_start_world_point: None,
             last_intersection: None,
-            intersection_smooth_factor: 0.1, // Adjust for smoothness vs responsiveness
+            intersection_smooth_factor: 0.05, // Adjust for smoothness vs responsiveness
         }
     }
 
@@ -338,4 +338,3 @@ pub fn camera_controller(
             .slerp(target_transform.rotation, lerp_speed.min(1.0));
     }
 }
-

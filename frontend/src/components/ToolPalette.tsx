@@ -1,12 +1,28 @@
+import React from "react";
 import Icon from "./Icon";
 
-const ToolPalette = ({
+interface Tool {
+  id: string;
+}
+
+interface ToolPaletteProps {
+  selectedTool: string | null;
+  showAssetLibrary: boolean;
+  onToolSelect: (toolId: string) => void;
+  isConnected: boolean;
+}
+
+const ToolPalette: React.FC<ToolPaletteProps> = ({
   selectedTool,
   showAssetLibrary,
   onToolSelect,
   isConnected,
 }) => {
-  const tools = [{ id: "polygon" }, { id: "measure" }, { id: "assets" }];
+  const tools: Tool[] = [
+    { id: "polygon" },
+    { id: "measure" },
+    { id: "assets" },
+  ];
 
   return (
     <div
@@ -52,13 +68,13 @@ const ToolPalette = ({
               position: "relative",
               opacity: isConnected ? 1 : 0.5,
             }}
-            onMouseEnter={(e) => {
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
               if (isConnected && !isActive) {
                 e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
                 e.currentTarget.style.color = "#aaa";
               }
             }}
-            onMouseLeave={(e) => {
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
               if (isConnected && !isActive) {
                 e.currentTarget.style.background = "transparent";
                 e.currentTarget.style.color = "#666";
