@@ -1,3 +1,4 @@
+use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
 use crate::tools::tool_manager::{ToolSelectionEvent, ToolSelectionSource, ToolType};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -30,7 +31,7 @@ pub struct RpcResponse {
     pub id: Option<serde_json::Value>,
 }
 
-/// JSON-RPC 2.0 notification structure for one-way communication.
+/// JSON-RPC notification structure for one-way communication.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RpcNotification {
     pub jsonrpc: String,
@@ -163,6 +164,7 @@ fn handle_rpc_messages(
     diagnostics: Res<DiagnosticsStore>,
     mut rpc_interface: ResMut<WebRpcInterface>,
     mut tool_events: EventWriter<ToolSelectionEvent>,
+    mut render_state: ResMut<RenderModeState>,
 ) {
     for event in events.read() {
         // Send debug notification to frontend.
@@ -173,28 +175,51 @@ fn handle_rpc_messages(
             }),
         );
 
-        match serde_json::from_str::<RpcRequest>(&event.content) {
-            Ok(request) => {
-                rpc_interface.send_notification(
-                    "debug_message",
-                    serde_json::json!({
-                        "message": format!("Processing method: {}", request.method)
-                    }),
-                );
+        // Parse as generic JSON first to check for 'id' field
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&event.content) {
+            // Check if it has an 'id' field to determine if it's a request or notification
+            if json_value.get("id").is_some() {
+                // Has ID field - try parsing as request
+                if let Ok(request) = serde_json::from_str::<RpcRequest>(&event.content) {
+                    info!("Processing RPC request: {}", request.method);
+                    rpc_interface.send_notification(
+                        "debug_message",
+                        serde_json::json!({
+                            "message": format!("Processing request method: {}", request.method)
+                        }),
+                    );
 
-                if let Some(response) = handle_rpc_request(&request, &diagnostics, &mut tool_events)
-                {
-                    rpc_interface.queue_response(response);
+                    if let Some(response) =
+                        handle_rpc_request(&request, &diagnostics, &mut tool_events)
+                    {
+                        rpc_interface.queue_response(response);
+                    }
+                } else {
+                    warn!("Failed to parse as RPC request: {}", event.content);
+                }
+            } else {
+                // No ID field - try parsing as notification
+                if let Ok(notification) = serde_json::from_str::<RpcNotification>(&event.content) {
+                    info!("Processing RPC notification: {}", notification.method);
+                    rpc_interface.send_notification(
+                        "debug_message",
+                        serde_json::json!({
+                            "message": format!("Processing notification method: {}", notification.method)
+                        }),
+                    );
+                    handle_rpc_notification(&notification, &mut render_state, &mut rpc_interface);
+                } else {
+                    warn!("Failed to parse as RPC notification: {}", event.content);
                 }
             }
-            Err(parse_error) => {
-                rpc_interface.send_notification(
-                    "debug_message",
-                    serde_json::json!({
-                        "message": format!("Parse error: {}", parse_error)
-                    }),
-                );
-            }
+        } else {
+            warn!("Failed to parse as JSON: {}", event.content);
+            rpc_interface.send_notification(
+                "debug_message",
+                serde_json::json!({
+                    "message": format!("Parse error: invalid JSON")
+                }),
+            );
         }
     }
 }
@@ -359,6 +384,42 @@ impl RpcError {
             code: -32603,
             message: message.to_string(),
             data: None,
+        }
+    }
+}
+
+/// Handle RPC notifications
+fn handle_rpc_notification(
+    notification: &RpcNotification,
+    render_state: &mut ResMut<RenderModeState>,
+    rpc_interface: &mut ResMut<WebRpcInterface>,
+) {
+    match notification.method.as_str() {
+        "render_mode_changed" => {
+            if let Some(mode_str) = notification.params.get("mode").and_then(|v| v.as_str()) {
+                let new_mode = match mode_str {
+                    "original" => RenderMode::OriginalClassification,
+                    "modified" => RenderMode::ModifiedClassification,
+                    "RGB" => RenderMode::RgbColour,
+                    _ => {
+                        warn!("Unknown render mode: {}", mode_str);
+                        return;
+                    }
+                };
+
+                render_state.current_mode = new_mode;
+                info!("Render mode changed via RPC to: {:?}", new_mode);
+
+                rpc_interface.send_notification(
+                    "debug_message",
+                    serde_json::json!({
+                        "message": format!("Render mode changed to: {}", mode_str)
+                    }),
+                );
+            }
+        }
+        _ => {
+            warn!("Unknown RPC notification method: {}", notification.method);
         }
     }
 }

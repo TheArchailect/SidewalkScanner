@@ -23,7 +23,6 @@ pub fn update_selection_buffer(
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
-        println!("add selection id");
         selection_buffer.selected_ids.push(2);
     }
 

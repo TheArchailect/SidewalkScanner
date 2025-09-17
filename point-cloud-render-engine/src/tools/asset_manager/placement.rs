@@ -1,15 +1,11 @@
-use bevy::math::primitives::Cuboid;
-use bevy::pbr::wireframe::{Wireframe, WireframeColor};
-use bevy::prelude::*;
-use bevy::render::alpha::AlphaMode;
-use bevy::render::view::NoFrustumCulling;
-
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
-use crate::engine::mesh::point_index_mesh::create_point_index_mesh;
 use crate::engine::render::instanced_render_plugin::{InstanceData, InstancedAssetData};
+use bevy::prelude::*;
+use bevy::render::alpha::AlphaMode;
+use bevy::render::view::NoFrustumCulling;
 
 use super::state::*;
 use bevy::prelude::{Mesh3d, MeshMaterial3d};
@@ -119,16 +115,6 @@ pub fn place_cube_on_world_click(
         asset_meta.uv_bounds.uv_max[1],
     );
 
-    // Creates transparent material for wireframe
-    let mat = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        emissive: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
-        perceptual_roughness: 1.0,
-        ..default()
-    });
-
     // Build data for placed instance and add to resource list
     let placed_instance = PlacedAssetInstance {
         asset_name: asset_meta.name.clone(),
@@ -137,27 +123,9 @@ pub fn place_cube_on_world_click(
     };
     placed_assets.instances.push(placed_instance.clone());
 
-    //  Disabled for now to compile for the browser, since POLYGON_MODE_LINE mode isn't supported on WebGPU
-    // // Spawn wireframe cuboid (AABB)
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Cuboid::from_size(size))), // cube mesh
-    //     MeshMaterial3d(mat),                         // transparent material
-    //     Transform::from_translation(center),         // transform
-    //     Wireframe,                                   // wireframe rendering
-    //     WireframeColor {
-    //         color: Color::WHITE,
-    //     }, // wireframe color
-    //     placed_instance.clone(),                     // copy of placed instance data
-    //     PlacedBounds,                                // marker component
-    //     BoundsSize(size),                            // size component
-    //     bevy::render::view::NoIndirectDrawing,       // disable indirect drawing
-    //     NoFrustumCulling,                            // disable frustum culling, always render
-    //     Name::new(format!("{}_bounds_wire", asset_meta.name)),
-    // ));
-
     commands.spawn((
         // Create wireframe using 12 line segments for cube edges
-        create_wireframe_mesh_bundle(&mut meshes, &mut materials, size, center, Color::WHITE),
+        create_wireframe_mesh_bundle(&mut meshes, &mut materials, size, center),
         placed_instance.clone(),
         PlacedBounds,
         BoundsSize(size),
@@ -184,7 +152,6 @@ fn create_wireframe_mesh_bundle(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     size: Vec3,
     center: Vec3,
-    color: Color,
 ) -> (Mesh3d, MeshMaterial3d<StandardMaterial>, Transform) {
     let mut mesh = Mesh::new(
         bevy::render::mesh::PrimitiveTopology::LineList,
@@ -226,8 +193,11 @@ fn create_wireframe_mesh_bundle(
     mesh.insert_indices(bevy::render::mesh::Indices::U32((0u32..24).collect()));
 
     let material = StandardMaterial {
-        base_color: color,
+        base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
+        alpha_mode: AlphaMode::Blend,
         unlit: true,
+        emissive: Color::srgba(0.0, 0.0, 0.0, 0.0).into(),
+        perceptual_roughness: 1.0,
         ..default()
     };
 

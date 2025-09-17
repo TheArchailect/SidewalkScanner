@@ -1,14 +1,26 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
+import PolygonToolPanel from "../components/PolygonSelection";
+
 const ScannerApp = () => {
   const [selectedTool, setSelectedTool] = useState("polygon");
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+  const [showPolygonPanel, setShowPolygonPanel] = useState(false);
+  const [renderMode, setRenderMode] = useState("original");
 
   // Use the RPC hook
-  const { fps, isConnected, selectTool, onNotification, canvasRef } =
-    useWebRpc();
+  const {
+    fps,
+    isConnected,
+    selectTool,
+    setRenderMode: sendRenderMode,
+    onNotification,
+    canvasRef,
+  } = useWebRpc();
 
   // Listen for tool state changes from Bevy
   useEffect(() => {
@@ -28,6 +40,12 @@ const ScannerApp = () => {
       setShowAssetLibrary(false);
     }
 
+    if (toolId === "polygon") {
+      setShowPolygonPanel(true);
+    } else {
+      setShowPolygonPanel(false);
+    }
+
     // Always select the clicked tool (each tool is either on or off)
     setSelectedTool(toolId);
 
@@ -37,6 +55,16 @@ const ScannerApp = () => {
       console.log(`Tool ${toolId} activated`);
     } catch (error) {
       console.error(`Failed to select tool ${toolId}:`, error);
+    }
+  };
+
+  const handleRenderModeChange = async (mode) => {
+    setRenderMode(mode);
+    try {
+      await sendRenderMode(mode);
+      console.log(`Render mode changed to: ${mode}`);
+    } catch (error) {
+      console.error(`Failed to change render mode to ${mode}:`, error);
     }
   };
 
@@ -98,6 +126,57 @@ const ScannerApp = () => {
             {fps > 0 ? `${fps.toFixed(1)} fps` : "--"}
           </span>
         </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "13px",
+              color: "#999",
+              marginRight: "8px",
+            }}
+          >
+            Render Mode:
+          </span>
+          {["original", "modified", "RGB"].map((mode) => (
+            <button
+              key={mode}
+              onClick={() => handleRenderModeChange(mode)}
+              style={{
+                padding: "4px 12px",
+                fontSize: "12px",
+                border: "1px solid rgba(255, 255, 255, 0.2)",
+                borderRadius: "4px",
+                background:
+                  renderMode === mode
+                    ? "rgba(0, 255, 136, 0.2)"
+                    : "rgba(255, 255, 255, 0.05)",
+                color: renderMode === mode ? "#ffffff" : "#999", // Changed to white for better contrast
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (renderMode !== mode) {
+                  e.target.style.background = "rgba(255, 255, 255, 0.1)";
+                  e.target.style.color = "#ccc";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (renderMode !== mode) {
+                  e.target.style.background = "rgba(255, 255, 255, 0.05)";
+                  e.target.style.color = "#999";
+                }
+              }}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tool Palette Component */}
@@ -110,6 +189,7 @@ const ScannerApp = () => {
 
       {/* Asset Library Panel */}
       <AssetLibrary isVisible={showAssetLibrary} canvasRef={canvasRef} />
+      <PolygonToolPanel isVisible={showPolygonPanel} canvasRef={canvasRef} />
     </div>
   );
 };

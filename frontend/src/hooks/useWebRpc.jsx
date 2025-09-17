@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useCallback, useRef } from "react";
 
 export const useWebRpc = () => {
@@ -164,6 +166,20 @@ export const useWebRpc = () => {
     [sendRequest],
   );
 
+  const setRenderMode = useCallback(
+    async (mode) => {
+      try {
+        // Send as notification since it's a setting change
+        sendNotification("render_mode_changed", { mode });
+        console.log(`Render mode set to: ${mode}`);
+      } catch (error) {
+        console.error("Render mode change failed:", error);
+        throw error;
+      }
+    },
+    [sendNotification],
+  );
+
   const getFps = useCallback(async () => {
     try {
       const result = await sendRequest("get_fps");
@@ -185,6 +201,7 @@ export const useWebRpc = () => {
 
     // Specific helpers
     selectTool,
+    setRenderMode, // Added render mode method to exports
     getFps,
 
     // Canvas ref
