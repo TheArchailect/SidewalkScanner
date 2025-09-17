@@ -4,6 +4,7 @@ use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
 use crate::tools::asset_manager::PlaceAssetBoundState;
 use crate::tools::tool_manager::{
     AssetPlacementAction, AssetPlacementEvent, ToolSelectionEvent, ToolSelectionSource, ToolType,
+    ClearToolEvent,
 };
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -180,6 +181,7 @@ fn handle_rpc_messages(
     mut place_asset_state: ResMut<PlaceAssetBoundState>,
     assets: Res<PointCloudAssets>,
     manifests: Res<Assets<SceneManifest>>,
+    mut clear_events: EventWriter<ClearToolEvent>,
 ) {
     for event in events.read() {
         // Parse as generic JSON first to check for 'id' field
@@ -196,6 +198,7 @@ fn handle_rpc_messages(
                         &mut place_asset_state,
                         &assets,
                         &manifests,
+                        &mut clear_events,
                     ) {
                         rpc_interface.queue_response(response);
                     }
@@ -231,12 +234,14 @@ fn handle_rpc_request(
     place_asset_state: &mut ResMut<PlaceAssetBoundState>,
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
+    clear_events: &mut EventWriter<ClearToolEvent>,
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
 
     let result = match request.method.as_str() {
-        "tool_selection" => handle_tool_selection(&request.params, tool_events),
+        "tool_selection" => handle_tool_selection(&request.params, tool_events, clear_events),
+        "clear_tool" => handle_clear_tool_request(clear_events),
         "get_fps" => handle_get_fps(diagnostics),
         "get_available_assets" => handle_get_available_assets(assets, manifests),
         "get_asset_categories" => handle_get_asset_categories(assets, manifests),
@@ -281,18 +286,36 @@ fn handle_rpc_request(
 fn handle_tool_selection(
     params: &serde_json::Value,
     tool_events: &mut EventWriter<ToolSelectionEvent>,
+    clear_events: &mut EventWriter<ClearToolEvent>,
 ) -> Result<serde_json::Value, RpcError> {
     #[derive(serde::Deserialize)]
     struct ToolSelectionParams {
-        tool: String,
+        tool: Option<String>,
     }
 
     let tool_params = serde_json::from_value::<ToolSelectionParams>(params.clone())
         .map_err(|_| RpcError::invalid_params("Expected 'tool' parameter"))?;
 
+    if tool_params
+        .tool
+        .as_deref()
+        .map(|s| s.eq_ignore_ascii_case("none"))
+        .unwrap_or(true)
+    {
+        clear_events.write(ClearToolEvent {
+            source: ToolSelectionSource::Rpc,
+        });
+        info!("Tool cleared via RPC");
+        return Ok(serde_json::json!({
+            "success": true,
+            "active_tool": "none"
+        }));
+    }
+
     // Convert string to tool type using generic mapping.
-    let tool_type = ToolType::from_string(&tool_params.tool)
-        .ok_or_else(|| RpcError::invalid_params(&format!("Unknown tool: {}", tool_params.tool)))?;
+    let tool_str = tool_params.tool.unwrap();
+    let tool_type = ToolType::from_string(&tool_str)
+        .ok_or_else(|| RpcError::invalid_params(&format!("Unknown tool: {}", tool_str)))?;
 
     // Dispatch tool selection event for processing by tool manager.
     tool_events.write(ToolSelectionEvent {
@@ -304,8 +327,17 @@ fn handle_tool_selection(
 
     Ok(serde_json::json!({
         "success": true,
-        "active_tool": tool_params.tool
+        "active_tool": tool_str
     }))
+}
+
+fn handle_clear_tool_request(
+    clear_events: &mut EventWriter<ClearToolEvent>,
+) -> Result<serde_json::Value, RpcError> {
+    clear_events.write(ClearToolEvent {
+        source: ToolSelectionSource::Rpc,
+    });
+    Ok(serde_json::json!({ "success": true }))
 }
 
 /// Handle FPS retrieval with diagnostic system integration.

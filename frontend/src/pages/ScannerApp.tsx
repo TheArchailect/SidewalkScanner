@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
@@ -22,18 +22,54 @@ const ScannerApp: React.FC = () => {
     selectTool,
     setRenderMode: sendRenderMode,
     onNotification,
+    clearTool,
   } = useWebRpc(canvasRef);
 
   useEffect(() => {
     console.log("[ScannerApp] canvasRef current:", canvasRef.current);
   }, [canvasRef.current]);
 
+  const handleClearTool = useCallback(() => {
+    clearTool()
+      .catch(console.error)
+      .finally(() => {
+        setSelectedTool(null);
+        setShowAssetLibrary(false);
+        setShowPolygonPanel(false);
+        setTimeout(() => {
+          const win = canvasRef.current?.contentWindow;
+          try {
+            win?.focus();
+          } catch {}
+        }, 0);
+      });
+  }, [clearTool]);
+
   // Listen for tool state changes from Bevy
   useEffect(() => {
     onNotification("tool_state_changed", (params?: Record<string, any>) => {
       console.log("Tool state changed from Bevy:", params);
+
+      if (!params?.active || params?.tool === "none") {
+        setSelectedTool(null);
+        setShowAssetLibrary(false);
+        setShowPolygonPanel(false);
+        return;
+      }
+
+      // Reflect active tool in UI
       if (params?.tool === "polygon" && params?.active) {
         setSelectedTool("polygon");
+        setShowPolygonPanel(true);
+        setShowAssetLibrary(false);
+      } else if (params?.tool === "assets" && params?.active) {
+        setSelectedTool("assets");
+        setShowAssetLibrary(true);
+        setShowPolygonPanel(false);
+      } else if (params?.tool === "measure" && params?.active) {
+        setSelectedTool("measure");
+        setShowAssetLibrary(false);
+        setShowPolygonPanel(false);
       }
     });
   }, [onNotification]);
@@ -74,6 +110,24 @@ const ScannerApp: React.FC = () => {
     }
   };
 
+  // Global Escape
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        e.preventDefault();
+        e.stopPropagation();
+        handleClearTool();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+    };
+  }, [handleClearTool]);
+
   return (
     <div
       style={{
@@ -88,6 +142,7 @@ const ScannerApp: React.FC = () => {
       {/* WASM Canvas - Full Screen */}
       <iframe
         ref={canvasRef}
+        tabIndex={-1}
         src="./renderer/SidewalkScanner.html"
         style={{
           position: "absolute",

@@ -39,6 +39,7 @@ use crate::tools::{
         AssetPlacementEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
         handle_asset_placement_events, handle_polygon_action_events,
         handle_tool_keyboard_shortcuts, handle_tool_selection_events,
+        ClearToolEvent, handle_clear_tool_events,
     },
 };
 // Create Web RPC modules
@@ -62,6 +63,9 @@ use crate::engine::render::extraction::{
 use crate::engine::render::instanced_render_plugin::InstancedAssetRenderPlugin;
 use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderState;
 use crate::tools::asset_manager::PlacedAssetInstances;
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::tools::tool_manager::clear_tool_on_escape;
 
 pub fn create_app() -> App {
     let mut app = App::new();
@@ -108,6 +112,7 @@ pub fn create_app() -> App {
         .add_event::<ToolSelectionEvent>()
         .add_event::<PolygonActionEvent>()
         .add_event::<AssetPlacementEvent>()
+        .add_event::<ClearToolEvent>()
         .insert_resource(create_point_cloud_assets(None));
 
     // Configure render app with proper resource extraction
@@ -181,6 +186,7 @@ pub fn create_app() -> App {
         // Tool management systems
         handle_tool_keyboard_shortcuts, // Native shortcuts or no-op for WASM
         handle_tool_selection_events,   // Process tool activation events
+        handle_clear_tool_events,       // Apply clear tool events
         handle_polygon_action_events,   // Process polygon action events
         handle_asset_placement_events,  // Process asset placement events - NEW!
         // Tool-specific systems - run after tool state changes
@@ -200,6 +206,14 @@ pub fn create_app() -> App {
     }
 
     app.add_systems(Update, runtime_systems.run_if(in_state(AppState::Running)));
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.add_systems(
+            Update,
+            clear_tool_on_escape.run_if(in_state(AppState::Running)),
+        );
+    }
 
     app.add_systems(
         Update,

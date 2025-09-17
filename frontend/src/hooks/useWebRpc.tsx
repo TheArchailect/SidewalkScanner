@@ -269,6 +269,17 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     [sendRequest],
   );
 
+  // Clear the active tool 
+  const clearTool = useCallback(async (): Promise<any> => {
+    try {
+      const result = await sendRequest("tool_selection", { tool: "none" });
+      return result;
+    } catch (error) {
+      console.error("Clear tool failed:", error);
+      throw error;
+    }
+  }, [sendRequest]);
+
   const setRenderMode = useCallback(
     async (mode: string): Promise<void> => {
       try {
@@ -387,6 +398,7 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
 
     // Specific helpers
     selectTool,
+    clearTool,
     setRenderMode,
     getFps,
     selectAsset,

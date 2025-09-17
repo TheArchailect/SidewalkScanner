@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState, type RefObject } from "react";
+import { useState, useEffect, useRef, type RefObject } from "react";
+import { useWebRpc } from "../hooks/useWebRpc";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
@@ -127,10 +128,38 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
   const hasAnySelection = getSelectedCount() > 0;
 
+  // Escape handling inside the panel
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const { clearTool } = useWebRpc(canvasRef);
+
+  const handleCancel = () => {
+    clearTool()
+      .catch(console.error)
+      .finally(() => {
+        // front-end UI will close from ScannerApps tool_state_changed handler
+        setTimeout(() => canvasRef.current?.focus(), 0);
+      });
+  };
+
+  useEffect(() => {
+    if (isVisible) panelRef.current?.focus();
+  }, [isVisible]);
+
+  const handleKeyDownCapture = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape" || e.key === "Esc") {
+      e.preventDefault();
+      e.stopPropagation();
+      handleCancel();
+    }
+  };
+
   if (!isVisible) return null;
 
   return (
     <div
+      ref={panelRef}
+      tabIndex={-1}
+      onKeyDownCapture={handleKeyDownCapture}
       style={{
         position: "fixed",
         right: "20px",
@@ -467,7 +496,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         }}
       >
         <button
-          onClick={() => console.log("cancel")}
+          onClick={handleCancel}
           style={{
             background: "rgba(0, 0, 0, 0.3)",
             border: "1px solid rgba(255, 255, 255, 0.1)",
@@ -493,22 +522,22 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? "rgba(0, 0, 0, 0.3)"
                 : operation === "hide"
-                  ? "rgba(0, 0, 0, 0.6)"
-                  : "rgba(0, 0, 0, 0.6)",
+                ? "rgba(0, 0, 0, 0.6)"
+                : "rgba(0, 0, 0, 0.6)",
             border: `1px solid ${
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? "rgba(255, 255, 255, 0.1)"
                 : operation === "hide"
-                  ? "rgba(239, 68, 68, 0.8)"
-                  : "rgba(59, 130, 246, 0.8)"
+                ? "rgba(239, 68, 68, 0.8)"
+                : "rgba(59, 130, 246, 0.8)"
             }`,
             borderRadius: "4px",
             color:
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? "#666"
                 : operation === "hide"
-                  ? "#fca5a5"
-                  : "#93c5fd",
+                ? "#fca5a5"
+                : "#93c5fd",
             padding: "8px 12px",
             fontSize: "11px",
             fontWeight: "600",
@@ -525,8 +554,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               ? "Hide Selected"
               : "Hide All"
             : hasAnySelection
-              ? "Reclassify Selected"
-              : "Reclassify All"}
+            ? "Reclassify Selected"
+            : "Reclassify All"}
         </button>
       </div>
     </div>
