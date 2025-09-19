@@ -11,7 +11,6 @@ Cargo.lock
 # =============================================================================
 # Dependencies
 node_modules
-frontend/package-lock.json
 
 # Build output
 /*/dist
@@ -30,9 +29,6 @@ lerna-debug.log*
 
 # Local environment files
 *.local
-
-# Lock files (except package-lock.json which should typically be committed)
-*.lock
 
 # =============================================================================
 # EDITORS & IDEs
