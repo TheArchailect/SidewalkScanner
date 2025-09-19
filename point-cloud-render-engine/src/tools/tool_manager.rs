@@ -398,3 +398,51 @@ pub fn handle_tool_keyboard_shortcuts(
 pub fn handle_tool_keyboard_shortcuts() {
     // No keyboard shortcuts in WASM builds - tools controlled via RPC only.
 }
+
+// Event to clear/deactivate whichever tool is currently active 
+#[derive(Event)]
+pub struct ClearToolEvent {
+    pub source: ToolSelectionSource,
+}
+
+pub fn handle_clear_tool_events(
+    mut events: EventReader<ClearToolEvent>,
+    mut tool_manager: ResMut<ToolManager>,
+    mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
+    mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
+    mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+) {
+    for event in events.read() {
+        let previous = tool_manager.deactivate_current_tool();
+
+        // Deactivate tool states
+        polygon_tool.set_active(false);
+        place_asset_state.active = false;
+
+        info!("Cleared active tool via {:?}", event.source);
+
+        // Notify frontend so UI closes panes
+        rpc_interface.send_notification(
+            "tool_state_changed",
+            serde_json::json!({
+                "tool": "none",
+                "active": false,
+                "previous": previous.map(|t| t.to_string())
+            }),
+        );
+    }
+}
+
+// Clear the current tool 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn clear_tool_on_escape(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    manager: Res<ToolManager>,
+    mut ev_clear: EventWriter<ClearToolEvent>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) && manager.active_tool().is_some() {
+        ev_clear.send(ClearToolEvent { source: ToolSelectionSource::Keyboard });
+    }
+}
+
+

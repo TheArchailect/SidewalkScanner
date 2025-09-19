@@ -22,6 +22,7 @@ const ScannerApp: React.FC = () => {
     selectTool,
     setRenderMode: sendRenderMode,
     onNotification,
+    clearTool,
   } = useWebRpc(canvasRef);
 
   useEffect(() => {
@@ -32,8 +33,27 @@ const ScannerApp: React.FC = () => {
   useEffect(() => {
     onNotification("tool_state_changed", (params?: Record<string, any>) => {
       console.log("Tool state changed from Bevy:", params);
+
+      if (!params?.active || params?.tool === "none") {
+        setSelectedTool(null);
+        setShowAssetLibrary(false);
+        setShowPolygonPanel(false);
+        return;
+      }
+
+      // Reflect active tool in UI
       if (params?.tool === "polygon" && params?.active) {
         setSelectedTool("polygon");
+        setShowPolygonPanel(true);
+        setShowAssetLibrary(false);
+      } else if (params?.tool === "assets" && params?.active) {
+        setSelectedTool("assets");
+        setShowAssetLibrary(true);
+        setShowPolygonPanel(false);
+      } else if (params?.tool === "measure" && params?.active) {
+        setSelectedTool("measure");
+        setShowAssetLibrary(false);
+        setShowPolygonPanel(false);
       }
     });
   }, [onNotification]);
@@ -74,6 +94,69 @@ const ScannerApp: React.FC = () => {
     }
   };
 
+  // Drop any current selection focus to iframe.
+  const refocusCanvas = () => {
+    try {
+      const sel = window.getSelection?.();
+      sel?.removeAllRanges();
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    } catch {}
+    // Do it twice across frames to cover reflows/rerenders.
+    const focusNow = () => canvasRef.current?.focus();
+    requestAnimationFrame(() => {
+      focusNow();
+      setTimeout(focusNow, 0);
+    });
+  };
+
+  // Global key handling for A/D and Escape
+  useEffect(() => {
+    const swallow = (e: KeyboardEvent) => {
+      const k = e.key;
+
+      if (k === "a" || k === "A" || k === "d" || k === "D") {
+        e.preventDefault();
+        e.stopPropagation();
+        (e as any).stopImmediatePropagation?.();
+        refocusCanvas();
+        return true;
+      }
+
+      if (k === "Escape" || k === "Esc") {
+        e.preventDefault();
+        e.stopPropagation();
+        (e as any).stopImmediatePropagation?.();
+
+        refocusCanvas();
+
+        clearTool()
+          .catch(console.error)
+          .finally(() => {
+            setSelectedTool(null);
+            setShowAssetLibrary(false);
+            setShowPolygonPanel(false);
+            refocusCanvas();
+          });
+        return true;
+      }
+      return false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      swallow(e);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (swallow(e)) refocusCanvas();
+    };
+
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    document.addEventListener("keyup", onKeyUp, { capture: true });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+      document.removeEventListener("keyup", onKeyUp as any, { capture: true } as any);
+    };
+  }, [clearTool]);
+
   return (
     <div
       style={{
@@ -83,11 +166,15 @@ const ScannerApp: React.FC = () => {
         width: "100vw",
         height: "100vh",
         background: "#000",
+        userSelect: "none",       
+        WebkitUserSelect: "none" as any,
+        caretColor: "transparent",  
       }}
     >
       {/* WASM Canvas - Full Screen */}
       <iframe
         ref={canvasRef}
+        tabIndex={-1} 
         src="./renderer/SidewalkScanner.html"
         style={{
           position: "absolute",
@@ -126,6 +213,7 @@ const ScannerApp: React.FC = () => {
             display: "flex",
             alignItems: "end",
             gap: "16px",
+            userSelect: "none",
           }}
         >
           <span style={{ color: "#00ff88" }}>
@@ -138,6 +226,7 @@ const ScannerApp: React.FC = () => {
             display: "flex",
             alignItems: "center",
             gap: "8px",
+            userSelect: "none",
           }}
         >
           <span
@@ -153,6 +242,8 @@ const ScannerApp: React.FC = () => {
             <button
               key={mode}
               onClick={() => handleRenderModeChange(mode)}
+              onMouseDown={(e) => e.preventDefault()}
+              onFocus={(e) => e.currentTarget.blur()}
               style={{
                 padding: "4px 12px",
                 fontSize: "12px",
