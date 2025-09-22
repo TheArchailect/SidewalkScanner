@@ -42,6 +42,7 @@ lerna-debug.log*
 .idea
 
 # Visual Studio
+.vs/
 *.suo
 *.ntvs*
 *.njsproj
@@ -58,7 +59,7 @@ lerna-debug.log*
 # PROJECT-SPECIFIC
 # =============================================================================
 # Asset files
-point-cloud-render-engine/assets/pre_processor_data/*
+point-cloud-render-engine/assets/output/*
 assets/*
 frontend/public/renderer/*
 # Data files
@@ -66,3 +67,6 @@ frontend/public/renderer/*
 *.dds
 *.las
 *.laz
+# lazy files
+build_everything.bat
+
