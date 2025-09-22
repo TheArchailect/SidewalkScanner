@@ -5,8 +5,12 @@ import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
 import PolygonToolPanel from "../components/PolygonSelection";
+import LoadingPanel from "../components/LoadingMessage";
 
-const ScannerApp: React.FC = () => {
+
+  const ScannerApp: React.FC = () => {
+  const [fileLoadProgress, setfileLoadProgress] = useState<Record<string, number>>({"Loading viewer": 0});
+  const [showLoadingPanel, setShowLoadingPanel] = useState<boolean>(true)
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [showAssetLibrary, setShowAssetLibrary] = useState<boolean>(false);
   const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
@@ -28,6 +32,22 @@ const ScannerApp: React.FC = () => {
   useEffect(() => {
     console.log("[ScannerApp] canvasRef current:", canvasRef.current);
   }, [canvasRef.current]);
+
+  // listen for the message that all files are loaded.
+    useEffect(() => {
+        onNotification("loading", (params?: Record<string, number>) => {
+            console.log("loaded:", params);
+            if (params?.loading) {
+                setShowLoadingPanel(true);
+                delete params["loading"];
+                setfileLoadProgress(params);
+            } else {
+                setShowLoadingPanel(false);
+            }
+        });
+    }, [onNotification]);
+
+
 
   // Listen for tool state changes from Bevy
   useEffect(() => {
@@ -277,6 +297,10 @@ const ScannerApp: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* loading panel Component */}
+      {showLoadingPanel && <LoadingPanel allFileLoadProgress={fileLoadProgress}/>}
+
 
       {/* Tool Palette Component */}
       <ToolPalette
