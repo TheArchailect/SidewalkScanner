@@ -36,13 +36,14 @@ import LoadingPanel from "../components/LoadingMessage";
   // listen for the message that all files are loaded.
     useEffect(() => {
         onNotification("loading", (params?: Record<string, number>) => {
-            console.log("loaded:", params);
+            //console.log("loaded:", params);
             if (params?.loading) {
                 setShowLoadingPanel(true);
                 delete params["loading"];
                 setfileLoadProgress(params);
             } else {
                 setShowLoadingPanel(false);
+                console.log("Everything loaded:", params);
             }
         });
     }, [onNotification]);
