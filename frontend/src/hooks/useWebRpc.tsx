@@ -79,12 +79,28 @@ interface NotificationHandler {
   (params?: Record<string, any>): void;
 }
 
+// Polygon 
+interface ClassificationCategory {
+  id: string;             // unique id "vegetation", "street furniture" etc
+  name: string;           // display name "shrub", "bike parking" etc
+  color: string;          // color for UI visualization
+  point_count?: number;   // number of points in classification
+}
+
+// Polygon operations feedback interface
+interface PolygonOperationResult {
+  success: boolean;         // show success/failure e.g display green/red status
+  points_affected: number;  // drovide metrics to tell user how many points are affected
+  message: string;          // display messages to show detailed feedback
+}
+
 export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   const [fps, setFps] = useState<number>(0);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [placedAssets, setPlacedAssets] = useState<PlacedAsset[]>([]);
+  const [classificationCategories, setClassificationCategories] = useState<ClassificationCategory[]>([]);   // Categories state array for polygon tool
 
   const requestIdCounter = useRef<number>(1);
   const pendingRequests = useRef<Map<number, PendingRequest>>(new Map());
@@ -221,6 +237,14 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
           if (message.method === "tool_state_changed") {
             console.log("Tool state changed:", message.params);
           }
+
+          // Polygon category-related notification handler
+          if (message.method === "classification_categories_updated") {
+            setClassificationCategories(message.params?.categories || [])   
+          } /*  Listening for real-time updates from Bevy engine
+                When classifications change - points are reclassified or hidden, the engine 
+                sends notification to update the UI state
+            */ 
 
           // Custom handlers
           const handler = notificationHandlers.current.get(message.method);
@@ -383,6 +407,77 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     }
   }, [sendRequest]);
 
+  /// Polygon methods
+  // Get classification categories for polygon operations
+  const getClassificationCategories = useCallback(async (): Promise<any> => {
+    try {
+      const result = await sendRequest<ClassificationCategory[]>("get_classification_categories")
+      const categories = Array.isArray(result) ? result: []
+      setClassificationCategories(categories)
+      return categories
+    } catch (error) {
+      console.error("Failed to get categories:", error)
+      setClassificationCategories([])
+    }
+    }, [sendRequest])
+    { /* Flow:  > PolygonSelection calls
+                > Hook sends JSON-RPC req
+                > Bevy returns categories
+                > Hook updates state
+                > PolygonSelection re-renders with new data
+      */}
+    
+
+    // Hide selected class types within polygon selection
+    const hidePointsInPolygon = useCallback(
+      async (sourceItems: Array<{ category_id: string; item_id: string }>): Promise<PolygonOperationResult> => {
+        try {
+          const result = await sendRequest<PolygonOperationResult>("hide_points_in_polygon", {
+            source_items: sourceItems,
+          })
+          return result
+        } catch (error) {
+          console.error("Failed to hide points in polgygon:", error)
+          throw error
+        }
+      },
+      [sendRequest]
+    )
+    { /* Flow:  > User selects polygon tool + categories
+                > PolygonSelection calls this method
+                > Hook sends RPC with "source_items"
+                > Bevy hides the matching points
+                > Returns success/failure + points_affected count
+      */}
+    
+    // Reclassify selected class types within polygon selection
+    const reclassifyPointsInPolygon = useCallback(
+      async (
+        sourceItems: Array<{ category_id: string; item_id: string }>,
+        targetCategoryId: string,
+        targetItemId: string,
+      ): Promise<PolygonOperationResult> => {
+        try {
+          const result = await sendRequest<PolygonOperationResult>("reclassify_points_in_polygon", {
+            source_items: sourceItems,
+            target_category_id: targetCategoryId,
+            target_item_id: targetItemId,
+          })
+          return result
+        } catch (error) {
+          console.error("Failed to reclassify points in polygon:", error)
+          throw error
+        }
+      },
+      [sendRequest],
+    )
+    { /* Flow:  > User selects source categories + target category
+                > PolygonSelection calls this method
+                > Hook sends RPC with source and target data
+                > Bevy reclassifies the matching points
+                > Returns operation results
+      */}
+
   return {
     // State
     fps,
@@ -390,6 +485,7 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     availableAssets,
     selectedAsset,
     placedAssets,
+    classificationCategories, // Polygon
 
     // Generic RPC methods
     sendRequest,
@@ -406,5 +502,9 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     placeAssetAtPosition,
     toggleAssetPlacementMode,
     clearAllAssets,
+    // Polygon
+    getClassificationCategories, 
+    hidePointsInPolygon,
+    reclassifyPointsInPolygon,
   };
 };
