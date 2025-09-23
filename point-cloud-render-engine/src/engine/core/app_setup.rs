@@ -50,7 +50,7 @@ use crate::engine::loading::progress::LoadingProgress;
 use crate::rpc::web_rpc::WebRpcPlugin;
 // Transitions
 use crate::engine::core::app_state::{
-    transition_to_assets_loaded, transition_to_compute_ready, transition_to_running,
+    transition_to_assets_loaded, transition_to_compute_ready, transition_to_running, update_loading_frontend,
 };
 
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
@@ -162,6 +162,7 @@ pub fn create_app() -> App {
                 configure_loaded_textures,
                 create_point_cloud_when_ready,
                 transition_to_assets_loaded,
+                update_loading_frontend,
             )
                 .chain()
                 .run_if(in_state(AppState::Loading)),
