@@ -310,13 +310,15 @@ const ScannerApp: React.FC = () => {
             alignItems: "center",
             gap: "8px",
             userSelect: "none",
+            fontFamily: theme.fonts.mono,
           }}
         >
           <span
             style={{
               fontSize: "13px",
-              color: "#999",
               marginRight: "8px",
+              color: theme.colors.primary.orange,
+              fontFamily: theme.fonts.mono,
             }}
           >
             Render Mode:
@@ -339,6 +341,7 @@ const ScannerApp: React.FC = () => {
                 color: renderMode === mode ? "#ffffff" : "#999",
                 cursor: "pointer",
                 transition: "all 0.2s ease",
+                fontFamily: theme.fonts.mono,
               }}
               onMouseEnter={(e) => {
                 if (renderMode !== mode) {

@@ -246,10 +246,10 @@ pub fn camera_controller(
 
         // Handle keyboard rotation (works always)
         let mut rotation_input = 0.0;
-        if keyboard.pressed(KeyCode::KeyQ) {
+        if keyboard.pressed(KeyCode::KeyE) {
             rotation_input -= 1.0;
         }
-        if keyboard.pressed(KeyCode::KeyE) {
+        if keyboard.pressed(KeyCode::KeyQ) {
             rotation_input += 1.0;
         }
 
