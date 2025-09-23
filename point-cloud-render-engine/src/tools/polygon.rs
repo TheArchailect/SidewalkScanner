@@ -8,6 +8,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
+use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
 
@@ -444,10 +445,13 @@ fn create_completed_polygon(
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
+                depth_bias: 0.0,
+                unlit: true,
                 ..default()
             })),
             Transform::from_translation(*point),
             CompletedPolygon { id: polygon_id },
+            RenderLayers::layer(1),
         ));
     }
 
@@ -469,10 +473,13 @@ fn create_completed_polygon(
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),
+                    depth_bias: 0.0,
+                    unlit: true,
                     ..default()
                 })),
                 Transform::from_translation(midpoint).with_rotation(rotation),
                 CompletedPolygon { id: polygon_id },
+                RenderLayers::layer(1),
             ));
         }
     }
@@ -485,9 +492,12 @@ fn create_completed_polygon(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::hsv(0., 1., 1.),
             emissive: LinearRgba::new(1., 1., 1., 1.),
+            depth_bias: 0.0,
+            unlit: true,
             ..default()
         })),
         CompletedPolygon { id: polygon_id },
+        RenderLayers::layer(1),
     ));
 }
 
@@ -516,10 +526,13 @@ pub fn update_polygon_preview(
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
+                depth_bias: 0.0,
+                unlit: true,
                 ..default()
             })),
             Transform::from_translation(preview_point),
             PolygonPreview,
+            RenderLayers::layer(1),
         ));
 
         // Show preview edge from last placed vertex to current cursor position.
@@ -536,10 +549,13 @@ pub fn update_polygon_preview(
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::hsv(0., 1., 1.),
                         emissive: LinearRgba::new(1., 1., 1., 1.),
+                        depth_bias: 0.0,
+                        unlit: true,
                         ..default()
                     })),
                     Transform::from_translation(midpoint).with_rotation(rotation),
                     PolygonPreview,
+                    RenderLayers::layer(1),
                 ));
             }
         }
@@ -597,10 +613,13 @@ pub fn update_polygon_render(
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 0.5, 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
+                depth_bias: 0.0,
+                unlit: true,
                 ..default()
             })),
             Transform::from_translation(*point),
             PolygonPoints,
+            RenderLayers::layer(1),
         ));
     }
 
@@ -621,10 +640,13 @@ pub fn update_polygon_render(
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),
+                    depth_bias: 0.0,
+                    unlit: true,
                     ..default()
                 })),
                 Transform::from_translation(midpoint).with_rotation(rotation),
                 PolygonLines,
+                RenderLayers::layer(1),
             ));
         }
     }

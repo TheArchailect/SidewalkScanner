@@ -1,13 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, CSSProperties } from "react";
 
-const Icon = ({
+interface IconProps {
+  name: string;
+  size?: number;
+  color?: string;
+  className?: string;
+  style?: CSSProperties;
+}
+
+const Icon: React.FC<IconProps> = ({
   name,
   size = 16,
   color = "currentColor",
   className = "",
   style = {},
 }) => {
-  const [svgContent, setSvgContent] = useState("");
+  const [svgContent, setSvgContent] = useState<string>("");
 
   useEffect(() => {
     const loadSvg = async () => {
@@ -40,7 +48,7 @@ const Icon = ({
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        color: color,
+        color,
         ...style,
       }}
       dangerouslySetInnerHTML={{ __html: svgContent }}

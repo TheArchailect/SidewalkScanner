@@ -1,20 +1,22 @@
-"use client";
-
 import { useState, useEffect, useRef } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import AssetLibrary from "../components/AssetLibrary";
 import ToolPalette from "../components/ToolPalette";
 import PolygonToolPanel from "../components/PolygonSelection";
 import LoadingPanel from "../components/LoadingMessage";
+import { TutorialOverlay } from "../components/TutorialOverlay";
+import { theme, styleUtils } from "../theme";
 
-
-  const ScannerApp: React.FC = () => {
-  const [fileLoadProgress, setfileLoadProgress] = useState<Record<string, number>>({"Loading viewer": 0});
-  const [showLoadingPanel, setShowLoadingPanel] = useState<boolean>(true)
+const ScannerApp: React.FC = () => {
+  const [fileLoadProgress, setfileLoadProgress] = useState<
+    Record<string, number>
+  >({ "Loading viewer": 0 });
+  const [showLoadingPanel, setShowLoadingPanel] = useState<boolean>(true);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [showAssetLibrary, setShowAssetLibrary] = useState<boolean>(false);
   const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
   const [renderMode, setRenderMode] = useState<string>("RGB");
+  const [showTutorial, setShowTutorial] = useState(true);
 
   // Create ref and pass to hook
   const canvasRef = useRef<HTMLIFrameElement | null>(null);
@@ -34,21 +36,18 @@ import LoadingPanel from "../components/LoadingMessage";
   }, [canvasRef.current]);
 
   // listen for the message that all files are loaded.
-    useEffect(() => {
-        onNotification("loading", (params?: Record<string, number>) => {
-            //console.log("loaded:", params);
-            if (params?.loading) {
-                setShowLoadingPanel(true);
-                delete params["loading"];
-                setfileLoadProgress(params);
-            } else {
-                setShowLoadingPanel(false);
-                console.log("Everything loaded:", params);
-            }
-        });
-    }, [onNotification]);
-
-
+  useEffect(() => {
+    onNotification("loading", (params?: Record<string, number>) => {
+      if (params?.loading) {
+        setShowLoadingPanel(true);
+        delete params["loading"];
+        setfileLoadProgress(params);
+      } else {
+        setShowLoadingPanel(false);
+        console.log("Everything loaded:", params);
+      }
+    });
+  }, [onNotification]);
 
   // Listen for tool state changes from Bevy
   useEffect(() => {
@@ -173,8 +172,16 @@ import LoadingPanel from "../components/LoadingMessage";
     document.addEventListener("keydown", onKeyDown, { capture: true });
     document.addEventListener("keyup", onKeyUp, { capture: true });
     return () => {
-      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
-      document.removeEventListener("keyup", onKeyUp as any, { capture: true } as any);
+      document.removeEventListener(
+        "keydown",
+        onKeyDown as any,
+        { capture: true } as any,
+      );
+      document.removeEventListener(
+        "keyup",
+        onKeyUp as any,
+        { capture: true } as any,
+      );
     };
   }, [clearTool]);
 
@@ -187,15 +194,15 @@ import LoadingPanel from "../components/LoadingMessage";
         width: "100vw",
         height: "100vh",
         background: "#000",
-        userSelect: "none",       
+        userSelect: "none",
         WebkitUserSelect: "none" as any,
-        caretColor: "transparent",  
+        caretColor: "transparent",
       }}
     >
       {/* WASM Canvas - Full Screen */}
       <iframe
         ref={canvasRef}
-        tabIndex={-1} 
+        tabIndex={-1}
         src="./renderer/SidewalkScanner.html"
         style={{
           position: "absolute",
@@ -232,12 +239,67 @@ import LoadingPanel from "../components/LoadingMessage";
             fontSize: "13px",
             color: "#999",
             display: "flex",
-            alignItems: "end",
+            alignItems: "center",
             gap: "16px",
             userSelect: "none",
           }}
         >
-          <span style={{ color: "#00ff88" }}>
+          {/* Tutorial Trigger Button */}
+          <button
+            onClick={() => setShowTutorial(true)}
+            style={{
+              width: "28px",
+              height: "28px",
+              border: "none",
+              background: "transparent",
+              borderRadius: "16px", // lg radius
+              color: "#0068ff", // blue color
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.15s ease", // fast transition
+              opacity: 1,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(0, 104, 255, 0.4)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+            aria-label="Start Tutorial"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+          <span
+            style={{
+              color: theme.colors.primary.orange,
+              fontFamily: theme.fonts.mono,
+
+              border: "none",
+              background: "transparent",
+              borderRadius: "12px",
+
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.15s ease",
+              opacity: 1,
+            }}
+          >
             {fps > 0 ? `${fps.toFixed(1)} fps` : "--"}
           </span>
         </div>
@@ -272,7 +334,7 @@ import LoadingPanel from "../components/LoadingMessage";
                 borderRadius: "4px",
                 background:
                   renderMode === mode
-                    ? "rgba(0, 255, 136, 0.2)"
+                    ? "rgba(255, 151, 0, 0.5)"
                     : "rgba(255, 255, 255, 0.05)",
                 color: renderMode === mode ? "#ffffff" : "#999",
                 cursor: "pointer",
@@ -300,8 +362,9 @@ import LoadingPanel from "../components/LoadingMessage";
       </div>
 
       {/* loading panel Component */}
-      {showLoadingPanel && <LoadingPanel allFileLoadProgress={fileLoadProgress}/>}
-
+      {showLoadingPanel && (
+        <LoadingPanel allFileLoadProgress={fileLoadProgress} />
+      )}
 
       {/* Tool Palette Component */}
       <ToolPalette
@@ -314,6 +377,12 @@ import LoadingPanel from "../components/LoadingMessage";
       {/* Asset Library Panel */}
       <AssetLibrary isVisible={showAssetLibrary} canvasRef={canvasRef} />
       <PolygonToolPanel isVisible={showPolygonPanel} canvasRef={canvasRef} />
+      {!showLoadingPanel && (
+        <TutorialOverlay
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+        />
+      )}
     </div>
   );
 };

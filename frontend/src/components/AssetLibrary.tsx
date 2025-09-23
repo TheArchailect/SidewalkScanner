@@ -1,7 +1,8 @@
-"use client";
+import type React from "react";
 
-import { useState, useEffect, RefObject } from "react";
+import { useState, useEffect, type RefObject } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
+import { theme, styleUtils } from "../theme";
 
 interface AssetLibraryProps {
   isVisible: boolean;
@@ -139,15 +140,12 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
     <div
       style={{
         position: "fixed",
-        right: "20px",
+        right: theme.spacing[6],
         top: "70px",
-        bottom: "20px",
+        bottom: theme.spacing[6],
         width: "320px",
-        background: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(20px)",
-        borderRadius: "8px",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        zIndex: 15,
+        ...styleUtils.glassPanel("dark"),
+        zIndex: theme.zIndex.modal,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -156,8 +154,8 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
       {/* Asset Library Header */}
       <div
         style={{
-          padding: "16px",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          padding: theme.spacing[5],
+          borderBottom: `1px solid ${theme.colors.border.default}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -166,21 +164,23 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         <h3
           style={{
             margin: 0,
-            fontSize: "14px",
-            fontWeight: "600",
-            color: "#fff",
+            ...styleUtils.text.subtitle(),
           }}
         >
           Asset Library
           {isLoading && (
             <span
-              style={{ fontSize: "10px", color: "#666", marginLeft: "8px" }}
+              style={{
+                fontSize: theme.fontSizes.xs,
+                color: theme.colors.gray[600],
+                marginLeft: theme.spacing[3],
+              }}
             >
               Loading...
             </span>
           )}
         </h3>
-        <div style={{ display: "flex", gap: "4px" }}>
+        <div style={{ display: "flex", gap: theme.spacing[1] }}>
           <button
             onClick={() => {
               setAssetViewMode("grid");
@@ -189,13 +189,17 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             style={{
               background:
                 assetViewMode === "grid"
-                  ? "rgba(255, 255, 255, 0.15)"
+                  ? theme.colors.background.hover
                   : "transparent",
               border: "none",
-              color: assetViewMode === "grid" ? "#fff" : "#666",
-              padding: "4px",
-              borderRadius: "3px",
+              color:
+                assetViewMode === "grid"
+                  ? theme.colors.white
+                  : theme.colors.gray[600],
+              padding: theme.spacing[1],
+              borderRadius: theme.radius.sm,
               cursor: "pointer",
+              transition: theme.transitions.fast,
             }}
           >
             <svg
@@ -220,13 +224,17 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             style={{
               background:
                 assetViewMode === "list"
-                  ? "rgba(255, 255, 255, 0.15)"
+                  ? theme.colors.background.hover
                   : "transparent",
               border: "none",
-              color: assetViewMode === "list" ? "#fff" : "#666",
-              padding: "4px",
-              borderRadius: "3px",
+              color:
+                assetViewMode === "list"
+                  ? theme.colors.white
+                  : theme.colors.gray[600],
+              padding: theme.spacing[1],
+              borderRadius: theme.radius.sm,
               cursor: "pointer",
+              transition: theme.transitions.fast,
             }}
           >
             <svg
@@ -253,10 +261,11 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             style={{
               background: "transparent",
               border: "none",
-              color: "#666",
-              padding: "4px",
-              borderRadius: "3px",
+              color: theme.colors.gray[600],
+              padding: theme.spacing[1],
+              borderRadius: theme.radius.sm,
               cursor: "pointer",
+              transition: theme.transitions.fast,
             }}
             title="Refresh assets"
           >
@@ -278,7 +287,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
       </div>
 
       {/* Search Bar */}
-      <div style={{ padding: "12px 16px" }}>
+      <div style={{ padding: `${theme.spacing[4]} ${theme.spacing[5]}` }}>
         <input
           type="text"
           placeholder="Search assets..."
@@ -289,13 +298,9 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
           }}
           style={{
             width: "100%",
-            background: "rgba(255, 255, 255, 0.05)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            borderRadius: "4px",
-            padding: "8px 12px",
-            fontSize: "12px",
-            color: "#fff",
-            outline: "none",
+            ...styleUtils.inputField(),
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            fontSize: theme.fontSizes.base,
             boxSizing: "border-box",
           }}
         />
@@ -304,10 +309,10 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
       {/* Category Tabs */}
       <div
         style={{
-          padding: "0 16px 20px",
+          padding: `0 ${theme.spacing[5]} ${theme.spacing[6]}`,
           display: "flex",
           flexWrap: "wrap",
-          gap: "6px",
+          gap: theme.spacing[2],
         }}
       >
         {calculatedCategories.map((category) => (
@@ -318,17 +323,10 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
               returnFocusToCanvas();
             }}
             style={{
-              background:
-                selectedCategory === category.id
-                  ? "rgba(0, 255, 136, 0.2)"
-                  : "rgba(255, 255, 255, 0.05)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              borderRadius: "12px",
-              color: selectedCategory === category.id ? "#00ff88" : "#999",
-              padding: "4px 8px",
-              fontSize: "11px",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
+              ...styleUtils.toolItem(selectedCategory === category.id),
+              padding: `${theme.spacing[1]} ${theme.spacing[3]}`,
+              borderRadius: theme.radius.xl,
+              fontSize: theme.fontSizes.sm,
             }}
           >
             {category.name} ({category.count})
@@ -340,18 +338,23 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
       {selectedAsset && (
         <div
           style={{
-            margin: "0 16px 12px",
-            padding: "8px 12px",
-            background: "rgba(0, 255, 136, 0.1)",
-            border: "1px solid rgba(0, 255, 136, 0.3)",
-            borderRadius: "4px",
-            fontSize: "11px",
-            color: "#00ff88",
+            margin: `0 ${theme.spacing[5]} ${theme.spacing[4]}`,
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            background: `rgba(255, 151, 0, 0.1)`,
+            border: `1px solid ${theme.colors.border.orange}`,
+            borderRadius: theme.radius.base,
+            fontSize: theme.fontSizes.sm,
+            color: theme.colors.primary.orange,
           }}
         >
           Selected: {selectedAsset.name}
           {selectedAsset.point_count && (
-            <span style={{ color: "#666", marginLeft: "8px" }}>
+            <span
+              style={{
+                color: theme.colors.gray[600],
+                marginLeft: theme.spacing[3],
+              }}
+            >
               ({selectedAsset.point_count.toLocaleString()} points)
             </span>
           )}
@@ -362,7 +365,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
       <div
         style={{
           flex: 1,
-          padding: "0 16px 16px",
+          padding: `0 ${theme.spacing[5]} ${theme.spacing[5]}`,
           overflowY: "auto",
         }}
       >
@@ -373,8 +376,8 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
               alignItems: "center",
               justifyContent: "center",
               height: "100%",
-              color: "#666",
-              fontSize: "12px",
+              ...styleUtils.text.body(),
+              color: theme.colors.gray[600],
             }}
           >
             {isLoading ? "Loading assets..." : "No assets found"}
@@ -384,7 +387,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(2, 1fr)",
-              gap: "8px",
+              gap: theme.spacing[3],
             }}
           >
             {filteredAssets.map((asset) => (
@@ -392,33 +395,25 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                 key={asset.id}
                 onClick={() => handleAssetSelection(asset)}
                 style={{
-                  background:
-                    selectedAsset?.id === asset.id
-                      ? "rgba(0, 255, 136, 0.1)"
-                      : "rgba(255, 255, 255, 0.05)",
-                  border:
-                    selectedAsset?.id === asset.id
-                      ? "1px solid rgba(0, 255, 136, 0.3)"
-                      : "1px solid rgba(255, 255, 255, 0.08)",
-                  borderRadius: "6px",
-                  padding: "8px",
+                  ...styleUtils.toolItem(selectedAsset?.id === asset.id),
+                  padding: theme.spacing[3],
+                  borderRadius: theme.radius.md,
                   cursor: "pointer",
-                  transition: "all 0.15s ease",
+                  transition: theme.transitions.fast,
                 }}
                 onMouseEnter={(e) => {
                   if (selectedAsset?.id !== asset.id) {
-                    e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.background = `rgba(0, 104, 255, 0.08)`;
                     e.currentTarget.style.borderColor =
-                      "rgba(255, 255, 255, 0.15)";
+                      theme.colors.border.blue;
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (selectedAsset?.id !== asset.id) {
                     e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.05)";
+                      theme.colors.background.input;
                     e.currentTarget.style.borderColor =
-                      "rgba(255, 255, 255, 0.08)";
+                      theme.colors.border.default;
                   }
                 }}
               >
@@ -430,22 +425,22 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                       "linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
-                    borderRadius: "4px",
-                    marginBottom: "6px",
+                    borderRadius: theme.radius.base,
+                    marginBottom: theme.spacing[2],
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "10px",
-                    color: "#666",
+                    fontSize: theme.fontSizes.xs,
+                    color: theme.colors.gray[600],
                   }}
                 >
                   3D Preview
                 </div>
                 <div
                   style={{
-                    fontSize: "11px",
-                    color: "#fff",
-                    fontWeight: "500",
+                    ...styleUtils.text.body(),
+                    fontSize: theme.fontSizes.sm,
+                    fontWeight: theme.fontWeights.medium,
                     marginBottom: "2px",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -456,8 +451,8 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                 </div>
                 <div
                   style={{
-                    fontSize: "10px",
-                    color: "#666",
+                    ...styleUtils.text.caption(),
+                    fontSize: theme.fontSizes.xs,
                   }}
                 >
                   {asset.point_count
@@ -468,38 +463,36 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             ))}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: theme.spacing[1],
+            }}
+          >
             {filteredAssets.map((asset) => (
               <div
                 key={asset.id}
                 onClick={() => handleAssetSelection(asset)}
                 style={{
-                  background:
-                    selectedAsset?.id === asset.id
-                      ? "rgba(0, 255, 136, 0.1)"
-                      : "rgba(255, 255, 255, 0.05)",
-                  border:
-                    selectedAsset?.id === asset.id
-                      ? "1px solid rgba(0, 255, 136, 0.3)"
-                      : "1px solid rgba(255, 255, 255, 0.08)",
-                  borderRadius: "4px",
-                  padding: "8px 12px",
+                  ...styleUtils.toolItem(selectedAsset?.id === asset.id),
+                  padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+                  borderRadius: theme.radius.base,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
-                  gap: "12px",
-                  transition: "all 0.15s ease",
+                  gap: theme.spacing[4],
+                  transition: theme.transitions.fast,
                 }}
                 onMouseEnter={(e) => {
                   if (selectedAsset?.id !== asset.id) {
-                    e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.08)";
+                    e.currentTarget.style.background = `rgba(0, 104, 255, 0.08)`;
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (selectedAsset?.id !== asset.id) {
                     e.currentTarget.style.background =
-                      "rgba(255, 255, 255, 0.05)";
+                      theme.colors.background.input;
                   }
                 }}
               >
@@ -511,13 +504,13 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                       "linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
-                    borderRadius: "3px",
+                    borderRadius: theme.radius.sm,
                     flexShrink: 0,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     fontSize: "8px",
-                    color: "#666",
+                    color: theme.colors.gray[600],
                   }}
                 >
                   3D
@@ -525,9 +518,9 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
-                      fontSize: "12px",
-                      color: "#fff",
-                      fontWeight: "500",
+                      ...styleUtils.text.body(),
+                      fontSize: theme.fontSizes.base,
+                      fontWeight: theme.fontWeights.medium,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -537,8 +530,8 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                   </div>
                   <div
                     style={{
-                      fontSize: "10px",
-                      color: "#666",
+                      ...styleUtils.text.caption(),
+                      fontSize: theme.fontSizes.xs,
                     }}
                   >
                     {asset.point_count

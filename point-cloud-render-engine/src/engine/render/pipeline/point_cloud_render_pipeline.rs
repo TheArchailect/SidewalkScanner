@@ -101,8 +101,8 @@ impl Plugin for PointCloudRenderPlugin {
             .add_render_graph_edges(
                 Core3d,
                 (
-                    Node3d::MainOpaquePass,
                     PointCloudRenderLabel,
+                    Node3d::MainOpaquePass,
                     Node3d::Tonemapping,
                 ),
             );
@@ -118,7 +118,7 @@ impl Plugin for PointCloudRenderPlugin {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-struct PointCloudRenderLabel;
+pub struct PointCloudRenderLabel;
 
 /// Resource containing point cloud rendering parameters extracted from main world.
 #[derive(Resource, Default, ExtractResource, Clone)]

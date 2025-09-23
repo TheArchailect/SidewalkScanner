@@ -1,11 +1,10 @@
 use crate::constants::path::RELATIVE_MANIFEST_PATH;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::loading::progress::LoadingProgress;
 use crate::load_unified_textures;
 use bevy::prelude::*;
-
-use crate::engine::assets::point_cloud_assets::PointCloudAssets;
-use crate::engine::assets::scene_manifest::SceneManifest;
 
 #[derive(Resource, Default)]
 pub struct ManifestLoader {
@@ -42,6 +41,7 @@ pub fn load_bounds_system(
             // Update camera with bounds
             let bounds = manifest.to_point_cloud_bounds();
             let vp_camera = ViewportCamera::with_bounds(&bounds);
+
             commands.insert_resource(vp_camera);
 
             // Start loading textures now that we have bounds

@@ -6,43 +6,21 @@ use crate::tools::asset_manager::interactions::ScrollCapture;
 use bevy::{
     input::mouse::{MouseMotion, MouseWheel},
     prelude::*,
-    window::PrimaryWindow,
 };
 
 #[derive(Resource)]
 pub struct ViewportCamera {
     pub focus_point: Vec3,
     pub height: f32,
-    pub rotation: Quat,
-    pub is_panning: bool,
     pub last_mouse_pos: Vec2,
     pub ground_height: f32,
-    pub pitch: f32,
     pub yaw: f32,
-    pub pan_start_world_point: Option<Vec3>,
     // Add smoothing for intersection
     pub last_intersection: Option<Vec3>,
     pub intersection_smooth_factor: f32,
 }
 
 impl ViewportCamera {
-    pub fn new(center: Vec3, ground_height: f32) -> Self {
-        let size = Vec3::new(100.0, 50.0, 100.0);
-        Self {
-            focus_point: center,
-            height: size.length() * 0.8,
-            is_panning: false,
-            last_mouse_pos: Vec2::ZERO,
-            ground_height,
-            rotation: Quat::default(),
-            pitch: -0.6,
-            yaw: 0.0,
-            pan_start_world_point: None,
-            last_intersection: None,
-            intersection_smooth_factor: 0.05, // Adjust for smoothness vs responsiveness
-        }
-    }
-
     pub fn with_bounds(bounds: &PointCloudBounds) -> Self {
         let center = bounds.center();
         let size = bounds.size();
@@ -51,15 +29,11 @@ impl ViewportCamera {
         Self {
             focus_point: center,
             height: size.length() * 0.2,
-            rotation: Quat::from_rotation_x(-0.6),
-            is_panning: false,
             last_mouse_pos: Vec2::ZERO,
             ground_height,
-            pitch: -0.6,
             yaw: 0.0,
-            pan_start_world_point: None,
             last_intersection: None,
-            intersection_smooth_factor: 0.15,
+            intersection_smooth_factor: 0.3,
         }
     }
 
@@ -218,22 +192,8 @@ impl ViewportCamera {
     }
 }
 
-impl Default for ViewportCamera {
-    fn default() -> Self {
-        Self {
-            focus_point: Vec3::ZERO,
-            height: 100.0,
-            rotation: Quat::default(),
-            is_panning: false,
-            last_mouse_pos: Vec2::ZERO,
-            ground_height: 0.0,
-            pitch: -0.6,
-            yaw: 0.0,
-            pan_start_world_point: None,
-            last_intersection: None,
-            intersection_smooth_factor: 0.15,
-        }
-    }
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
 
 pub fn camera_controller(
@@ -242,7 +202,6 @@ pub fn camera_controller(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut scroll_events: EventReader<MouseWheel>,
-    windows: Query<&Window, With<PrimaryWindow>>,
     mut cursor_moved: EventReader<CursorMoved>,
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -252,27 +211,27 @@ pub fn camera_controller(
     cap: Res<ScrollCapture>,
 ) {
     if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
-        // Update cursor position
-        for cursor in cursor_moved.read() {
-            maps_camera.last_mouse_pos = cursor.position;
-        }
-
-        // Handle zoom (scroll wheel)
+        // Update cursor position if we're not rotating some asset
         if !cap.lock_zoom_this_frame {
+            for cursor in cursor_moved.read() {
+                maps_camera.last_mouse_pos = cursor.position;
+            }
+
+            // Handle zoom (scroll wheel)
             for scroll in scroll_events.read() {
                 let zoom_factor = if scroll.y > 0.0 { 0.9 } else { 1.1 };
-                maps_camera.height *= zoom_factor;
-                maps_camera.height = maps_camera.height.clamp(5.0, 5000.0);
+                maps_camera.height = lerp(
+                    maps_camera.height,
+                    maps_camera.height * zoom_factor,
+                    maps_camera.intersection_smooth_factor,
+                );
             }
-        } else {
-            scroll_events.clear();
         }
 
-        // Collect mouse motion
         let total_motion: Vec2 = mouse_motion.read().map(|motion| motion.delta).sum();
-
         let is_panning = mouse_button.pressed(MouseButton::Middle);
-        let is_following_mouse = keyboard.pressed(KeyCode::Space);
+        let is_following_mouse =
+            keyboard.pressed(KeyCode::Space) | mouse_button.pressed(MouseButton::Right);
 
         // Handle panning - fixed directions
         if is_panning && total_motion != Vec2::ZERO {
@@ -287,10 +246,10 @@ pub fn camera_controller(
 
         // Handle keyboard rotation (works always)
         let mut rotation_input = 0.0;
-        if keyboard.pressed(KeyCode::KeyA) {
+        if keyboard.pressed(KeyCode::KeyQ) {
             rotation_input -= 1.0;
         }
-        if keyboard.pressed(KeyCode::KeyD) {
+        if keyboard.pressed(KeyCode::KeyE) {
             rotation_input += 1.0;
         }
 
@@ -304,6 +263,34 @@ pub fn camera_controller(
             return;
         };
 
+        // WASD camera focus point update
+        let was_speed_mult = maps_camera.height * 0.35;
+        let movement_speed = 2.0 * time.delta_secs();
+        if keyboard.pressed(KeyCode::KeyW) {
+            let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
+            let forward = yaw_rot * Vec3::Z;
+            let new_position = maps_camera.focus_point + forward * -1.0 * was_speed_mult;
+            maps_camera.focus_point = maps_camera.focus_point.lerp(new_position, movement_speed);
+        }
+        if keyboard.pressed(KeyCode::KeyA) {
+            let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
+            let right = yaw_rot * Vec3::X;
+            let new_position = maps_camera.focus_point + right * -1.0 * was_speed_mult;
+            maps_camera.focus_point = maps_camera.focus_point.lerp(new_position, movement_speed);
+        }
+        if keyboard.pressed(KeyCode::KeyS) {
+            let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
+            let forward = yaw_rot * Vec3::Z;
+            let new_position = maps_camera.focus_point + forward * 1.0 * was_speed_mult;
+            maps_camera.focus_point = maps_camera.focus_point.lerp(new_position, movement_speed);
+        }
+        if keyboard.pressed(KeyCode::KeyD) {
+            let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
+            let right = yaw_rot * Vec3::X;
+            let new_position = maps_camera.focus_point + right * 1.0 * was_speed_mult;
+            maps_camera.focus_point = maps_camera.focus_point.lerp(new_position, movement_speed);
+        }
+
         // Follow mouse with spacebar
         if is_following_mouse {
             let last_pos = maps_camera.last_mouse_pos;
@@ -314,14 +301,13 @@ pub fn camera_controller(
                 images.get(&assets.heightmap_texture),
                 &bounds,
             ) {
-                let movement_speed = 2.0 * time.delta_secs();
                 maps_camera.focus_point = maps_camera.focus_point.lerp(pivot_point, movement_speed);
             }
         }
 
         // Simple camera positioning
         let yaw_rot = Quat::from_rotation_y(maps_camera.yaw);
-        let horizontal_offset = yaw_rot * Vec3::new(0.0, 0.0, maps_camera.height * 0.5);
+        let horizontal_offset = yaw_rot * Vec3::new(0.0, 0.0, maps_camera.height);
         let target_pos = maps_camera.focus_point
             + Vec3::new(horizontal_offset.x, maps_camera.height, horizontal_offset.z);
 
@@ -329,7 +315,7 @@ pub fn camera_controller(
             Transform::from_translation(target_pos).looking_at(maps_camera.focus_point, Vec3::Y);
 
         // Smooth interpolation
-        let lerp_speed = 12.0 * time.delta_secs();
+        let lerp_speed = 24.0 * time.delta_secs();
         camera_transform.translation = camera_transform
             .translation
             .lerp(target_transform.translation, lerp_speed.min(1.0));

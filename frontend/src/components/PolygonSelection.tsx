@@ -1,8 +1,7 @@
-"use client";
-
 import type React from "react";
 import { useState, useEffect, useRef, type RefObject } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
+import { theme, styleUtils } from "../theme";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
@@ -34,7 +33,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     {
       id: "vehicles",
       name: "Vehicles",
-      color: "#3b82f6",
+      color: theme.colors.primary.blue,
       items: [
         { id: "car", name: "Cars", selected: false },
         { id: "truck", name: "Trucks", selected: false },
@@ -44,7 +43,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     {
       id: "vegetation",
       name: "Vegetation",
-      color: "#22c55e",
+      color: theme.colors.success,
       items: [
         { id: "tree", name: "Trees", selected: false },
         { id: "grass", name: "Grass", selected: false },
@@ -54,7 +53,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     {
       id: "infrastructure",
       name: "Infrastructure",
-      color: "#f59e0b",
+      color: theme.colors.primary.orange,
       items: [
         { id: "building", name: "Buildings", selected: false },
         { id: "road", name: "Roads", selected: false },
@@ -162,14 +161,11 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
       onKeyDownCapture={handleKeyDownCapture}
       style={{
         position: "fixed",
-        right: "20px",
+        right: theme.spacing[6],
         top: "70px",
         width: "360px",
-        background: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(20px)",
-        borderRadius: "8px",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        zIndex: 15,
+        ...styleUtils.glassPanel("medium"),
+        zIndex: theme.zIndex.modal,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -178,41 +174,48 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
       {/* Header */}
       <div
         style={{
-          padding: "16px",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          padding: theme.spacing[5],
+          borderBottom: `1px solid ${theme.colors.border.default}`,
         }}
       >
         <h3
           style={{
-            margin: "0 0 16px 0",
-            fontSize: "14px",
-            fontWeight: "600",
-            color: "#fff",
+            margin: `0 0 ${theme.spacing[5]} 0`,
+            ...styleUtils.text.subtitle(),
             textAlign: "center",
           }}
         >
           Polygon Tool
         </h3>
 
-        <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: theme.spacing[2],
+            marginBottom: theme.spacing[4],
+          }}
+        >
           <button
             onClick={() => {
               setOperation("hide");
               returnFocusToCanvas();
             }}
             style={{
+              ...styleUtils.buttonBase(),
               background:
                 operation === "hide"
-                  ? "rgba(0, 0, 0, 0.6)"
-                  : "rgba(0, 0, 0, 0.3)",
-              border: `1px solid ${operation === "hide" ? "rgba(239, 68, 68, 0.8)" : "rgba(255, 255, 255, 0.1)"}`,
-              color: operation === "hide" ? "#fca5a5" : "#999",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: "500",
-              transition: "all 0.15s ease",
+                  ? theme.colors.background.overlay
+                  : theme.colors.background.card,
+              border: `1px solid ${operation === "hide" ? theme.colors.border.orangeStrong : theme.colors.border.light}`,
+              color:
+                operation === "hide"
+                  ? theme.colors.primary.orangeLight
+                  : theme.colors.gray[500],
+              padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+              borderRadius: theme.radius.md,
+              fontSize: theme.fontSizes.sm,
+              fontWeight: theme.fontWeights.medium,
+              transition: theme.transitions.fast,
               flex: 1,
             }}
           >
@@ -224,18 +227,21 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               returnFocusToCanvas();
             }}
             style={{
+              ...styleUtils.buttonBase(),
               background:
                 operation === "reclassify"
-                  ? "rgba(0, 0, 0, 0.6)"
-                  : "rgba(0, 0, 0, 0.3)",
-              border: `1px solid ${operation === "reclassify" ? "rgba(59, 130, 246, 0.8)" : "rgba(255, 255, 255, 0.1)"}`,
-              color: operation === "reclassify" ? "#93c5fd" : "#999",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: "500",
-              transition: "all 0.15s ease",
+                  ? theme.colors.background.overlay
+                  : theme.colors.background.card,
+              border: `1px solid ${operation === "reclassify" ? theme.colors.border.orangeStrong : theme.colors.border.light}`,
+              color:
+                operation === "reclassify"
+                  ? theme.colors.primary.orangeLight
+                  : theme.colors.gray[500],
+              padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+              borderRadius: theme.radius.md,
+              fontSize: theme.fontSizes.sm,
+              fontWeight: theme.fontWeights.medium,
+              transition: theme.transitions.fast,
               flex: 1,
             }}
           >
@@ -245,14 +251,13 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
         <div
           style={{
-            fontSize: "11px",
-            color: "#999",
+            ...styleUtils.text.caption(),
             textAlign: "center",
             lineHeight: "1.4",
-            background: "rgba(0, 0, 0, 0.3)",
-            padding: "8px 12px",
-            borderRadius: "4px",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
+            background: theme.colors.background.card,
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            borderRadius: theme.radius.base,
+            border: `1px solid ${theme.colors.border.light}`,
           }}
         >
           {operation === "hide"
@@ -263,22 +268,22 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
       <div
         style={{
-          padding: "12px 16px",
+          padding: `${theme.spacing[4]} ${theme.spacing[5]}`,
           flex: 1,
           maxHeight: "400px",
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: "12px",
+          gap: theme.spacing[4],
         }}
       >
         {/* Source Selection Card */}
         <div
           style={{
-            background: "rgba(0, 0, 0, 0.3)",
-            border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: "6px",
-            padding: "12px",
+            background: theme.colors.background.card,
+            border: `1px solid ${theme.colors.border.default}`,
+            borderRadius: theme.radius.md,
+            padding: theme.spacing[4],
           }}
         >
           <div
@@ -286,48 +291,32 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              marginBottom: "12px",
+              marginBottom: theme.spacing[4],
             }}
           >
             <h4
               style={{
                 margin: 0,
-                fontSize: "12px",
-                fontWeight: "600",
-                color: "#fff",
+                fontSize: theme.fontSizes.base,
+                fontWeight: theme.fontWeights.semibold,
+                color: theme.colors.white,
               }}
             >
               {operation === "hide" ? "What to Hide" : "What to Reclassify"}
             </h4>
-
-            <div
-              style={{
-                fontSize: "10px",
-                padding: "2px 6px",
-                borderRadius: "8px",
-                fontWeight: "500",
-                background: hasAnySelection
-                  ? "rgba(0, 255, 136, 0.2)"
-                  : "rgba(0, 0, 0, 0.4)",
-                color: hasAnySelection ? "#00ff88" : "#999",
-                border: `1px solid ${hasAnySelection ? "rgba(0, 255, 136, 0.3)" : "rgba(255, 255, 255, 0.1)"}`,
-              }}
-            >
-              {hasAnySelection ? `${getSelectedCount()} selected` : "All types"}
-            </div>
           </div>
 
           {categories.map((category) => (
-            <div key={category.id} style={{ marginBottom: "8px" }}>
+            <div key={category.id} style={{ marginBottom: theme.spacing[3] }}>
               <div
                 style={{
-                  fontSize: "11px",
+                  fontSize: theme.fontSizes.sm,
                   color: category.color,
-                  marginBottom: "4px",
-                  fontWeight: "500",
+                  marginBottom: theme.spacing[1],
+                  fontWeight: theme.fontWeights.medium,
                   display: "flex",
                   alignItems: "center",
-                  gap: "4px",
+                  gap: theme.spacing[1],
                 }}
               >
                 <div
@@ -345,7 +334,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                 style={{
                   display: "flex",
                   flexWrap: "wrap",
-                  gap: "4px",
+                  gap: theme.spacing[1],
                   paddingLeft: "10px",
                 }}
               >
@@ -354,17 +343,12 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                     key={item.id}
                     onClick={() => toggleSourceItem(category.id, item.id)}
                     style={{
-                      background: item.selected
-                        ? "rgba(0, 255, 136, 0.2)"
-                        : "rgba(0, 0, 0, 0.3)",
-                      border: `1px solid ${item.selected ? "rgba(0, 255, 136, 0.4)" : "rgba(255, 255, 255, 0.1)"}`,
-                      borderRadius: "4px",
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                      fontSize: "10px",
-                      color: item.selected ? "#00ff88" : "#999",
-                      fontWeight: item.selected ? "500" : "400",
-                      transition: "all 0.15s ease",
+                      ...styleUtils.toolItem(item.selected),
+                      padding: `${theme.spacing[1]} ${theme.spacing[3]}`,
+                      fontSize: theme.fontSizes.xs,
+                      fontWeight: item.selected
+                        ? theme.fontWeights.medium
+                        : theme.fontWeights.normal,
                     }}
                   >
                     {item.name}
@@ -379,27 +363,27 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           style={{
             minHeight: operation === "reclassify" ? "100px" : "0px",
             overflow: "hidden",
-            transition: "all 0.3s ease",
+            transition: theme.transitions.slow,
           }}
         >
           {operation === "reclassify" && (
             <div
               style={{
-                background: "rgba(59, 130, 246, 0.1)",
-                border: "1px solid rgba(59, 130, 246, 0.2)",
-                borderRadius: "6px",
-                padding: "12px",
+                background: theme.colors.background.overlay,
+                border: `1px solid ${theme.colors.border.orangeStrong}`,
+                borderRadius: theme.radius.md,
+                padding: theme.spacing[4],
               }}
             >
               <h4
                 style={{
-                  margin: "0 0 8px 0",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#93c5fd",
+                  margin: `0 0 ${theme.spacing[3]} 0`,
+                  fontSize: theme.fontSizes.base,
+                  fontWeight: theme.fontWeights.semibold,
+                  color: theme.colors.primary.orangeLight,
                   display: "flex",
                   alignItems: "center",
-                  gap: "6px",
+                  gap: theme.spacing[2],
                 }}
               >
                 <span>→</span>
@@ -407,7 +391,11 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               </h4>
 
               <div
-                style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: theme.spacing[2],
+                }}
               >
                 <select
                   value={targetCategory}
@@ -417,19 +405,18 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                     returnFocusToCanvas();
                   }}
                   style={{
-                    background: "rgba(0, 0, 0, 0.4)",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: "4px",
-                    color: "#fff",
-                    padding: "8px 10px",
-                    fontSize: "11px",
+                    ...styleUtils.inputField(),
+                    padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
+                    fontSize: theme.fontSizes.sm,
                     cursor: "pointer",
-                    outline: "none",
                   }}
                 >
                   <option
                     value=""
-                    style={{ background: "#1a1a1a", color: "#fff" }}
+                    style={{
+                      background: theme.colors.gray[800],
+                      color: theme.colors.white,
+                    }}
                   >
                     Choose category...
                   </option>
@@ -437,7 +424,10 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                     <option
                       key={cat.id}
                       value={cat.id}
-                      style={{ background: "#1a1a1a", color: "#fff" }}
+                      style={{
+                        background: theme.colors.gray[800],
+                        color: theme.colors.white,
+                      }}
                     >
                       {cat.name}
                     </option>
@@ -452,19 +442,18 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                       returnFocusToCanvas();
                     }}
                     style={{
-                      background: "rgba(0, 0, 0, 0.4)",
-                      border: "1px solid rgba(255, 255, 255, 0.1)",
-                      borderRadius: "4px",
-                      color: "#fff",
-                      padding: "8px 10px",
-                      fontSize: "11px",
+                      ...styleUtils.inputField(),
+                      padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
+                      fontSize: theme.fontSizes.sm,
                       cursor: "pointer",
-                      outline: "none",
                     }}
                   >
                     <option
                       value=""
-                      style={{ background: "#1a1a1a", color: "#fff" }}
+                      style={{
+                        background: theme.colors.gray[800],
+                        color: theme.colors.white,
+                      }}
                     >
                       Choose specific type...
                     </option>
@@ -474,7 +463,10 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                         <option
                           key={item.id}
                           value={item.id}
-                          style={{ background: "#1a1a1a", color: "#fff" }}
+                          style={{
+                            background: theme.colors.gray[800],
+                            color: theme.colors.white,
+                          }}
                         >
                           {item.name}
                         </option>
@@ -489,24 +481,19 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
       <div
         style={{
-          padding: "12px 16px",
-          borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+          padding: `${theme.spacing[4]} ${theme.spacing[5]}`,
+          borderTop: `1px solid ${theme.colors.border.default}`,
           display: "flex",
-          gap: "8px",
+          gap: theme.spacing[3],
         }}
       >
         <button
           onClick={handleCancel}
           style={{
-            background: "rgba(0, 0, 0, 0.3)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            borderRadius: "4px",
-            color: "#999",
-            padding: "8px 12px",
-            fontSize: "11px",
-            fontWeight: "500",
-            cursor: "pointer",
-            transition: "all 0.15s ease",
+            ...styleUtils.buttonGhost(),
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            fontSize: theme.fontSizes.sm,
+            fontWeight: theme.fontWeights.semibold,
             flex: "1",
           }}
         >
@@ -518,34 +505,34 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
             operation === "reclassify" && (!targetCategory || !targetItem)
           }
           style={{
+            ...styleUtils.buttonBase(),
             background:
               operation === "reclassify" && (!targetCategory || !targetItem)
-                ? "rgba(0, 0, 0, 0.3)"
+                ? theme.colors.background.card
                 : operation === "hide"
-                ? "rgba(0, 0, 0, 0.6)"
-                : "rgba(0, 0, 0, 0.6)",
+                  ? theme.colors.background.overlay
+                  : theme.colors.background.overlay,
             border: `1px solid ${
               operation === "reclassify" && (!targetCategory || !targetItem)
-                ? "rgba(255, 255, 255, 0.1)"
+                ? theme.colors.border.light
                 : operation === "hide"
-                ? "rgba(239, 68, 68, 0.8)"
-                : "rgba(59, 130, 246, 0.8)"
+                  ? theme.colors.border.orangeStrong
+                  : theme.colors.border.blueStrong
             }`,
-            borderRadius: "4px",
             color:
               operation === "reclassify" && (!targetCategory || !targetItem)
-                ? "#666"
+                ? theme.colors.gray[600]
                 : operation === "hide"
-                ? "#fca5a5"
-                : "#93c5fd",
-            padding: "8px 12px",
-            fontSize: "11px",
-            fontWeight: "600",
+                  ? theme.colors.primary.orangeLight
+                  : theme.colors.primary.blueLight,
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            fontSize: theme.fontSizes.sm,
+            fontWeight: theme.fontWeights.semibold,
             cursor:
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? "not-allowed"
                 : "pointer",
-            transition: "all 0.15s ease",
+            transition: theme.transitions.fast,
             flex: "2",
           }}
         >
@@ -554,8 +541,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               ? "Hide Selected"
               : "Hide All"
             : hasAnySelection
-            ? "Reclassify Selected"
-            : "Reclassify All"}
+              ? "Reclassify Selected"
+              : "Reclassify All"}
         </button>
       </div>
     </div>

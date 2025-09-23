@@ -28,7 +28,7 @@ pub fn place_cube_on_world_click(
     mut placed_assets: ResMut<PlacedAssetInstances>,
     mut existing_instances: Query<&mut InstancedAssetData>,
 ) {
-    // Only run if placement mode is active and left mouse was just clicked
+    // Only run if placement mode is active and right mouse was just clicked
     if !place.active || !buttons.just_pressed(MouseButton::Left) {
         return;
     }
@@ -69,17 +69,24 @@ pub fn place_cube_on_world_click(
     let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) else {
         return;
     };
+
     let picked = if let Some(ref name) = place.selected_asset_name {
         manifest
             .asset_atlas
             .as_ref()
             .and_then(|aa| aa.assets.iter().find(|a| a.name == *name))
     } else {
-        manifest
-            .asset_atlas
-            .as_ref()
-            .and_then(|aa| aa.assets.first())
+        return;
     };
+
+    // we shouldn't have a default chosen asset for placement
+    // else {
+    //     manifest
+    //         .asset_atlas
+    //         .as_ref()
+    //         .and_then(|aa| aa.assets.first())
+    // };
+
     let Some(asset_meta) = picked else {
         return;
     };

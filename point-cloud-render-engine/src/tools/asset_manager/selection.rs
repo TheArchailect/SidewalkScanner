@@ -1,6 +1,6 @@
-use bevy::prelude::*;
-use super::state::*;
 use super::ray::ray_hits_obb;
+use super::state::*;
+use bevy::prelude::*;
 
 // Toggles selection of placed bounds on left mouse click
 pub fn toggle_select_on_click(
@@ -10,13 +10,23 @@ pub fn toggle_select_on_click(
     q_bounds: Query<(Entity, &GlobalTransform, &BoundsSize, Option<&Selected>), With<PlacedBounds>>,
     mut commands: Commands,
 ) {
-    if !buttons.just_pressed(MouseButton::Left) { return; }
+    if !buttons.just_pressed(MouseButton::Right) {
+        return;
+    }
 
-    let Ok(window) = windows.single() else { return; };
-    let Some(cursor_pos) = window.cursor_position() else { return; };
-    let Ok((cam_xf, camera)) = cameras.single() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok((cam_xf, camera)) = cameras.single() else {
+        return;
+    };
 
-    let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) else { return; };
+    let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) else {
+        return;
+    };
     let origin = ray.origin;
     let dir = ray.direction.as_vec3();
 
@@ -35,19 +45,42 @@ pub fn toggle_select_on_click(
             if sel.is_some() {
                 commands.entity(e).remove::<Selected>();
                 commands.entity(e).remove::<ActiveRotating>();
-                commands.entity(e).insert(bevy::pbr::wireframe::WireframeColor { color: Color::WHITE });
+                commands
+                    .entity(e)
+                    .insert(bevy::pbr::wireframe::WireframeColor {
+                        color: Color::WHITE,
+                    });
             }
         }
         // Select hit
         if !was_selected {
             commands.entity(hit_e).insert(Selected);
             commands.entity(hit_e).insert(ActiveRotating);
-            commands.entity(hit_e).insert(bevy::pbr::wireframe::WireframeColor { color: Color::srgb(1.0, 1.0, 0.0) });
+            commands
+                .entity(hit_e)
+                .insert(bevy::pbr::wireframe::WireframeColor {
+                    color: Color::srgb(1.0, 1.0, 0.0),
+                });
+        }
+    } else {
+        for (e, _, _, selected) in &q_bounds {
+            if selected.is_some() {
+                commands.entity(e).remove::<Selected>();
+                commands.entity(e).remove::<ActiveRotating>();
+                commands
+                    .entity(e)
+                    .insert(bevy::pbr::wireframe::WireframeColor {
+                        color: Color::WHITE,
+                    });
+            }
         }
     }
 }
 
-pub fn reflect_selection_lock(q_selected: Query<(), With<Selected>>, mut lock: ResMut<SelectionLock>) {
+pub fn reflect_selection_lock(
+    q_selected: Query<(), With<Selected>>,
+    mut lock: ResMut<SelectionLock>,
+) {
     lock.active = !q_selected.is_empty();
 }
 
@@ -62,9 +95,12 @@ pub fn deselect_on_escape(
             if sel.is_some() {
                 commands.entity(e).remove::<Selected>();
                 commands.entity(e).remove::<ActiveRotating>();
-                commands.entity(e).insert(bevy::pbr::wireframe::WireframeColor { color: Color::WHITE });
+                commands
+                    .entity(e)
+                    .insert(bevy::pbr::wireframe::WireframeColor {
+                        color: Color::WHITE,
+                    });
             }
         }
     }
 }
-

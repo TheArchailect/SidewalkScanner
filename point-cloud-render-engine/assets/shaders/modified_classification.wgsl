@@ -212,7 +212,7 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             }
         }
         case 5u: {
-            return vec4<f32>(classification_to_color(point_connectivity_class_id), f32(point_connectivity_class_id));
+            return vec4<f32>(classification_to_random_color(point_connectivity_class_id), f32(point_connectivity_class_id));
         }
         default: {
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
@@ -237,7 +237,7 @@ fn point_in_polygon(point: vec2<f32>, start_idx: u32, point_count: u32) -> bool 
     return inside;
 }
 
-fn classification_to_color(classification: u32) -> vec3<f32> {
+fn classification_to_random_color(classification: u32) -> vec3<f32> {
     let c = classification & 255u;
     let hash1 = (c * 73u) % 255u;
     let hash2 = (c * 151u + 17u) % 255u;
@@ -248,6 +248,25 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
         f32(hash2) / 255.0,
         f32(hash3) / 255.0
     );
+}
+
+fn classification_to_color(classification: u32) -> vec3<f32> {
+    switch classification {
+        case 0u: { return vec3<f32>(0.85, 0.85, 0.85); }     // never classified
+        case 1u: { return vec3<f32>(0.73, 0.73, 0.73); }     // unclassified
+        case 2u: { return vec3<f32>(1.0, 0.6, 0.0); }        // sidewalk
+        case 3u: { return vec3<f32>(0.28, 0.70, 0.28); }     // low vegetation
+        case 4u: { return vec3<f32>(0.0, 0.8, 0.0); }        // medium vegetation
+        case 5u: { return vec3<f32>(0.0, 0.6, 0.0); }        // high vegetation
+        case 6u: { return vec3<f32>(0.92, 1.0, 0.0); }       // buildings
+        case 8u: { return vec3<f32>(0.2, 0.0, 1.0); }        // street furniture
+        case 10u: { return vec3<f32>(1.0, 1.0, 1.0); }       // street markings
+        case 11u: { return vec3<f32>(0.18, 0.18, 0.18); }    // street surface
+        case 13u: { return vec3<f32>(1.0, 0.95, 0.0); }      // non-permanent
+        case 15u: { return vec3<f32>(1.0, 0.0, 0.0); }       // cars
+        case 20u: { return vec3<f32>(0.7, 0.5, 0.8); }       // highlight
+        default: { return vec3<f32>(0.5, 0.5, 0.5); }        // fallback for unknown classifications
+    }
 }
 
 fn morton_to_debug_color_blended(morton_high: u32, morton_low: u32) -> vec3<f32> {

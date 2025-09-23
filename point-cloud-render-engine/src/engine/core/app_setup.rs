@@ -4,6 +4,7 @@ use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResourcePlugin;
+use bevy::render::view::RenderLayers;
 use bevy_common_assets::json::JsonAssetPlugin;
 // Crate engine modules
 use crate::engine::camera::viewport_camera::camera_controller;
@@ -36,10 +37,9 @@ use crate::tools::{
         update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
     },
     tool_manager::{
-        AssetPlacementEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
-        handle_asset_placement_events, handle_polygon_action_events,
+        AssetPlacementEvent, ClearToolEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
+        handle_asset_placement_events, handle_clear_tool_events, handle_polygon_action_events,
         handle_tool_keyboard_shortcuts, handle_tool_selection_events,
-        ClearToolEvent, handle_clear_tool_events,
     },
 };
 // Create Web RPC modules
@@ -50,7 +50,8 @@ use crate::engine::loading::progress::LoadingProgress;
 use crate::rpc::web_rpc::WebRpcPlugin;
 // Transitions
 use crate::engine::core::app_state::{
-    transition_to_assets_loaded, transition_to_compute_ready, transition_to_running, update_loading_frontend,
+    transition_to_assets_loaded, transition_to_compute_ready, transition_to_running,
+    update_loading_frontend,
 };
 
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
@@ -246,6 +247,7 @@ fn create_edl_post_processor_camera(commands: &mut Commands) {
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         EDL_SETTINGS,
+        RenderLayers::default().with(1),
     ));
 }
 

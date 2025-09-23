@@ -7,3 +7,8 @@ createRoot(document.getElementById("root")).render(
     <ScannerApp />
   </StrictMode>,
 );
+
+document.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  console.log("Right-click disabled. Show custom menu.");
+});
