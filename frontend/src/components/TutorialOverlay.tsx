@@ -274,6 +274,15 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
       zIndex: theme.zIndex.highlight,
       display: "none",
     },
+    toolControls: {
+      ...styleUtils.text.caption(),
+      fontSize: theme.fontSizes.xs,
+      color: theme.colors.gray[300],
+      marginTop: theme.spacing[2],
+      paddingTop: theme.spacing[2],
+      borderTop: `1px solid ${theme.colors.border.default}`,
+      lineHeight: "1.4",
+    },
   });
 
   return (
@@ -397,6 +406,11 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
                   <div style={styles.toolDesc}>
                     Edit, hide and classify polygon areas in the scan
                   </div>
+                  <div style={styles.toolControls}>
+                    <strong>Controls:</strong> Left click to place points → Left
+                    Shift or Complete button to finish → Use polygon UI to
+                    reclassify or hide with class masks
+                  </div>
                 </div>
 
                 <div
@@ -418,6 +432,11 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
                   <div style={styles.toolName}>Asset Library</div>
                   <div style={styles.toolDesc}>
                     Add 3D objects and assets to your scene
+                  </div>
+                  <div style={styles.toolControls}>
+                    <strong>Controls:</strong> Select asset/model → Left click
+                    viewport to place → Right click asset + scroll wheel to
+                    rotate → Right click elsewhere to stop rotating
                   </div>
                 </div>
               </div>
