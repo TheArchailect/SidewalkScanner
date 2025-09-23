@@ -6,6 +6,7 @@ html_output = "SidewalkScanner.html"
 dist = "./frontend/public/renderer"
 filehash = false                                  #   Disables hashing of generated file naming conventions
 no_sri = true                                     #   Disables SHA-3 file hash security - need to research security implications
+minify = "always"
 
 [[copy]]
 source = "assets"
