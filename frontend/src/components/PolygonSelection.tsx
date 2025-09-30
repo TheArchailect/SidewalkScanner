@@ -8,22 +8,22 @@ interface PolygonToolPanelProps {
   canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
-interface ClassCategory {
-  id: string;
-  name: string;
-  color: string;
-  items: ClassItem[];
+interface ClassItem {
+  id: string;     // maps to asset id/name from availableAssets
+  name: string;   // pretty label for the UI
+  selected: boolean;
 }
 
-interface ClassItem {
-  id: string;
-  name: string;
-  selected: boolean;
+interface ClassCategory {
+  id: string;         // maps to asset.category (or "uncategorized")
+  name: string;       // pretty label for the UI
+  color: string;      // UI color per category
+  items: ClassItem[]; // assets belonging to this category
 }
 
 type Operation = "hide" | "reclassify";
 
-const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
+/*const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   isVisible,
   canvasRef,
 }) => {
@@ -70,17 +70,76 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         { id: "light", name: "Lights", selected: false },
       ],
     },
-  ]);
+  ]);*/
 
+const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
+  isVisible,
+  canvasRef,
+}) => {
+  const {
+    // assets + RPC helpers (same baseline as AssetLibrary)
+    availableAssets,
+    getAvailableAssets,
+    selectTool,
+    clearTool,
+    hidePointsInPolygon,
+    reclassifyPointsInPolygon,
+  } = useWebRpc(canvasRef);
+
+  const [operation, setOperation] = useState<Operation>("hide");
+  const [categories, setCategories] = useState<ClassCategory[]>([]);
   const [targetCategory, setTargetCategory] = useState<string>("");
   const [targetItem, setTargetItem] = useState<string>("");
 
+  // -------- helpers --------
   const returnFocusToCanvas = (): void => {
-    setTimeout(() => {
-      if (canvasRef.current) {
-        canvasRef.current.focus();
-      }
-    }, 100);
+    setTimeout(() => canvasRef.current?.focus(), 100);
+  };
+
+  // Convert snake_id into title labels - regex expression
+  const prettify = (id: string) =>
+    id.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const colorForCategory = (catId: string) => {
+    // Keep the same visual language as the old hard-coded set
+    if (catId === "vehicles") return theme.colors.primary.blue;
+    if (catId === "vegetation") return theme.colors.success;
+    if (catId === "infrastructure") return theme.colors.primary.orange;
+    if (catId === "furniture") return "#8b5cf6";
+    if (catId === "uncategorized") return theme.colors.gray[400];
+    return theme.colors.primary.blue;
+  };
+
+  const buildPolygonCategories = (): ClassCategory[] => {
+    const groups = new Map<string, ClassItem[]>();
+
+    for (const a of availableAssets || []) {
+      const cat = a.category || "uncategorized";
+      const id = (a.id || a.name || "").toString();
+      if (!id) continue;
+
+      const item: ClassItem = {
+        id,
+        name: prettify(a.name || id),
+        selected: false,
+      };
+
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(item);
+    }
+
+    const out: ClassCategory[] = [];
+    for (const [catId, items] of groups) {
+      out.push({
+        id: catId,
+        name: prettify(catId),
+        color: colorForCategory(catId),
+        items: items.sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    }
+
+    // stable ordering by category name
+    return out.sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const toggleSourceItem = (categoryId: string, itemId: string) => {
@@ -101,48 +160,65 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     returnFocusToCanvas();
   };
 
-  const handleApply = () => {
-    const selectedItems = categories.flatMap((cat) =>
+  const getSelectedPairs = () =>
+    categories.flatMap((cat) =>
       cat.items
-        .filter((item) => item.selected)
-        .map((item) => ({
-          category: cat.name,
-          item: item.name,
-        })),
+        .filter((i) => i.selected)
+        .map((i) => ({ category_id: cat.id, item_id: i.id })),
     );
 
-    console.log(`[v0] ${operation} operation:`, {
-      selectedItems,
-      targetCategory: operation === "reclassify" ? targetCategory : null,
-      targetItem: operation === "reclassify" ? targetItem : null,
-    });
-  };
-
-  const getSelectedCount = () => {
-    return categories.reduce(
-      (total, cat) => total + cat.items.filter((item) => item.selected).length,
+  const getSelectedCount = () =>
+    categories.reduce(
+      (sum, cat) => sum + cat.items.filter((i) => i.selected).length,
       0,
     );
-  };
 
   const hasAnySelection = getSelectedCount() > 0;
 
+  const handleApply = async () => {
+    const selectedPairs = getSelectedPairs();
+
+    if (operation === "hide") {
+      // Hide selected (or all if none selected) within the active polygon
+      // Backend will interpret empty source_items as "all"
+      await hidePointsInPolygon(selectedPairs);
+    } else {
+      // Reclassify selected (or all) to the chosen target
+      if (!targetCategory || !targetItem) return;
+      await reclassifyPointsInPolygon(selectedPairs, targetCategory, targetItem);
+    }
+
+    returnFocusToCanvas();
+  };
+
+
+
+  // When panel opens: activate tool + ensure assets are loaded
+  useEffect(() => {
+    if (!isVisible) return;
+    selectTool("polygon").catch(console.error);
+    getAvailableAssets().catch(console.error);
+  }, [isVisible]);
+
+  // Rebuild categories whenever availableAssets changes
+  useEffect(() => {
+    setCategories(buildPolygonCategories());
+    // Reset target selection to avoid stale ids
+    setTargetCategory("");
+    setTargetItem("");
+  }, [availableAssets]);
+
   // Escape handling inside the panel
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const { clearTool } = useWebRpc(canvasRef);
+  useEffect(() => {
+    if (isVisible) panelRef.current?.focus();
+  }, [isVisible]);
 
   const handleCancel = () => {
     clearTool()
       .catch(console.error)
-      .finally(() => {
-        // front-end UI will close from ScannerApps tool_state_changed handler
-        setTimeout(() => canvasRef.current?.focus(), 0);
-      });
+      .finally(() => setTimeout(() => canvasRef.current?.focus(), 0));
   };
-
-  useEffect(() => {
-    if (isVisible) panelRef.current?.focus();
-  }, [isVisible]);
 
   const handleKeyDownCapture = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Escape" || e.key === "Esc") {
@@ -154,6 +230,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
   if (!isVisible) return null;
 
+  // -------- render --------
   return (
     <div
       ref={panelRef}
@@ -206,7 +283,11 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                 operation === "hide"
                   ? theme.colors.background.overlay
                   : theme.colors.background.card,
-              border: `1px solid ${operation === "hide" ? theme.colors.border.orangeStrong : theme.colors.border.light}`,
+              border: `1px solid ${
+                operation === "hide"
+                  ? theme.colors.border.orangeStrong
+                  : theme.colors.border.light
+              }`,
               color:
                 operation === "hide"
                   ? theme.colors.primary.orangeLight
@@ -232,7 +313,11 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                 operation === "reclassify"
                   ? theme.colors.background.overlay
                   : theme.colors.background.card,
-              border: `1px solid ${operation === "reclassify" ? theme.colors.border.orangeStrong : theme.colors.border.light}`,
+              border: `1px solid ${
+                operation === "reclassify"
+                  ? theme.colors.border.orangeStrong
+                  : theme.colors.border.light
+              }`,
               color:
                 operation === "reclassify"
                   ? theme.colors.primary.orangeLight
@@ -359,6 +444,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           ))}
         </div>
 
+        {/* Target (only for reclassify) */}
         <div
           style={{
             minHeight: operation === "reclassify" ? "100px" : "0px",
@@ -391,11 +477,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
               </h4>
 
               <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: theme.spacing[2],
-                }}
+                style={{ display: "flex", flexDirection: "column", gap: theme.spacing[2] }}
               >
                 <select
                   value={targetCategory}
@@ -413,10 +495,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                 >
                   <option
                     value=""
-                    style={{
-                      background: theme.colors.gray[800],
-                      color: theme.colors.white,
-                    }}
+                    style={{ background: theme.colors.gray[800], color: theme.colors.white }}
                   >
                     Choose category...
                   </option>
@@ -424,10 +503,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                     <option
                       key={cat.id}
                       value={cat.id}
-                      style={{
-                        background: theme.colors.gray[800],
-                        color: theme.colors.white,
-                      }}
+                      style={{ background: theme.colors.gray[800], color: theme.colors.white }}
                     >
                       {cat.name}
                     </option>
@@ -450,10 +526,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                   >
                     <option
                       value=""
-                      style={{
-                        background: theme.colors.gray[800],
-                        color: theme.colors.white,
-                      }}
+                      style={{ background: theme.colors.gray[800], color: theme.colors.white }}
                     >
                       Choose specific type...
                     </option>
@@ -463,10 +536,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                         <option
                           key={item.id}
                           value={item.id}
-                          style={{
-                            background: theme.colors.gray[800],
-                            color: theme.colors.white,
-                          }}
+                          style={{ background: theme.colors.gray[800], color: theme.colors.white }}
                         >
                           {item.name}
                         </option>
@@ -501,30 +571,22 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         </button>
         <button
           onClick={handleApply}
-          disabled={
-            operation === "reclassify" && (!targetCategory || !targetItem)
-          }
+          disabled={operation === "reclassify" && (!targetCategory || !targetItem)}
           style={{
             ...styleUtils.buttonBase(),
             background:
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? theme.colors.background.card
-                : operation === "hide"
-                  ? theme.colors.background.overlay
-                  : theme.colors.background.overlay,
+                : theme.colors.background.overlay,
             border: `1px solid ${
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? theme.colors.border.light
-                : operation === "hide"
-                  ? theme.colors.border.orangeStrong
-                  : theme.colors.border.blueStrong
+                : theme.colors.border.orangeStrong
             }`,
             color:
               operation === "reclassify" && (!targetCategory || !targetItem)
                 ? theme.colors.gray[600]
-                : operation === "hide"
-                  ? theme.colors.primary.orangeLight
-                  : theme.colors.primary.blueLight,
+                : theme.colors.primary.orangeLight,
             padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
             fontSize: theme.fontSizes.sm,
             fontWeight: theme.fontWeights.semibold,

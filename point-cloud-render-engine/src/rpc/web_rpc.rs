@@ -10,6 +10,36 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Polygon RPC DTOs
+#[derive(Debug, Deserialize)]
+struct SourceItem {
+    category_id: string,
+    item_id: string,
+}
+
+#[derive(Debug, Deserialize)]
+struct HideParams {
+    #[serde(default)]
+    source_items: Vec<SourceItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReclassifyParams {
+    #[serde(default)]
+    source_items: Vec<SourceItem>,
+    target_categoriy_id: String,
+    target_item_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PolygonOperationResult {
+    success: bool,
+    points_affected:u64,
+    message: String,
+}
+
+
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -254,7 +284,11 @@ fn handle_rpc_request(
         ),
         "place_asset_at_position" => {
             handle_place_asset_at_position(&request.params, asset_placement_events)
-        }
+        },
+        // Polygon rpc
+        "get_classification_categories" => handle_get_classification_categories(assets, manifests),
+        "hide_points_in_polygon" => handle_hide_points_in_polygon(&request.params),
+        "reclassify_points_in_polygon" => handle_reclassify_points_in_polygon(&request.params),
         _ => {
             warn!("Unknown RPC method: {}", request.method);
             return Some(create_error_response(
@@ -678,4 +712,77 @@ fn handle_rpc_notification(
             warn!("Unknown RPC notification method: {}", notification.method);
         }
     }
+}
+
+/// Build polygon categories/items from Manieft/Asset Atlas
+/// This mirrors AssetLibrary source; single "assets" category with all atlas entries
+fn handle_get_classification_categories(
+    assets: &Res<PointCloudAssets>,
+    manifests: &Res<Assets<SceneManifest>>,
+) -> Result<Value, RpcError> {
+    let manifest_handle = assets.manifest.as_ref().unwrap();
+    let manifest = manifests.get(manifest_handle).unwrap();
+    let atlas = manifest.asset_atlas.as_ref().unwrap();
+
+    let items: Vec<Value> = atlas
+    .assets
+    .iter()
+    .map(|a| {
+        json! ({
+            "id": a.name,
+            "name": a.name,
+            "point_count": a.point_count,
+        })
+    })
+    .collect();
+
+    let total: u64 = items
+    .iter()
+    .map(|v| v.get("point_count").and_then(|n| n.asu64()).unwrap_or(0))
+    .sum();
+
+    let categories = vec![json!({
+        "id": "assets",
+        "name": "Assets",
+        "color": "#4aa3ff",
+        "point_count": total,
+        "items": items,
+    })];
+    Ok(json!(categories))
+}
+
+/// Parse + queue hide operation (engine hook comes next step).
+fn handle_hide_points_in_polygon(params: &Value) -> Result<Value, RpcError> {
+    let p: HideParams = serde_json::from_value(params.clone())
+        .map_err(|_| RpcError::invalid_params("Expected { source_items?: [{category_id,item_id}] }"))?;
+
+    // NEXT STEP: call into your polygon engine system here
+    // e.g., write an event or set a resource the polygon system consumes.
+    // let affected = polygon::hide_points_in_polygon(...);
+
+    let affected = 0_u64; // placeholder so we can wire end-to-end now
+
+    Ok(json!(PolygonOperationResult {
+        success: true,
+        points_affected: affected,
+        message: format!("{} points hidden", affected),
+    }))
+}
+
+/// Parse + queue reclassify operation (engine hook comes next step).
+fn handle_reclassify_points_in_polygon(params: &Value) -> Result<Value, RpcError> {
+    let p: ReclassifyParams = serde_json::from_value(params.clone())
+        .map_err(|_| RpcError::invalid_params("Expected { source_items?:[], target_category_id, target_item_id }"))?;
+
+    // NEXT STEP: call into your polygon engine system here
+    // e.g., write an event or set a resource the polygon system consumes.
+    // let affected = polygon::reclassify_points_in_polygon(...);
+
+    let affected = 0_u64; // placeholder for initial wiring
+
+    Ok(json!(PolygonOperationResult {
+        success: true,
+        points_affected: affected,
+        message: format!("{} points reclassified", affected),
+    }))
 }
