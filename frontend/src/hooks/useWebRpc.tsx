@@ -94,6 +94,14 @@ interface PolygonOperationResult {
   message: string;          // display messages to show detailed feedback
 }
 
+// Measure tool interfaces 
+interface Measurement {
+  id?: number;
+  start?: [number, number, number];
+  end?: [number, number, number];
+  distance?: number;
+}
+
 export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   const [fps, setFps] = useState<number>(0);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -101,6 +109,10 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [placedAssets, setPlacedAssets] = useState<PlacedAsset[]>([]);
   const [classificationCategories, setClassificationCategories] = useState<ClassificationCategory[]>([]);   // Categories state array for polygon tool
+
+  // Measure state 
+  const [currentMeasurement, setCurrentMeasurement] = useState<Measurement | null>(null);
+  const [completedMeasurements, setCompletedMeasurements] = useState<Measurement[]>([]);
 
   const requestIdCounter = useRef<number>(1);
   const pendingRequests = useRef<Map<number, PendingRequest>>(new Map());
@@ -245,6 +257,37 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
                 When classifications change - points are reclassified or hidden, the engine 
                 sends notification to update the UI state
             */ 
+
+          // Measure notifications
+          if (message.method === "measure_started") {
+            setCurrentMeasurement({ start: message.params?.position });
+            setCompletedMeasurements([]);
+            console.log("Measure started:", message.params);
+          }
+          if (message.method === "measure_updated") {
+            setCurrentMeasurement({
+              start: message.params?.start,
+              end: message.params?.end,
+              distance: message.params?.distance,
+            });
+            console.log("Measure updated:", message.params);
+          }
+          if (message.method === "measure_completed") {
+            const measurement: Measurement = {
+              id: message.params?.id,
+              start: message.params?.start,
+              end: message.params?.end,
+              distance: message.params?.distance,
+            };
+            setCompletedMeasurements([measurement]);
+            setCurrentMeasurement(null);
+            console.log("Measure completed:", message.params);
+          }
+          if (message.method === "measure_cleared") {
+            setCurrentMeasurement(null);
+            setCompletedMeasurements([]);
+            console.log("Measure cleared:", message.params);
+          }
 
           // Custom handlers
           const handler = notificationHandlers.current.get(message.method);
@@ -486,6 +529,10 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     selectedAsset,
     placedAssets,
     classificationCategories, // Polygon
+
+    // Measure state 
+    currentMeasurement,
+    completedMeasurements,
 
     // Generic RPC methods
     sendRequest,

@@ -36,6 +36,7 @@ use crate::tools::{
         PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
         update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
     },
+    measure::{MeasureTool, measure_tool_system, update_measure_render}, 
     tool_manager::{
         AssetPlacementEvent, ClearToolEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
         handle_asset_placement_events, handle_clear_tool_events, handle_polygon_action_events,
@@ -106,6 +107,7 @@ pub fn create_app() -> App {
         .init_resource::<PolygonClassificationData>()
         .init_resource::<PolygonCounter>()
         .init_resource::<PolygonTool>()
+        .init_resource::<MeasureTool>() 
         .init_resource::<RenderModeState>()
         .init_resource::<PlacedAssetInstances>()
         .init_resource::<GridCreated>()
@@ -195,6 +197,8 @@ pub fn create_app() -> App {
         polygon_tool_system,
         update_polygon_preview,
         update_polygon_render,
+        measure_tool_system,  
+        update_measure_render, 
         // Other systems
         render_mode_system,
         update_selection_buffer,

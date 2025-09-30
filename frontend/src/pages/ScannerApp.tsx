@@ -29,6 +29,8 @@ const ScannerApp: React.FC = () => {
     setRenderMode: sendRenderMode,
     onNotification,
     clearTool,
+    currentMeasurement,      
+    completedMeasurements,    
   } = useWebRpc(canvasRef);
 
   useEffect(() => {
@@ -385,6 +387,42 @@ const ScannerApp: React.FC = () => {
           isOpen={showTutorial}
           onClose={() => setShowTutorial(false)}
         />
+      )}
+
+      {/* Measurement Overlay */}
+      {selectedTool === "measure" && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "20px",
+            left: "20px",
+            padding: "12px 16px",
+            background: "rgba(0,0,0,0.6)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "8px",
+            color: "#fff",
+            fontFamily: theme.fonts.mono,
+            fontSize: "13px",
+            zIndex: 20,
+            maxWidth: "240px",
+          }}
+        >
+          {currentMeasurement?.distance ? (
+            <div>Current: {currentMeasurement.distance.toFixed(2)} m</div>
+          ) : (
+            <div>Click and drag to measure</div>
+          )}
+          {completedMeasurements.length > 0 && (
+            <div style={{ marginTop: "8px" }}>
+              <strong>Completed:</strong>
+              <ul style={{ margin: 0, paddingLeft: "16px" }}>
+                {completedMeasurements.map((m) => (
+                  <li key={m.id}>~{m.distance?.toFixed(2)} m</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
