@@ -436,6 +436,7 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
             source_items: sourceItems,
           })
           return result
+          console.log("[v0] PolygonSelection: Hide function has triggered successfully - useWebRpc.tsx")
         } catch (error) {
           console.error("Failed to hide points in polgygon:", error)
           throw error

@@ -34,7 +34,7 @@ use crate::tools::{
     },
     polygon::{
         PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
-        update_polygon_classification_shader, update_polygon_preview, update_polygon_render,
+        update_polygon_classification_shader, update_polygon_preview, update_polygon_render, PolygonHideRequestEvent, PolygonToolPlugin
     },
     tool_manager::{
         AssetPlacementEvent, ClearToolEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
@@ -97,6 +97,9 @@ pub fn create_app() -> App {
 
     // Plugin for asset manager UI panel
     app.add_plugins(AssetManagerUiPlugin);
+    
+    // Plugin for Polygon
+    app.add_plugins(PolygonToolPlugin);
 
     // Initialise resources early
     app.init_resource::<LoadingProgress>()
@@ -114,6 +117,7 @@ pub fn create_app() -> App {
         .add_event::<PolygonActionEvent>()
         .add_event::<AssetPlacementEvent>()
         .add_event::<ClearToolEvent>()
+        .add_event::<PolygonHideRequestEvent>()
         .insert_resource(create_point_cloud_assets(None));
 
     // Configure render app with proper resource extraction

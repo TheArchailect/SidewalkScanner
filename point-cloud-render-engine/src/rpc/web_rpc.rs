@@ -6,6 +6,8 @@ use crate::tools::tool_manager::{
     AssetPlacementAction, AssetPlacementEvent, ToolSelectionEvent, ToolSelectionSource, ToolType,
     ClearToolEvent,
 };
+use crate::tools::polygon::{PolygonHideRequestEvent, PolygonReclassifyRequestEvent}; // Polygon import module path
+use serde_json::{Value, json};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -13,8 +15,8 @@ use serde::{Deserialize, Serialize};
 /// Polygon RPC DTOs
 #[derive(Debug, Deserialize)]
 struct SourceItem {
-    category_id: string,
-    item_id: string,
+    category_id: String,
+    item_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,11 +29,11 @@ struct HideParams {
 struct ReclassifyParams {
     #[serde(default)]
     source_items: Vec<SourceItem>,
-    target_categoriy_id: String,
+    target_category_id: String,
     target_item_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize)]
 struct PolygonOperationResult {
     success: bool,
     points_affected:u64,
@@ -212,6 +214,8 @@ fn handle_rpc_messages(
     assets: Res<PointCloudAssets>,
     manifests: Res<Assets<SceneManifest>>,
     mut clear_events: EventWriter<ClearToolEvent>,
+    mut polygon_hide_events: EventWriter<PolygonHideRequestEvent>,              // Polygon event writer to handle Hide request
+    mut polygon_reclassify_events: EventWriter<PolygonReclassifyRequestEvent>   // Polygon event writer to handle Reclassify request
 ) {
     for event in events.read() {
         // Parse as generic JSON first to check for 'id' field
@@ -229,6 +233,8 @@ fn handle_rpc_messages(
                         &assets,
                         &manifests,
                         &mut clear_events,
+                        &mut polygon_hide_events,       // Polygon Hide event writer
+                        &mut polygon_reclassify_events, // Polygon Reclassify writer
                     ) {
                         rpc_interface.queue_response(response);
                     }
@@ -265,6 +271,8 @@ fn handle_rpc_request(
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
     clear_events: &mut EventWriter<ClearToolEvent>,
+    polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>,             // Accept Polygon Hide writer
+    polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>  // Accept Polygon Reclassify writer
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
@@ -286,9 +294,9 @@ fn handle_rpc_request(
             handle_place_asset_at_position(&request.params, asset_placement_events)
         },
         // Polygon rpc
-        "get_classification_categories" => handle_get_classification_categories(assets, manifests),
-        "hide_points_in_polygon" => handle_hide_points_in_polygon(&request.params),
-        "reclassify_points_in_polygon" => handle_reclassify_points_in_polygon(&request.params),
+        //"get_classification_categories" => handle_get_classification_categories(assets, manifests),
+        "hide_points_in_polygon" => handle_hide_points_in_polygon(&request.params, polygon_hide_events),
+        "reclassify_points_in_polygon" => handle_reclassify_points_in_polygon(&request.params, polygon_reclassify_events),
         _ => {
             warn!("Unknown RPC method: {}", request.method);
             return Some(create_error_response(
@@ -716,7 +724,7 @@ fn handle_rpc_notification(
 
 /// Build polygon categories/items from Manieft/Asset Atlas
 /// This mirrors AssetLibrary source; single "assets" category with all atlas entries
-fn handle_get_classification_categories(
+/*fn handle_get_classification_categories(
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
 ) -> Result<Value, RpcError> {
@@ -749,40 +757,61 @@ fn handle_get_classification_categories(
         "items": items,
     })];
     Ok(json!(categories))
-}
+}*/
 
 /// Parse + queue hide operation (engine hook comes next step).
-fn handle_hide_points_in_polygon(params: &Value) -> Result<Value, RpcError> {
+fn handle_hide_points_in_polygon(
+    params: &Value,
+    polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>,
+) -> Result<Value, RpcError> {
     let p: HideParams = serde_json::from_value(params.clone())
-        .map_err(|_| RpcError::invalid_params("Expected { source_items?: [{category_id,item_id}] }"))?;
+        .map_err(|_| RpcError::invalid_params(
+            "Expected { source_items?: [{category_id,item_id}] }"))?;
 
-    // NEXT STEP: call into your polygon engine system here
-    // e.g., write an event or set a resource the polygon system consumes.
-    // let affected = polygon::hide_points_in_polygon(...);
+    info!("[RPC] hide_points_in_polygon queued; filters={}", p.source_items.len());
 
-    let affected = 0_u64; // placeholder so we can wire end-to-end now
+    polygon_hide_events.write(PolygonHideRequestEvent {
+        source_items: p.source_items
+            .into_iter()
+            .map(|s| (s.category_id, s.item_id))
+            .collect()
+    });
 
-    Ok(json!(PolygonOperationResult {
+    let result = PolygonOperationResult {
         success: true,
-        points_affected: affected,
-        message: format!("{} points hidden", affected),
-    }))
+        points_affected: 0,
+        message: "Hide operation queued".to_string(),
+    };
+
+    Ok(serde_json::to_value(result).unwrap())
 }
 
-/// Parse + queue reclassify operation (engine hook comes next step).
-fn handle_reclassify_points_in_polygon(params: &Value) -> Result<Value, RpcError> {
+//Parse + queue reclassify operation (engine hook comes next step).
+fn handle_reclassify_points_in_polygon(
+    params: &Value,
+    polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>,
+) -> Result<Value, RpcError> {
     let p: ReclassifyParams = serde_json::from_value(params.clone())
-        .map_err(|_| RpcError::invalid_params("Expected { source_items?:[], target_category_id, target_item_id }"))?;
+        .map_err(|_| RpcError::invalid_params(
+            "Expected { source_items?:[], target_category_id, target_item_id }"
+        ))?;
 
-    // NEXT STEP: call into your polygon engine system here
-    // e.g., write an event or set a resource the polygon system consumes.
-    // let affected = polygon::reclassify_points_in_polygon(...);
+    info!(
+        "[RPC] reclassify_points_in_polygon queued; filters={}, target=({},{})",
+        p.source_items.len(), p.target_category_id, p.target_item_id
+    );
 
-    let affected = 0_u64; // placeholder for initial wiring
+    polygon_reclassify_events.write(PolygonReclassifyRequestEvent {
+        source_items: p.source_items
+            .into_iter()
+            .map(|s| (s.category_id, s.item_id))
+            .collect(),
+        target: (p.target_category_id, p.target_item_id),
+    });
 
     Ok(json!(PolygonOperationResult {
         success: true,
-        points_affected: affected,
-        message: format!("{} points reclassified", affected),
+        points_affected: 0,
+        message: "Reclassify operation queued".to_string(),
     }))
 }

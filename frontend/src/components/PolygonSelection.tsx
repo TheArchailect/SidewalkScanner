@@ -182,6 +182,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
       // Hide selected (or all if none selected) within the active polygon
       // Backend will interpret empty source_items as "all"
       await hidePointsInPolygon(selectedPairs);
+      console.log("[v0] Hide function triggered successfully", selectedPairs)
     } else {
       // Reclassify selected (or all) to the chosen target
       if (!targetCategory || !targetItem) return;
