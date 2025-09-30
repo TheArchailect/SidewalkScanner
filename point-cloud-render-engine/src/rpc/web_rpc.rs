@@ -9,12 +9,13 @@ use crate::tools::tool_manager::{
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 /// Polygon RPC DTOs
 #[derive(Debug, Deserialize)]
 struct SourceItem {
-    category_id: string,
-    item_id: string,
+    category_id: String,
+    item_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -738,7 +739,7 @@ fn handle_get_classification_categories(
 
     let total: u64 = items
     .iter()
-    .map(|v| v.get("point_count").and_then(|n| n.asu64()).unwrap_or(0))
+    .map(|v| v.get("point_count").and_then(|n| n.as_u64()).unwrap_or(0))
     .sum();
 
     let categories = vec![json!({
@@ -762,10 +763,10 @@ fn handle_hide_points_in_polygon(params: &Value) -> Result<Value, RpcError> {
 
     let affected = 0_u64; // placeholder so we can wire end-to-end now
 
-    Ok(json!(PolygonOperationResult {
-        success: true,
-        points_affected: affected,
-        message: format!("{} points hidden", affected),
+    Ok(json!({
+    "success": true,
+    "points_affected": affected,
+    "message": format!("{} points hidden", affected),
     }))
 }
 
@@ -780,9 +781,10 @@ fn handle_reclassify_points_in_polygon(params: &Value) -> Result<Value, RpcError
 
     let affected = 0_u64; // placeholder for initial wiring
 
-    Ok(json!(PolygonOperationResult {
-        success: true,
-        points_affected: affected,
-        message: format!("{} points reclassified", affected),
+    Ok(json!({
+    "success": true,
+    "points_affected": affected,
+    "message": format!("{} points reclassified", affected),
     }))
+
 }
