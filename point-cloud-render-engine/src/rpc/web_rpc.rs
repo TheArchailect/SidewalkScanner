@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 /// Polygon RPC DTOs
 #[derive(Debug, Deserialize)]
@@ -746,7 +747,7 @@ fn handle_rpc_notification(
 
     let total: u64 = items
     .iter()
-    .map(|v| v.get("point_count").and_then(|n| n.asu64()).unwrap_or(0))
+    .map(|v| v.get("point_count").and_then(|n| n.as_u64()).unwrap_or(0))
     .sum();
 
     let categories = vec![json!({
@@ -814,4 +815,5 @@ fn handle_reclassify_points_in_polygon(
         points_affected: 0,
         message: "Reclassify operation queued".to_string(),
     }))
+
 }

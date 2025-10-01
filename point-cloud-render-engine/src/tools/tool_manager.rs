@@ -130,6 +130,7 @@ pub fn handle_tool_selection_events(
     mut tool_manager: ResMut<ToolManager>,
     mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
     mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
+    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>, 
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
     for event in events.read() {
@@ -143,6 +144,7 @@ pub fn handle_tool_selection_events(
         // Deactivate all tools first to ensure clean state.
         polygon_tool.set_active(false);
         place_asset_state.active = false;
+        measure_tool.set_active(false); 
 
         // Activate the requested tool.
         match event.tool_type {
@@ -182,6 +184,10 @@ pub fn handle_tool_selection_events(
                 );
             }
             ToolType::Measure => {
+                measure_tool.set_active(true); 
+
+                info!("Measure tool activated via {:?}", event.source);
+
                 // Send confirmation to frontend.
                 rpc_interface.send_notification(
                     "tool_state_changed",
@@ -391,6 +397,13 @@ pub fn handle_tool_keyboard_shortcuts(
             source: ToolSelectionSource::Keyboard,
         });
     }
+
+    if keyboard.just_pressed(KeyCode::KeyM) { 
+        tool_events.send(ToolSelectionEvent {
+            tool_type: ToolType::Measure,
+            source: ToolSelectionSource::Keyboard,
+        });
+    }
 }
 
 /// Placeholder system for WASM builds where keyboard shortcuts are disabled.
@@ -410,6 +423,7 @@ pub fn handle_clear_tool_events(
     mut tool_manager: ResMut<ToolManager>,
     mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
     mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
+    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>, 
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
     for event in events.read() {
@@ -418,6 +432,7 @@ pub fn handle_clear_tool_events(
         // Deactivate tool states
         polygon_tool.set_active(false);
         place_asset_state.active = false;
+        measure_tool.set_active(false); 
 
         info!("Cleared active tool via {:?}", event.source);
 
@@ -444,5 +459,3 @@ pub fn clear_tool_on_escape(
         ev_clear.send(ClearToolEvent { source: ToolSelectionSource::Keyboard });
     }
 }
-
-
