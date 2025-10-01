@@ -18,9 +18,10 @@ pub struct PolygonHideRequestEvent{
     pub source_items: Vec<(String, String)>,    // category_id, item_id
 }
 
+#[derive(Event, Debug, Clone)]
 pub struct PolygonReclassifyRequestEvent {
     pub source_items: Vec<(String, String)>,
-    pub targer: (String, String),               // target_category_id, target_item_id
+    pub target: (String, String),               // target_category_id, target_item_id
 }
 
 pub struct PolygonToolPlugin;
@@ -28,7 +29,9 @@ impl Plugin for PolygonToolPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_event::<PolygonHideRequestEvent>()
-            .add_systems(PostUpdate, process_poloygon_hide_requests);
+            .add_event::<PolygonReclassifyRequestEvent>()
+            .add_systems(PostUpdate, process_poloygon_hide_requests)
+            .add_systems(PostUpdate, process_polygon_reclassify_requests);
     }
 }
 
@@ -74,6 +77,16 @@ fn process_poloygon_hide_requests(
         //     }
         // });
         info!("[POLY] hide request received; {} filter pairs", e.source_items.len());
+    }
+}
+
+fn process_polygon_reclassify_requests(
+    mut ev: EventReader<PolygonReclassifyRequestEvent>,
+
+) {
+    for e in ev.read() {
+        let (target_Cat, target_Item) = &e.target;
+        info!("[POLY] Reclassify request received; {} filter pairs -> target=({},{})", e.source_items.len(), target_Cat, target_Item)
     }
 }
 

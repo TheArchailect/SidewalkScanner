@@ -187,6 +187,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
       // Reclassify selected (or all) to the chosen target
       if (!targetCategory || !targetItem) return;
       await reclassifyPointsInPolygon(selectedPairs, targetCategory, targetItem);
+      console.log("[v0] Reclassify function triggered successfully")
     }
 
     returnFocusToCanvas();

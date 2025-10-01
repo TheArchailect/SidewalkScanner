@@ -34,7 +34,7 @@ use crate::tools::{
     },
     polygon::{
         PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
-        update_polygon_classification_shader, update_polygon_preview, update_polygon_render, PolygonHideRequestEvent, PolygonToolPlugin
+        update_polygon_classification_shader, update_polygon_preview, update_polygon_render, PolygonHideRequestEvent, PolygonReclassifyRequestEvent, PolygonToolPlugin
     },
     measure::{MeasureTool, measure_tool_system, update_measure_render}, 
     tool_manager::{
@@ -119,6 +119,7 @@ pub fn create_app() -> App {
         .add_event::<PolygonActionEvent>()
         .add_event::<AssetPlacementEvent>()
         .add_event::<ClearToolEvent>()
+        .add_event::<PolygonHideRequestEvent>()
         .add_event::<PolygonHideRequestEvent>()
         .insert_resource(create_point_cloud_assets(None));
 
