@@ -13,6 +13,7 @@ struct ComputeUniformData {
    _padding: u32,
    point_data: array<vec4<f32>, 512>,
    polygon_info: array<vec4<f32>, 64>,
+   ignore_masks: array<vec4<u32>, 128>,  // 128 × 4 = 512 u32 values
 }
 
 @group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
@@ -174,6 +175,9 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
+            if (original_class == 15u) {
+                return vec4<f32>(classification_to_color(final_class), f32(254u));
+            }
             return vec4<f32>(classification_to_color(final_class), f32(original_class));
         }
         case 2u: { // RGB

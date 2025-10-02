@@ -99,7 +99,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
 
     // Count assets by category
     assets.forEach((asset) => {
-      const category = asset.category || "uncategorized";
+      const category = asset.category || "uncategorised";
       categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
     });
 

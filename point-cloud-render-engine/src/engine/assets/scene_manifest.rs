@@ -7,6 +7,18 @@ use crate::engine::assets::texture_files::{AssetTextureFiles, TerrainTextureFile
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClassType {
+    pub class_name: String,
+    pub objects_ids: HashSet<u32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ClassificationInfo {
+    pub class_types: HashMap<u8, ClassType>,
+}
 
 /// Terrain point cloud data with texture file references and metadata.
 /// Contains the core point cloud information that was previously in bounds.
@@ -31,10 +43,15 @@ pub struct AssetAtlasData {
 /// Contains both terrain point cloud data and optional asset atlas information.
 #[derive(Asset, Debug, Clone, Serialize, Deserialize, TypePath, Resource, ExtractResource)]
 pub struct SceneManifest {
+    /// Primary terrain dataset information and file paths.
     pub terrain: TerrainData,
+    /// Optional asset atlas configuration and metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_atlas: Option<AssetAtlasData>,
+    /// Global scene bounds encompassing terrain and all assets.
     pub scene_bounds: BoundsData,
+    /// Describes the class types and object id's found in the specific dataset
+    pub classes: ClassificationInfo,
 }
 
 impl SceneManifest {

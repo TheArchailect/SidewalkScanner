@@ -2,46 +2,42 @@ use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
 use crate::tools::asset_manager::PlaceAssetBoundState;
+use crate::tools::polygon::{PolygonHideRequestEvent, PolygonReclassifyRequestEvent};
 use crate::tools::tool_manager::{
-    AssetPlacementAction, AssetPlacementEvent, ToolSelectionEvent, ToolSelectionSource, ToolType,
-    ClearToolEvent,
+    AssetPlacementAction, AssetPlacementEvent, ClearToolEvent, ToolSelectionEvent,
+    ToolSelectionSource, ToolType,
 };
-use crate::tools::polygon::{PolygonHideRequestEvent, PolygonReclassifyRequestEvent}; // Polygon import module path
-use serde_json::{Value, json};
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-//use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-/// Polygon RPC DTOs
 #[derive(Debug, Deserialize)]
 struct SourceItem {
-    category_id: String,
-    item_id: String,
+    class_id: u32,
+    object_id: u32,
 }
 
 #[derive(Debug, Deserialize)]
 struct HideParams {
     #[serde(default)]
-    source_items: Vec<SourceItem>,
+    masked_classes: Vec<SourceItem>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ReclassifyParams {
     #[serde(default)]
-    source_items: Vec<SourceItem>,
-    target_category_id: String,
-    target_item_id: String,
+    masked_classes: Vec<SourceItem>,
+    target_class_id: u32,
+    target_object_id: u32,
 }
 
 #[derive(Debug, Serialize)]
 struct PolygonOperationResult {
     success: bool,
-    points_affected:u64,
+    points_affected: u64,
     message: String,
 }
-
-
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -153,6 +149,11 @@ fn setup_message_listener(mut commands: Commands) {
                             &"[DEBUG] get_available_assets received and queued".into(),
                         );
                     }
+                    if message_str.contains("get_classification_categories") {
+                        web_sys::console::log_1(
+                            &"[DEBUG] get_classification_categories received and queued".into(),
+                        );
+                    }
                     if let Ok(mut queue) = queue_clone.lock() {
                         queue.push(message_str);
                     }
@@ -215,8 +216,8 @@ fn handle_rpc_messages(
     assets: Res<PointCloudAssets>,
     manifests: Res<Assets<SceneManifest>>,
     mut clear_events: EventWriter<ClearToolEvent>,
-    mut polygon_hide_events: EventWriter<PolygonHideRequestEvent>,              // Polygon event writer to handle Hide request
-    mut polygon_reclassify_events: EventWriter<PolygonReclassifyRequestEvent>   // Polygon event writer to handle Reclassify request
+    mut polygon_hide_events: EventWriter<PolygonHideRequestEvent>, // Polygon event writer to handle Hide request
+    mut polygon_reclassify_events: EventWriter<PolygonReclassifyRequestEvent>, // Polygon event writer to handle Reclassify request
 ) {
     for event in events.read() {
         // Parse as generic JSON first to check for 'id' field
@@ -234,7 +235,7 @@ fn handle_rpc_messages(
                         &assets,
                         &manifests,
                         &mut clear_events,
-                        &mut polygon_hide_events,       // Polygon Hide event writer
+                        &mut polygon_hide_events, // Polygon Hide event writer
                         &mut polygon_reclassify_events, // Polygon Reclassify writer
                     ) {
                         rpc_interface.queue_response(response);
@@ -272,8 +273,8 @@ fn handle_rpc_request(
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
     clear_events: &mut EventWriter<ClearToolEvent>,
-    polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>,             // Accept Polygon Hide writer
-    polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>  // Accept Polygon Reclassify writer
+    polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>, // Accept Polygon Hide writer
+    polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>, // Accept Polygon Reclassify writer
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
@@ -293,11 +294,15 @@ fn handle_rpc_request(
         ),
         "place_asset_at_position" => {
             handle_place_asset_at_position(&request.params, asset_placement_events)
-        },
+        }
         // Polygon rpc
-        //"get_classification_categories" => handle_get_classification_categories(assets, manifests),
-        "hide_points_in_polygon" => handle_hide_points_in_polygon(&request.params, polygon_hide_events),
-        "reclassify_points_in_polygon" => handle_reclassify_points_in_polygon(&request.params, polygon_reclassify_events),
+        "get_classification_categories" => handle_get_classification_categories(assets, manifests),
+        "hide_points_in_polygon" => {
+            handle_hide_points_in_polygon(&request.params, polygon_hide_events)
+        }
+        "reclassify_points_in_polygon" => {
+            handle_reclassify_points_in_polygon(&request.params, polygon_reclassify_events)
+        }
         _ => {
             warn!("Unknown RPC method: {}", request.method);
             return Some(create_error_response(
@@ -481,7 +486,6 @@ fn handle_get_asset_categories(
         .ok_or_else(|| RpcError::internal_error("Scene manifest not available"))?;
 
     // For now, return a simple default category structure
-    // You may want to extend this based on your asset categorization needs
     let categories = vec![
         serde_json::json!({
             "id": "all",
@@ -725,57 +729,48 @@ fn handle_rpc_notification(
 
 /// Build polygon categories/items from Manieft/Asset Atlas
 /// This mirrors AssetLibrary source; single "assets" category with all atlas entries
-/*fn handle_get_classification_categories(
+fn handle_get_classification_categories(
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
 ) -> Result<Value, RpcError> {
-    let manifest_handle = assets.manifest.as_ref().unwrap();
-    let manifest = manifests.get(manifest_handle).unwrap();
-    let atlas = manifest.asset_atlas.as_ref().unwrap();
+    let manifest = assets
+        .manifest
+        .as_ref()
+        .and_then(|h| manifests.get(h))
+        .ok_or_else(|| RpcError::internal_error("Scene manifest not available"))?;
 
-    let items: Vec<Value> = atlas
-    .assets
-    .iter()
-    .map(|a| {
-        json! ({
-            "id": a.name,
-            "name": a.name,
-            "point_count": a.point_count,
-        })
-    })
-    .collect();
+    let mut classes: Vec<Value> = Vec::new();
+    for (class, value) in &manifest.classes.class_types {
+        classes.push(serde_json::json!({
+            "class": class,
+            "class_name": value.class_name,
+            "object_ids": value.objects_ids
+        }))
+    }
 
-    let total: u64 = items
-    .iter()
-    .map(|v| v.get("point_count").and_then(|n| n.as_u64()).unwrap_or(0))
-    .sum();
-
-    let categories = vec![json!({
-        "id": "assets",
-        "name": "Assets",
-        "color": "#4aa3ff",
-        "point_count": total,
-        "items": items,
-    })];
-    Ok(json!(categories))
-}*/
+    Ok(serde_json::json!(classes))
+}
 
 /// Parse + queue hide operation (engine hook comes next step).
 fn handle_hide_points_in_polygon(
     params: &Value,
     polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>,
 ) -> Result<Value, RpcError> {
-    let p: HideParams = serde_json::from_value(params.clone())
-        .map_err(|_| RpcError::invalid_params(
-            "Expected { source_items?: [{category_id,item_id}] }"))?;
+    info!(
+        "[RPC] hide_points_in_polygon - received: {:?}",
+        params.clone()
+    );
 
-    info!("[RPC] hide_points_in_polygon queued; filters={}", p.source_items.len());
+    let p: HideParams = serde_json::from_value(params.clone()).map_err(|_| {
+        RpcError::invalid_params("Expected { source_items?: [{class_id, object_id}] }")
+    })?;
 
     polygon_hide_events.write(PolygonHideRequestEvent {
-        source_items: p.source_items
+        source_items: p
+            .masked_classes
             .into_iter()
-            .map(|s| (s.category_id, s.item_id))
-            .collect()
+            .map(|s| (s.class_id, s.object_id))
+            .collect(),
     });
 
     let result = PolygonOperationResult {
@@ -792,22 +787,31 @@ fn handle_reclassify_points_in_polygon(
     params: &Value,
     polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>,
 ) -> Result<Value, RpcError> {
-    let p: ReclassifyParams = serde_json::from_value(params.clone())
-        .map_err(|_| RpcError::invalid_params(
-            "Expected { source_items?:[], target_category_id, target_item_id }"
-        ))?;
+    info!(
+        "[RPC] reclassify_points_in_polygon - received: {:?}",
+        params.clone()
+    );
+
+    let p: ReclassifyParams = serde_json::from_value(params.clone()).map_err(|_| {
+        RpcError::invalid_params(
+            "Expected { source_items?:[], target_category_id, target_item_id }",
+        )
+    })?;
 
     info!(
         "[RPC] reclassify_points_in_polygon queued; filters={}, target=({},{})",
-        p.source_items.len(), p.target_category_id, p.target_item_id
+        p.masked_classes.len(),
+        p.target_class_id,
+        p.target_object_id
     );
 
     polygon_reclassify_events.write(PolygonReclassifyRequestEvent {
-        source_items: p.source_items
+        source_items: p
+            .masked_classes
             .into_iter()
-            .map(|s| (s.category_id, s.item_id))
+            .map(|s| (s.class_id, s.object_id))
             .collect(),
-        target: (p.target_category_id, p.target_item_id),
+        target: (p.target_class_id, p.target_object_id),
     });
 
     Ok(json!(PolygonOperationResult {
@@ -815,5 +819,4 @@ fn handle_reclassify_points_in_polygon(
         points_affected: 0,
         message: "Reclassify operation queued".to_string(),
     }))
-
 }

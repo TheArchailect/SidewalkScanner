@@ -290,6 +290,7 @@ fn create_compute_buffer(
         _padding: [u32; 3],
         point_data: [[f32; 4]; 512],
         polygon_info: [[f32; 4]; 64],
+        ignore_masks: [[u32; 4]; 128], // 128 × 4 = 512 u32 values
     }
 
     let mut uniform = ComputeUniformData::zeroed();

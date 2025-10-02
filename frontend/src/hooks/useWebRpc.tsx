@@ -79,22 +79,21 @@ interface NotificationHandler {
   (params?: Record<string, any>): void;
 }
 
-// Polygon 
-interface ClassificationCategory {
-  id: string;             // unique id "vegetation", "street furniture" etc
-  name: string;           // display name "shrub", "bike parking" etc
-  color: string;          // color for UI visualization
-  point_count?: number;   // number of points in classification
+// Polygon
+export interface ClassificationCategory {
+  class: number;
+  class_name: string;
+  object_ids: Array<number>;
 }
 
 // Polygon operations feedback interface
 interface PolygonOperationResult {
-  success: boolean;         // show success/failure e.g display green/red status
-  points_affected: number;  // drovide metrics to tell user how many points are affected
-  message: string;          // display messages to show detailed feedback
+  success: boolean; // show success/failure e.g display green/red status
+  points_affected: number; // drovide metrics to tell user how many points are affected
+  message: string; // display messages to show detailed feedback
 }
 
-// Measure tool interfaces 
+// Measure tool interfaces
 interface Measurement {
   id?: number;
   start?: [number, number, number];
@@ -108,11 +107,16 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [placedAssets, setPlacedAssets] = useState<PlacedAsset[]>([]);
-  const [classificationCategories, setClassificationCategories] = useState<ClassificationCategory[]>([]);   // Categories state array for polygon tool
+  const [classificationCategories, setClassificationCategories] = useState<
+    ClassificationCategory[]
+  >([]); // Categories state array for polygon tool
 
-  // Measure state 
-  const [currentMeasurement, setCurrentMeasurement] = useState<Measurement | null>(null);
-  const [completedMeasurements, setCompletedMeasurements] = useState<Measurement[]>([]);
+  // Measure state
+  const [currentMeasurement, setCurrentMeasurement] =
+    useState<Measurement | null>(null);
+  const [completedMeasurements, setCompletedMeasurements] = useState<
+    Measurement[]
+  >([]);
 
   const requestIdCounter = useRef<number>(1);
   const pendingRequests = useRef<Map<number, PendingRequest>>(new Map());
@@ -214,7 +218,8 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
         const message: JsonRpcMessage = JSON.parse(event.data as string);
 
         if (message.method === "debug_message") {
-          // Uncomment for debugging: console.log("[RUST DEBUG]", message.params?.message);
+          // Uncomment for debugging:
+          console.log("[RUST DEBUG]", message.params?.message);
         }
 
         // Handle JSON-RPC response
@@ -252,11 +257,12 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
 
           // Polygon category-related notification handler
           if (message.method === "classification_categories_updated") {
-            setClassificationCategories(message.params?.categories || [])   
-          } /*  Listening for real-time updates from Bevy engine
-                When classifications change - points are reclassified or hidden, the engine 
+            setClassificationCategories(message.params?.categories || []);
+          }
+          /*  Listening for real-time updates from Bevy engine
+                When classifications change - points are reclassified or hidden, the engine
                 sends notification to update the UI state
-            */ 
+            */
 
           // Measure notifications
           if (message.method === "measure_started") {
@@ -336,7 +342,7 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     [sendRequest],
   );
 
-  // Clear the active tool 
+  // Clear the active tool
   const clearTool = useCallback(async (): Promise<any> => {
     try {
       const result = await sendRequest("tool_selection", { tool: "none" });
@@ -454,73 +460,65 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
   // Get classification categories for polygon operations
   const getClassificationCategories = useCallback(async (): Promise<any> => {
     try {
-      const result = await sendRequest<ClassificationCategory[]>("get_classification_categories")
-      const categories = Array.isArray(result) ? result: []
-      setClassificationCategories(categories)
-      return categories
+      const result = await sendRequest<ClassificationCategory[]>(
+        "get_classification_categories",
+      );
+      const categories = Array.isArray(result) ? result : [];
+      setClassificationCategories(categories);
+      return categories;
     } catch (error) {
-      console.error("Failed to get categories:", error)
-      setClassificationCategories([])
+      console.error("Failed to get categories:", error);
+      setClassificationCategories([]);
     }
-    }, [sendRequest])
-    { /* Flow:  > PolygonSelection calls
-                > Hook sends JSON-RPC req
-                > Bevy returns categories
-                > Hook updates state
-                > PolygonSelection re-renders with new data
-      */}
-    
+  }, [sendRequest]);
 
-    // Hide selected class types within polygon selection
-    const hidePointsInPolygon = useCallback(
-      async (sourceItems: Array<{ category_id: string; item_id: string }>): Promise<PolygonOperationResult> => {
-        try {
-          const result = await sendRequest<PolygonOperationResult>("hide_points_in_polygon", {
-            source_items: sourceItems,
-          })
-          return result
-          console.log("[v0] PolygonSelection: Hide function has triggered successfully - useWebRpc.tsx")
-        } catch (error) {
-          console.error("Failed to hide points in polgygon:", error)
-          throw error
-        }
-      },
-      [sendRequest]
-    )
-    { /* Flow:  > User selects polygon tool + categories
-                > PolygonSelection calls this method
-                > Hook sends RPC with "source_items"
-                > Bevy hides the matching points
-                > Returns success/failure + points_affected count
-      */}
-    
-    // Reclassify selected class types within polygon selection
-    const reclassifyPointsInPolygon = useCallback(
-      async (
-        sourceItems: Array<{ category_id: string; item_id: string }>,
-        targetCategoryId: string,
-        targetItemId: string,
-      ): Promise<PolygonOperationResult> => {
-        try {
-          const result = await sendRequest<PolygonOperationResult>("reclassify_points_in_polygon", {
-            source_items: sourceItems,
-            target_category_id: targetCategoryId,
-            target_item_id: targetItemId,
-          })
-          return result
-        } catch (error) {
-          console.error("Failed to reclassify points in polygon:", error)
-          throw error
-        }
-      },
-      [sendRequest],
-    )
-    { /* Flow:  > User selects source categories + target category
-                > PolygonSelection calls this method
-                > Hook sends RPC with source and target data
-                > Bevy reclassifies the matching points
-                > Returns operation results
-      */}
+  // Hide selected class types within polygon selection
+  const hidePointsInPolygon = useCallback(
+    async (
+      masked_classes: Array<{ class_id: number; object_id: number }>,
+    ): Promise<PolygonOperationResult> => {
+      try {
+        console.log("Hide Data: ", masked_classes);
+        const result = await sendRequest<PolygonOperationResult>(
+          "hide_points_in_polygon",
+          {
+            masked_classes: masked_classes,
+          },
+        );
+        return result;
+      } catch (error) {
+        console.error("Failed to hide points in polgygon:", error);
+        throw error;
+      }
+    },
+    [sendRequest],
+  );
+
+  // Reclassify selected class types within polygon selection
+  const reclassifyPointsInPolygon = useCallback(
+    async (
+      maskedClasses: Array<{ class_id: number; object_id: number }>,
+      targetClassId: number,
+      targetObjectId: number,
+    ): Promise<PolygonOperationResult> => {
+      try {
+        const result = await sendRequest<PolygonOperationResult>(
+          "reclassify_points_in_polygon",
+          {
+            masked_classes: maskedClasses,
+            target_class_id: targetClassId,
+            target_object_id: targetObjectId,
+          },
+        );
+
+        return result;
+      } catch (error) {
+        console.error("Failed to reclassify points in polygon:", error);
+        throw error;
+      }
+    },
+    [sendRequest],
+  );
 
   return {
     // State
@@ -529,9 +527,9 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     availableAssets,
     selectedAsset,
     placedAssets,
-    classificationCategories, // Polygon
+    classificationCategories,
 
-    // Measure state 
+    // Measure state
     currentMeasurement,
     completedMeasurements,
 
@@ -551,7 +549,8 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     toggleAssetPlacementMode,
     clearAllAssets,
     // Polygon
-    getClassificationCategories, 
+
+    getClassificationCategories,
     hidePointsInPolygon,
     reclassifyPointsInPolygon,
   };

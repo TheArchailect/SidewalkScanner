@@ -2,84 +2,31 @@ import type React from "react";
 import { useState, useEffect, useRef, type RefObject } from "react";
 import { useWebRpc } from "../hooks/useWebRpc";
 import { theme, styleUtils } from "../theme";
+import { ClassificationCategory } from "../hooks/useWebRpc";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
   canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
-interface ClassItem {
-  id: string;     // maps to asset id/name from availableAssets
-  name: string;   // pretty label for the UI
+interface SelectableClass {
+  classId: number;
+  className: string;
+  color: string;
+  objectIds: number[];
   selected: boolean;
-}
-
-interface ClassCategory {
-  id: string;         // maps to asset.category (or "uncategorized")
-  name: string;       // pretty label for the UI
-  color: string;      // UI color per category
-  items: ClassItem[]; // assets belonging to this category
+  selectedObjectIds: Set<number>;
 }
 
 type Operation = "hide" | "reclassify";
-
-/*const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
-  isVisible,
-  canvasRef,
-}) => {
-  const [operation, setOperation] = useState<Operation>("hide");
-
-  const [categories, setCategories] = useState<ClassCategory[]>([
-    {
-      id: "vehicles",
-      name: "Vehicles",
-      color: theme.colors.primary.blue,
-      items: [
-        { id: "car", name: "Cars", selected: false },
-        { id: "truck", name: "Trucks", selected: false },
-        { id: "bike", name: "Bikes", selected: false },
-      ],
-    },
-    {
-      id: "vegetation",
-      name: "Vegetation",
-      color: theme.colors.success,
-      items: [
-        { id: "tree", name: "Trees", selected: false },
-        { id: "grass", name: "Grass", selected: false },
-        { id: "bush", name: "Bushes", selected: false },
-      ],
-    },
-    {
-      id: "infrastructure",
-      name: "Infrastructure",
-      color: theme.colors.primary.orange,
-      items: [
-        { id: "building", name: "Buildings", selected: false },
-        { id: "road", name: "Roads", selected: false },
-        { id: "sidewalk", name: "Sidewalks", selected: false },
-      ],
-    },
-    {
-      id: "furniture",
-      name: "Street Furniture",
-      color: "#8b5cf6",
-      items: [
-        { id: "bench", name: "Benches", selected: false },
-        { id: "sign", name: "Signs", selected: false },
-        { id: "light", name: "Lights", selected: false },
-      ],
-    },
-  ]);*/
 
 const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   isVisible,
   canvasRef,
 }) => {
   const {
-    // assets + RPC helpers (same baseline as AssetLibrary)
-    availableAssets,
-    getAvailableAssets,
+    classificationCategories,
+    getClassificationCategories,
     selectTool,
     clearTool,
     hidePointsInPolygon,
@@ -87,142 +34,153 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   } = useWebRpc(canvasRef);
 
   const [operation, setOperation] = useState<Operation>("hide");
-  const [categories, setCategories] = useState<ClassCategory[]>([]);
-  const [targetCategory, setTargetCategory] = useState<string>("");
-  const [targetItem, setTargetItem] = useState<string>("");
+  const [sourceClasses, setSourceClasses] = useState<SelectableClass[]>([]);
+  const [targetClassId, setTargetClassId] = useState<number>(-1);
 
-  // -------- helpers --------
   const returnFocusToCanvas = (): void => {
     setTimeout(() => canvasRef.current?.focus(), 100);
   };
 
-  // Convert snake_id into title labels - regex expression
-  const prettify = (id: string) =>
-    id.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const prettify = (id: string | undefined): string => {
+    if (!id) return "Unknown";
+    return id.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  };
 
-  const colorForCategory = (catId: string) => {
-    // Keep the same visual language as the old hard-coded set
+  const colorForCategory = (catId: string): string => {
     if (catId === "vehicles") return theme.colors.primary.blue;
     if (catId === "vegetation") return theme.colors.success;
     if (catId === "infrastructure") return theme.colors.primary.orange;
     if (catId === "furniture") return "#8b5cf6";
-    if (catId === "uncategorized") return theme.colors.gray[400];
+    if (catId === "uncategorised") return theme.colors.gray[400];
     return theme.colors.primary.blue;
   };
 
-  const buildPolygonCategories = (): ClassCategory[] => {
-    const groups = new Map<string, ClassItem[]>();
+  // Initialize source classes from classification categories
+  useEffect(() => {
+    if (!classificationCategories) return;
+    console.log("classificationCategories: ", classificationCategories);
+    const classes: SelectableClass[] = classificationCategories.map((cat) => ({
+      classId: cat.class,
+      className: prettify(cat.class_name),
+      color: colorForCategory(cat.class.toString()),
+      objectIds: cat.object_ids,
+      selected: false,
+      selectedObjectIds: new Set<number>(),
+    }));
 
-    for (const a of availableAssets || []) {
-      const cat = a.category || "uncategorized";
-      const id = (a.id || a.name || "").toString();
-      if (!id) continue;
+    setSourceClasses(
+      classes.sort((a, b) => a.className.localeCompare(b.className)),
+    );
+    setTargetClassId(-1);
+  }, [classificationCategories]);
 
-      const item: ClassItem = {
-        id,
-        name: prettify(a.name || id),
-        selected: false,
-      };
-
-      if (!groups.has(cat)) groups.set(cat, []);
-      groups.get(cat)!.push(item);
-    }
-
-    const out: ClassCategory[] = [];
-    for (const [catId, items] of groups) {
-      out.push({
-        id: catId,
-        name: prettify(catId),
-        color: colorForCategory(catId),
-        items: items.sort((a, b) => a.name.localeCompare(b.name)),
-      });
-    }
-
-    // stable ordering by category name
-    return out.sort((a, b) => a.name.localeCompare(b.name));
-  };
-
-  const toggleSourceItem = (categoryId: string, itemId: string) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.id === categoryId
-          ? {
-              ...cat,
-              items: cat.items.map((item) =>
-                item.id === itemId
-                  ? { ...item, selected: !item.selected }
-                  : item,
-              ),
-            }
-          : cat,
+  // Toggle class selection
+  const toggleClass = (classId: number): void => {
+    setSourceClasses((prev) =>
+      prev.map((cls) =>
+        cls.classId === classId
+          ? { ...cls, selected: !cls.selected, selectedObjectIds: new Set() }
+          : cls,
       ),
     );
     returnFocusToCanvas();
   };
 
-  const getSelectedPairs = () =>
-    categories.flatMap((cat) =>
-      cat.items
-        .filter((i) => i.selected)
-        .map((i) => ({ category_id: cat.id, item_id: i.id })),
+  // Toggle object ID selection within a class
+  const toggleObjectId = (classId: number, objectId: number): void => {
+    setSourceClasses((prev) =>
+      prev.map((cls) => {
+        if (cls.classId !== classId) return cls;
+
+        const newSelectedIds = new Set(cls.selectedObjectIds);
+        if (newSelectedIds.has(objectId)) {
+          newSelectedIds.delete(objectId);
+        } else {
+          newSelectedIds.add(objectId);
+        }
+
+        return { ...cls, selectedObjectIds: newSelectedIds };
+      }),
     );
+    returnFocusToCanvas();
+  };
 
-  const getSelectedCount = () =>
-    categories.reduce(
-      (sum, cat) => sum + cat.items.filter((i) => i.selected).length,
-      0,
-    );
+  // Get selected classes with their optional object IDs
+  const getSelectedPairs = (): Array<{
+    class_id: number;
+    object_id: number;
+  }> => {
+    return sourceClasses.flatMap((cls) => {
+      if (!cls.selected) return [];
 
-  const hasAnySelection = getSelectedCount() > 0;
+      // If specific object IDs are selected, use those
+      if (cls.selectedObjectIds.size > 0) {
+        return Array.from(cls.selectedObjectIds).map((objId) => ({
+          class_id: cls.classId,
+          object_id: objId,
+        }));
+      }
 
-  const handleApply = async () => {
+      // Otherwise, include all object IDs for this class
+      return cls.objectIds.map((objId) => ({
+        class_id: cls.classId,
+        object_id: objId,
+      }));
+    });
+  };
+
+  const hasAnySelection = sourceClasses.some((cls) => cls.selected);
+
+  const handleApply = async (): Promise<void> => {
     const selectedPairs = getSelectedPairs();
 
     if (operation === "hide") {
-      // Hide selected (or all if none selected) within the active polygon
-      // Backend will interpret empty source_items as "all"
       await hidePointsInPolygon(selectedPairs);
-      console.log("[v0] Hide function triggered successfully", selectedPairs)
     } else {
-      // Reclassify selected (or all) to the chosen target
-      if (!targetCategory || !targetItem) return;
-      await reclassifyPointsInPolygon(selectedPairs, targetCategory, targetItem);
-      console.log("[v0] Reclassify function triggered successfully")
+      console.log("reclassifyPointsInPolygon Component Before:");
+      if (!targetClassId) return;
+
+      console.log("reclassifyPointsInPolygon Component After:");
+      // For reclassify, we need to pass the target class
+      const targetClass = sourceClasses.find(
+        (cls) => cls.classId === targetClassId,
+      );
+
+      let object_id_target =
+        !targetClass || targetClass.objectIds.length === 0
+          ? -1
+          : targetClass.objectIds[0];
+
+      await reclassifyPointsInPolygon(
+        selectedPairs,
+        targetClassId,
+        object_id_target,
+      );
     }
 
     returnFocusToCanvas();
   };
 
-
-
-  // When panel opens: activate tool + ensure assets are loaded
   useEffect(() => {
     if (!isVisible) return;
     selectTool("polygon").catch(console.error);
-    getAvailableAssets().catch(console.error);
+    getClassificationCategories();
   }, [isVisible]);
 
-  // Rebuild categories whenever availableAssets changes
-  useEffect(() => {
-    setCategories(buildPolygonCategories());
-    // Reset target selection to avoid stale ids
-    setTargetCategory("");
-    setTargetItem("");
-  }, [availableAssets]);
-
-  // Escape handling inside the panel
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (isVisible) panelRef.current?.focus();
   }, [isVisible]);
 
-  const handleCancel = () => {
+  const handleCancel = (): void => {
     clearTool()
       .catch(console.error)
       .finally(() => setTimeout(() => canvasRef.current?.focus(), 0));
   };
 
-  const handleKeyDownCapture = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDownCapture = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+  ): void => {
     if (e.key === "Escape" || e.key === "Esc") {
       e.preventDefault();
       e.stopPropagation();
@@ -232,7 +190,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
 
   if (!isVisible) return null;
 
-  // -------- render --------
+  const selectedClasses = sourceClasses.filter((cls) => cls.selected);
+
   return (
     <div
       ref={panelRef}
@@ -348,8 +307,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           }}
         >
           {operation === "hide"
-            ? "Choose which types to hide, or leave empty to hide all points in the polygon"
-            : "Choose which types to reclassify, or leave empty to reclassify all points in the polygon"}
+            ? "Select class types to hide. Optionally refine by specific object IDs, or leave empty to affect all in polygon."
+            : "Select class types to reclassify from, optionally refine by object IDs, then choose target class."}
         </div>
       </div>
 
@@ -364,7 +323,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           gap: theme.spacing[4],
         }}
       >
-        {/* Source Selection Card */}
+        {/* Source Selection */}
         <div
           style={{
             background: theme.colors.background.card,
@@ -373,184 +332,192 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
             padding: theme.spacing[4],
           }}
         >
+          <h4
+            style={{
+              margin: `0 0 ${theme.spacing[4]} 0`,
+              fontSize: theme.fontSizes.base,
+              fontWeight: theme.fontWeights.semibold,
+              color: theme.colors.white,
+            }}
+          >
+            {operation === "hide" ? "What to Hide" : "What to Reclassify"}
+          </h4>
+
+          {/* Class Selection */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: theme.spacing[2],
               marginBottom: theme.spacing[4],
             }}
           >
-            <h4
-              style={{
-                margin: 0,
-                fontSize: theme.fontSizes.base,
-                fontWeight: theme.fontWeights.semibold,
-                color: theme.colors.white,
-              }}
-            >
-              {operation === "hide" ? "What to Hide" : "What to Reclassify"}
-            </h4>
-          </div>
-
-          {categories.map((category) => (
-            <div key={category.id} style={{ marginBottom: theme.spacing[3] }}>
-              <div
+            {sourceClasses.map((cls) => (
+              <button
+                key={cls.classId}
+                onClick={() => toggleClass(cls.classId)}
                 style={{
+                  ...styleUtils.buttonBase(),
+                  background: cls.selected
+                    ? theme.colors.background.overlay
+                    : theme.colors.background.card,
+                  border: `1px solid ${
+                    cls.selected ? cls.color : theme.colors.border.light
+                  }`,
+                  color: cls.selected ? cls.color : theme.colors.gray[400],
+                  padding: `${theme.spacing[2]} ${theme.spacing[3]}`,
+                  borderRadius: theme.radius.base,
                   fontSize: theme.fontSizes.sm,
-                  color: category.color,
-                  marginBottom: theme.spacing[1],
-                  fontWeight: theme.fontWeights.medium,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: theme.spacing[1],
-                }}
-              >
-                <div
-                  style={{
-                    width: "6px",
-                    height: "6px",
-                    borderRadius: "50%",
-                    background: category.color,
-                  }}
-                />
-                {category.name}
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: theme.spacing[1],
-                  paddingLeft: "10px",
-                }}
-              >
-                {category.items.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => toggleSourceItem(category.id, item.id)}
-                    style={{
-                      ...styleUtils.toolItem(item.selected),
-                      padding: `${theme.spacing[1]} ${theme.spacing[3]}`,
-                      fontSize: theme.fontSizes.xs,
-                      fontWeight: item.selected
-                        ? theme.fontWeights.medium
-                        : theme.fontWeights.normal,
-                    }}
-                  >
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Target (only for reclassify) */}
-        <div
-          style={{
-            minHeight: operation === "reclassify" ? "100px" : "0px",
-            overflow: "hidden",
-            transition: theme.transitions.slow,
-          }}
-        >
-          {operation === "reclassify" && (
-            <div
-              style={{
-                background: theme.colors.background.overlay,
-                border: `1px solid ${theme.colors.border.orangeStrong}`,
-                borderRadius: theme.radius.md,
-                padding: theme.spacing[4],
-              }}
-            >
-              <h4
-                style={{
-                  margin: `0 0 ${theme.spacing[3]} 0`,
-                  fontSize: theme.fontSizes.base,
-                  fontWeight: theme.fontWeights.semibold,
-                  color: theme.colors.primary.orangeLight,
+                  fontWeight: cls.selected
+                    ? theme.fontWeights.semibold
+                    : theme.fontWeights.medium,
                   display: "flex",
                   alignItems: "center",
                   gap: theme.spacing[2],
                 }}
               >
-                <span>→</span>
-                Reclassify To
-              </h4>
-
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: theme.spacing[2] }}
-              >
-                <select
-                  value={targetCategory}
-                  onChange={(e) => {
-                    setTargetCategory(e.target.value);
-                    setTargetItem("");
-                    returnFocusToCanvas();
-                  }}
+                <div
                   style={{
-                    ...styleUtils.inputField(),
-                    padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
-                    fontSize: theme.fontSizes.sm,
-                    cursor: "pointer",
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: cls.color,
+                    opacity: cls.selected ? 1 : 0.5,
                   }}
-                >
-                  <option
-                    value=""
-                    style={{ background: theme.colors.gray[800], color: theme.colors.white }}
-                  >
-                    Choose category...
-                  </option>
-                  {categories.map((cat) => (
-                    <option
-                      key={cat.id}
-                      value={cat.id}
-                      style={{ background: theme.colors.gray[800], color: theme.colors.white }}
-                    >
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                />
+                {cls.className}
+              </button>
+            ))}
+          </div>
 
-                {targetCategory && (
-                  <select
-                    value={targetItem}
-                    onChange={(e) => {
-                      setTargetItem(e.target.value);
-                      returnFocusToCanvas();
-                    }}
+          {/* Object ID refinement for selected classes */}
+          {selectedClasses.length > 0 && (
+            <div
+              style={{
+                borderTop: `1px solid ${theme.colors.border.light}`,
+                paddingTop: theme.spacing[4],
+              }}
+            >
+              <div
+                style={{
+                  fontSize: theme.fontSizes.xs,
+                  color: theme.colors.gray[400],
+                  marginBottom: theme.spacing[3],
+                  fontWeight: theme.fontWeights.medium,
+                }}
+              >
+                Optional: Refine by Object IDs
+              </div>
+              {selectedClasses.map((cls) => (
+                <div
+                  key={cls.classId}
+                  style={{ marginBottom: theme.spacing[3] }}
+                >
+                  <div
                     style={{
-                      ...styleUtils.inputField(),
-                      padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
-                      fontSize: theme.fontSizes.sm,
-                      cursor: "pointer",
+                      fontSize: theme.fontSizes.xs,
+                      color: cls.color,
+                      marginBottom: theme.spacing[2],
+                      fontWeight: theme.fontWeights.medium,
                     }}
                   >
-                    <option
-                      value=""
-                      style={{ background: theme.colors.gray[800], color: theme.colors.white }}
-                    >
-                      Choose specific type...
-                    </option>
-                    {categories
-                      .find((cat) => cat.id === targetCategory)
-                      ?.items.map((item) => (
-                        <option
-                          key={item.id}
-                          value={item.id}
-                          style={{ background: theme.colors.gray[800], color: theme.colors.white }}
-                        >
-                          {item.name}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
+                    {cls.className}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: theme.spacing[1],
+                      paddingLeft: theme.spacing[3],
+                    }}
+                  >
+                    {cls.objectIds.map((objId) => (
+                      <button
+                        key={`${cls.classId}-${objId}`}
+                        onClick={() => toggleObjectId(cls.classId, objId)}
+                        style={{
+                          ...styleUtils.toolItem(
+                            cls.selectedObjectIds.has(objId),
+                          ),
+                          padding: `${theme.spacing[1]} ${theme.spacing[2]}`,
+                          fontSize: theme.fontSizes.xs,
+                        }}
+                      >
+                        {objId}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
+
+        {/* Target Selection (reclassify only) */}
+        {operation === "reclassify" && (
+          <div
+            style={{
+              background: theme.colors.background.overlay,
+              border: `1px solid ${theme.colors.border.orangeStrong}`,
+              borderRadius: theme.radius.md,
+              padding: theme.spacing[4],
+            }}
+          >
+            <h4
+              style={{
+                margin: `0 0 ${theme.spacing[3]} 0`,
+                fontSize: theme.fontSizes.base,
+                fontWeight: theme.fontWeights.semibold,
+                color: theme.colors.primary.orangeLight,
+                display: "flex",
+                alignItems: "center",
+                gap: theme.spacing[2],
+              }}
+            >
+              <span>→</span>
+              Reclassify To
+            </h4>
+
+            <select
+              value={targetClassId}
+              onChange={(e) => {
+                setTargetClassId(Number(e.target.value));
+                returnFocusToCanvas();
+              }}
+              style={{
+                ...styleUtils.inputField(),
+                padding: `${theme.spacing[3]} ${theme.spacing[3]}`,
+                fontSize: theme.fontSizes.sm,
+                cursor: "pointer",
+              }}
+            >
+              <option
+                value=""
+                style={{
+                  background: theme.colors.gray[800],
+                  color: theme.colors.white,
+                }}
+              >
+                Choose target class...
+              </option>
+              {sourceClasses.map((cls) => (
+                <option
+                  key={cls.classId}
+                  value={cls.classId}
+                  style={{
+                    background: theme.colors.gray[800],
+                    color: theme.colors.white,
+                  }}
+                >
+                  {cls.className}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
+      {/* Footer Actions */}
       <div
         style={{
           padding: `${theme.spacing[4]} ${theme.spacing[5]}`,
@@ -573,27 +540,27 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         </button>
         <button
           onClick={handleApply}
-          disabled={operation === "reclassify" && (!targetCategory || !targetItem)}
+          disabled={operation === "reclassify" && !targetClassId}
           style={{
             ...styleUtils.buttonBase(),
             background:
-              operation === "reclassify" && (!targetCategory || !targetItem)
+              operation === "reclassify" && !targetClassId
                 ? theme.colors.background.card
                 : theme.colors.background.overlay,
             border: `1px solid ${
-              operation === "reclassify" && (!targetCategory || !targetItem)
+              operation === "reclassify" && !targetClassId
                 ? theme.colors.border.light
                 : theme.colors.border.orangeStrong
             }`,
             color:
-              operation === "reclassify" && (!targetCategory || !targetItem)
+              operation === "reclassify" && !targetClassId
                 ? theme.colors.gray[600]
                 : theme.colors.primary.orangeLight,
             padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
             fontSize: theme.fontSizes.sm,
             fontWeight: theme.fontWeights.semibold,
             cursor:
-              operation === "reclassify" && (!targetCategory || !targetItem)
+              operation === "reclassify" && !targetClassId
                 ? "not-allowed"
                 : "pointer",
             transition: theme.transitions.fast,

@@ -2,8 +2,41 @@
 use crate::atlas::{AssetAtlasInfo, AssetMetadata, AtlasConfig, AtlasTextureFiles};
 use crate::bounds::PointCloudBounds;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClassType {
+    pub class_name: String,
+    pub objects_ids: HashSet<u32>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ClassificationInfo {
+    pub class_types: HashMap<u8, ClassType>,
+}
+
+impl ClassificationInfo {
+    pub fn insert_or_update(&mut self, class_id: u8, name: String, object_id: u32) {
+        self.class_types
+            .entry(class_id)
+            .or_insert_with(|| ClassType {
+                class_name: name,
+                objects_ids: HashSet::new(),
+            })
+            .objects_ids
+            .insert(object_id);
+    }
+}
+
+impl std::fmt::Debug for ClassificationInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClassificationInfo")
+            .field("class_types", &self.class_types)
+            .finish()
+    }
+}
 
 /// Unified scene manifest linking terrain and asset atlas data.
 /// Contains all necessary information for GPU renderer integration.
@@ -15,6 +48,8 @@ pub struct SceneManifest {
     pub asset_atlas: Option<AssetAtlasInfo>,
     /// Global scene bounds encompassing terrain and all assets.
     pub scene_bounds: PointCloudBounds,
+    /// Describes the class types and object id's found in the specific dataset
+    pub classes: ClassificationInfo,
 }
 
 /// Terrain dataset information for main point cloud processing.
@@ -66,6 +101,7 @@ impl ManifestGenerator {
         &self,
         terrain_info: TerrainInfo,
         asset_atlas_info: Option<AssetAtlasInfo>,
+        classes: ClassificationInfo,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Calculate global scene bounds encompassing terrain and assets.
         let scene_bounds = self.calculate_global_bounds(&terrain_info, &asset_atlas_info);
@@ -74,6 +110,7 @@ impl ManifestGenerator {
             terrain: terrain_info,
             asset_atlas: asset_atlas_info,
             scene_bounds,
+            classes,
         };
 
         // Write manifest to root output directory for easy discovery.

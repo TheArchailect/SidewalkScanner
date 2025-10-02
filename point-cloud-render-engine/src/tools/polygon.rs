@@ -14,79 +14,44 @@ use serde::{Deserialize, Serialize};
 
 /// Polygon operations events
 #[derive(Event, Debug, Clone)]
-pub struct PolygonHideRequestEvent{
-    pub source_items: Vec<(String, String)>,    // category_id, item_id
+pub struct PolygonHideRequestEvent {
+    pub source_items: Vec<(u32, u32)>, // class_id, object_id
 }
 
 #[derive(Event, Debug, Clone)]
 pub struct PolygonReclassifyRequestEvent {
-    pub source_items: Vec<(String, String)>,
-    pub target: (String, String),               // target_category_id, target_item_id
+    pub source_items: Vec<(u32, u32)>,
+    pub target: (u32, u32), // target_class_id, target_object_id
 }
 
 pub struct PolygonToolPlugin;
 impl Plugin for PolygonToolPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_event::<PolygonHideRequestEvent>()
+        app.add_event::<PolygonHideRequestEvent>()
             .add_event::<PolygonReclassifyRequestEvent>()
             .add_systems(PostUpdate, process_poloygon_hide_requests)
             .add_systems(PostUpdate, process_polygon_reclassify_requests);
     }
 }
 
-/// Polygon system which applies Hide operation
-fn process_poloygon_hide_requests(
-    mut ev: EventReader<PolygonHideRequestEvent>,
-    // TODO: add resources/queries needed to perform the actual hide - for geometry + data mutation
-    // Examples (adjust to your project paths/types):
-    // assets store to access/classify/mutate points
-    // assets: ResMut<PointCloudAssets>,
-    //
-    // active polygon state (whatever you use to store the finished polygon loop)
-    // polygon_state: Res<YourPolygonState>,
-) {
+/// Polygon system which applies Hide operations
+fn process_poloygon_hide_requests(mut ev: EventReader<PolygonHideRequestEvent>) {
     for e in ev.read() {
-        // TODO: find points inside active polygon, filter by e.source_items, mark hidden, update counts
-        // 1) Get the current/active polygon (world-space).
-        //    Replace this with your real accessor.
-        //    The usual convention is projecting XZ plane; if your ground plane is XY, adapt the projection below.
-        // --------------------------------------------------------------------
-        // let polygon_world_2d: Vec<Vec2> = polygon_state.vertices.iter()
-        //     .map(|v3| Vec2::new(v3.x, v3.z)) // project to XZ
-        //     .collect();
-        // if polygon_world_2d.len() < 3 { continue; }
-
-        // 2) Compute a conservative AABB around the polygon to cheaply cull candidates.
-        // --------------------------------------------------------------------
-        // let (min, max) = aabb_from_poly(&polygon_world_2d);
-
-        // 3) Iterate candidate points in that AABB and do a precise point-in-polygon test.
-        //    Filter by e.source_items if provided.
-        //    For performance, prefer an index/histogram in your store rather than scanning every point.
-        // --------------------------------------------------------------------
-        // let mut affected: u64 = 0;
-        // assets.for_each_point_in_aabb(min, max, |pid, p| {
-        //     let p2 = Vec2::new(p.x, p.z); // project onto XZ
-        //     if point_in_polygon_2d(p2, &polygon_world_2d) {
-        //         if matches_source_items(&assets, pid, &e.source_items) {
-        //             // mark hidden; replace with your real mutation call:
-        //             assets.set_point_hidden(pid, true);
-        //             affected += 1;
-        //         }
-        //     }
-        // });
-        info!("[POLY] hide request received; {} filter pairs", e.source_items.len());
+        info!(
+            "[POLY] hide request received; {} filter pairs",
+            e.source_items.len()
+        );
     }
 }
 
-fn process_polygon_reclassify_requests(
-    mut ev: EventReader<PolygonReclassifyRequestEvent>,
-
-) {
+fn process_polygon_reclassify_requests(mut ev: EventReader<PolygonReclassifyRequestEvent>) {
     for e in ev.read() {
-        let (target_Cat, target_Item) = &e.target;
-        info!("[POLY] Reclassify request received; {} filter pairs -> target=({},{})", e.source_items.len(), target_Cat, target_Item)
+        info!(
+            "[POLY] Reclassify request received; {} filter pairs -> target=({},{})",
+            e.source_items.len(),
+            e.target.0,
+            e.target.1
+        )
     }
 }
 
