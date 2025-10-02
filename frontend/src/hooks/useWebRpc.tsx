@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect, useCallback, useRef, RefObject } from "react";
 
 interface JsonRpcRequest {

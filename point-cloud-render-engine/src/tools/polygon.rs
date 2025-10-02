@@ -1,6 +1,7 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
+use crate::engine::core::app_state::AppState;
 use crate::engine::scene::grid::GroundGrid;
 use crate::engine::systems::render_mode::RenderMode;
 use crate::engine::systems::render_mode::RenderModeState;
@@ -29,39 +30,231 @@ impl Plugin for PolygonToolPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<PolygonHideRequestEvent>()
             .add_event::<PolygonReclassifyRequestEvent>()
-            .add_systems(PostUpdate, process_poloygon_hide_requests)
-            .add_systems(PostUpdate, process_polygon_reclassify_requests);
+            .add_systems(
+                Update,
+                process_poloygon_hide_requests.run_if(in_state(AppState::Running)),
+            )
+            .add_systems(
+                Update,
+                process_polygon_reclassify_requests.run_if(in_state(AppState::Running)),
+            );
     }
 }
 
 /// Polygon system which applies Hide operations
-fn process_poloygon_hide_requests(mut ev: EventReader<PolygonHideRequestEvent>) {
+fn process_poloygon_hide_requests(
+    mut commands: Commands,
+    mut ev: EventReader<PolygonHideRequestEvent>,
+    mut polygon_tool: ResMut<PolygonTool>,
+    mut polygon_counter: ResMut<PolygonCounter>,
+    mut classification_data: ResMut<PolygonClassificationData>,
+    mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    viewport_camera: ResMut<ViewportCamera>,
+) {
     for e in ev.read() {
         info!(
             "[POLY] hide request received; {} filter pairs",
             e.source_items.len()
         );
+
+        let should_complete = polygon_tool.current_polygon.len() >= 3;
+        if should_complete {
+            let resampled_points = resample_polygon_uniform(
+                &polygon_tool.current_polygon,
+                polygon_tool.target_point_spacing,
+            );
+
+            // Generate unique polygon identifier for tracking.
+            let polygon_id = polygon_counter.next_id;
+            polygon_counter.next_id += 1;
+
+            // Create classification data structure for compute shader processing.
+            let class_polygon = ClassificationPolygon {
+                id: polygon_id,
+                points: resampled_points.clone(),
+                new_class: 0, // not actually used during hide mode
+                mode: PolygonMode::Hide,
+                masks: e.source_items.clone(),
+            };
+
+            // Add to classification data with GPU memory constraint validation.
+            if classification_data.polygons.len() < classification_data.max_polygons {
+                classification_data.polygons.push(class_polygon);
+                println!(
+                    "Added classification polygon {} with class {}",
+                    polygon_id, polygon_tool.current_class
+                );
+
+                // Create visual representation using standard material pipeline.
+                create_completed_polygon(
+                    &mut commands,
+                    &resampled_points,
+                    polygon_id,
+                    viewport_camera.ground_height,
+                    &mut meshes,
+                    &mut materials,
+                );
+
+                println!(
+                    "Polygon {} completed with {} points",
+                    polygon_id,
+                    polygon_tool.current_polygon.len()
+                );
+
+                // Notify frontend of successful completion
+                rpc_interface.send_notification(
+                    "polygon_completed",
+                    serde_json::json!({
+                        "polygon_id": polygon_id,
+                        "point_count": polygon_tool.current_polygon.len(),
+                        "class": polygon_tool.current_class,
+                        "total_polygons": classification_data.polygons.len()
+                    }),
+                );
+            } else {
+                println!(
+                    "Warning: Maximum polygon limit reached ({})",
+                    classification_data.max_polygons
+                );
+
+                // Notify frontend of error
+                rpc_interface.send_notification(
+                    "polygon_error",
+                    serde_json::json!({
+                        "error": "Maximum polygon limit reached",
+                        "max_polygons": classification_data.max_polygons
+                    }),
+                );
+            }
+
+            // Reset state for next polygon creation.
+            polygon_tool.current_polygon.clear();
+            polygon_tool.preview_point = None;
+            polygon_tool.is_completed = false;
+        }
     }
 }
 
-fn process_polygon_reclassify_requests(mut ev: EventReader<PolygonReclassifyRequestEvent>) {
+fn process_polygon_reclassify_requests(
+    mut commands: Commands,
+    mut ev: EventReader<PolygonReclassifyRequestEvent>,
+    mut polygon_tool: ResMut<PolygonTool>,
+    mut polygon_counter: ResMut<PolygonCounter>,
+    mut classification_data: ResMut<PolygonClassificationData>,
+    mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    viewport_camera: ResMut<ViewportCamera>,
+) {
     for e in ev.read() {
+        polygon_tool.current_class = e.target.0;
         info!(
             "[POLY] Reclassify request received; {} filter pairs -> target=({},{})",
             e.source_items.len(),
             e.target.0,
             e.target.1
-        )
+        );
+        let should_complete = polygon_tool.current_polygon.len() >= 3;
+
+        info!(
+            "[POLY] Reclassify Complete: {:?}, with target: {:?}",
+            should_complete, polygon_tool.current_class
+        );
+
+        if should_complete {
+            let resampled_points = resample_polygon_uniform(
+                &polygon_tool.current_polygon,
+                polygon_tool.target_point_spacing,
+            );
+
+            // Generate unique polygon identifier for tracking.
+            let polygon_id = polygon_counter.next_id;
+            polygon_counter.next_id += 1;
+
+            // Create classification data structure for compute shader processing.
+            let class_polygon = ClassificationPolygon {
+                id: polygon_id,
+                points: resampled_points.clone(),
+                new_class: polygon_tool.current_class,
+                mode: PolygonMode::Reclassify,
+                masks: e.source_items.clone(),
+            };
+
+            // Add to classification data with GPU memory constraint validation.
+            if classification_data.polygons.len() < classification_data.max_polygons {
+                classification_data.polygons.push(class_polygon);
+                println!(
+                    "Added classification polygon {} with class {}",
+                    polygon_id, polygon_tool.current_class
+                );
+
+                // Create visual representation using standard material pipeline.
+                create_completed_polygon(
+                    &mut commands,
+                    &resampled_points,
+                    polygon_id,
+                    viewport_camera.ground_height,
+                    &mut meshes,
+                    &mut materials,
+                );
+
+                println!(
+                    "Polygon {} completed with {} points",
+                    polygon_id,
+                    polygon_tool.current_polygon.len()
+                );
+
+                // Notify frontend of successful completion
+                rpc_interface.send_notification(
+                    "polygon_completed",
+                    serde_json::json!({
+                        "polygon_id": polygon_id,
+                        "point_count": polygon_tool.current_polygon.len(),
+                        "class": polygon_tool.current_class,
+                        "total_polygons": classification_data.polygons.len()
+                    }),
+                );
+            } else {
+                println!(
+                    "Warning: Maximum polygon limit reached ({})",
+                    classification_data.max_polygons
+                );
+
+                // Notify frontend of error
+                rpc_interface.send_notification(
+                    "polygon_error",
+                    serde_json::json!({
+                        "error": "Maximum polygon limit reached",
+                        "max_polygons": classification_data.max_polygons
+                    }),
+                );
+            }
+
+            // Reset state for next polygon creation.
+            polygon_tool.current_polygon.clear();
+            polygon_tool.preview_point = None;
+            polygon_tool.is_completed = false;
+        }
     }
 }
 
 /// Polygon definition for point cloud classification operations.
 /// Contains spatial coordinates and target classification metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+enum PolygonMode {
+    Hide,
+    Reclassify,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassificationPolygon {
     pub id: u32,
     pub points: Vec<Vec3>, // XZ plane coordinates for heightmap intersection.
     pub new_class: u32,    // Target classification ID for enclosed points.
+    pub masks: Vec<(u32, u32)>,
+    pub mode: PolygonMode,
 }
 
 /// Resource containing active polygon classification data.
@@ -365,6 +558,8 @@ pub fn polygon_tool_system(
                 id: polygon_id,
                 points: resampled_points.clone(),
                 new_class: polygon_tool.current_class,
+                mode: PolygonMode::Reclassify,
+                masks: Vec::new(), // empty masks if we're running natively
             };
 
             // Add to classification data with GPU memory constraint validation.

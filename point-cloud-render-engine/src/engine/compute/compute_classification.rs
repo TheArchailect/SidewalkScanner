@@ -298,6 +298,19 @@ fn create_compute_buffer(
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
 
+    if polygons.len() > 0 {
+        polygons[0]
+            .masks
+            .iter()
+            .flat_map(|&(a, b)| [a, b])
+            .enumerate()
+            .for_each(|(i, val)| {
+                uniform.ignore_masks[i / 4][i % 4] = val;
+            });
+    }
+
+    info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
+
     uniform.selection_point = selection_state
         .selection_point
         .map(|p| [p.x, p.y, p.z, 0.0])

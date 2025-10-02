@@ -82,6 +82,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 if should_test_polygon {
                     if point_in_polygon(world_pos.xz, start_idx, point_count) {
                         final_class = new_class;
+
+                        // if we detect a collision, we need to know if it was in hide mode or not
+                        // collision_detected = true;
+
                         break; // Early termination: first matching polygon wins.
                     }
                 }
@@ -169,13 +173,24 @@ fn is_point_near_polygon_aabb(
            point.y >= (min_z - margin) && point.y <= (max_z + margin);
 }
 
+fn contains_value(needle: u32, ignore_masks: array<vec4<u32>, 128>) -> bool {
+    for (var i = 0u; i < 128u; i++) {
+        let mask = ignore_masks[i];
+        if (mask.x == needle || mask.y == needle ||
+            mask.z == needle || mask.w == needle) {
+            return true;
+        }
+    }
+    return false;
+}
+
 fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
     switch compute_data.render_mode {
         case 0u: { // Original classification
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
-            if (original_class == 15u) {
+            if (contains_value(original_class, compute_data.ignore_masks)) {
                 return vec4<f32>(classification_to_color(final_class), f32(254u));
             }
             return vec4<f32>(classification_to_color(final_class), f32(original_class));
