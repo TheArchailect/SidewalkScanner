@@ -1,7 +1,7 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_state::{AppState, PipelineDebugState};
 use crate::engine::render::extraction::render_state::extract_point_cloud_render_state;
-use crate::engine::render_mode::RenderModeState;
+use crate::engine::systems::render_mode::RenderModeState;
 use bevy::core_pipeline::core_3d::graph::{Core3d, Node3d};
 use bevy::ecs::{
     query::QueryItem,
@@ -101,8 +101,8 @@ impl Plugin for PointCloudRenderPlugin {
             .add_render_graph_edges(
                 Core3d,
                 (
-                    Node3d::MainOpaquePass,
                     PointCloudRenderLabel,
+                    Node3d::MainOpaquePass,
                     Node3d::Tonemapping,
                 ),
             );
@@ -118,7 +118,7 @@ impl Plugin for PointCloudRenderPlugin {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-struct PointCloudRenderLabel;
+pub struct PointCloudRenderLabel;
 
 /// Resource containing point cloud rendering parameters extracted from main world.
 #[derive(Resource, Default, ExtractResource, Clone)]

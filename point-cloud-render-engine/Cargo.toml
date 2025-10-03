@@ -4,7 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.16", features = ["exr", "dds", "webgpu"] }
+bevy = { version = "0.16", features = [
+  "bevy_ui",
+  "bevy_text",
+  "bevy_winit", 
+  "bevy_pbr",    
+  "webgpu",
+  "exr",
+  "dds",
+] }
 bevy_common_assets = { version = "0.13", features = ["json"] }
 las = { version = "0.9", features = ["laz-parallel"] }
 serde = { version = "1.0", features = ["derive"] }

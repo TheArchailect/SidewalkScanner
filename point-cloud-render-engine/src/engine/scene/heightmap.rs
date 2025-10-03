@@ -47,7 +47,18 @@ pub fn sample_heightmap_bilinear(
 
 /// Sample height at specific pixel coordinates
 fn sample_height_at_pixel(data: &[u8], x: usize, z: usize) -> f32 {
+    // Check if coordinates are within texture bounds
+    if x >= TEXTURE_SIZE || z >= TEXTURE_SIZE {
+        return 0.0; // Return default height for out-of-bounds access
+    }
+
     let pixel_index = (z * TEXTURE_SIZE + x) * 4; // 4 bytes per f32
+
+    // Check if we have enough data to read
+    if pixel_index + 4 > data.len() {
+        return 0.0; // Return default height if data is insufficient
+    }
+
     let height_bytes = &data[pixel_index..pixel_index + 4];
     f32::from_le_bytes([
         height_bytes[0],

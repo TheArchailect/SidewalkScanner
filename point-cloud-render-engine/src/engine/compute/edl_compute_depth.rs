@@ -153,10 +153,6 @@ pub fn run_edl_compute(
     };
 
     let Some(pipeline) = pipeline_cache.get_compute_pipeline(pipeline_id) else {
-        // println!(
-        //     "EDL Compute Depth: Pipeline not ready in cache yet for ID: {:?}",
-        //     pipeline_id
-        // );
         return;
     };
 

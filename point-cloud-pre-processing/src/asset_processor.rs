@@ -57,11 +57,15 @@ impl AssetProcessor {
             ProgressStyle::default_bar()
                 .template("[{bar:40.green/blue}] {pos}/{len} assets ({percent}%) {msg}")
                 .unwrap()
-                .progress_chars("▉▊▋▌▍▎▏ "),
+                .progress_chars("█▉▊▋▌▍▎▏"),
         );
         pb.set_message("Processing assets");
 
-        for candidate in &candidates {
+        for (idx, candidate) in candidates.iter().enumerate() {
+            println!(
+                "Processing #{}: {} -> will assign to tile",
+                idx, candidate.name
+            );
             let (asset_points, local_bounds) = self.load_asset_points(&candidate)?;
             atlas_gen.add_asset(&asset_points, candidate.name.clone(), local_bounds)?;
             pb.inc(1);

@@ -23,7 +23,6 @@ pub fn update_selection_buffer(
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
-        println!("add selection id");
         selection_buffer.selected_ids.push(2);
     }
 
@@ -64,7 +63,7 @@ pub fn handle_class_selection(
 ) {
     if keyboard.just_pressed(KeyCode::KeyS) {
         selection_state.is_selecting = true;
-        println!("Click to select");
+        // println!("Click to select");
     }
 
     if keyboard.just_pressed(KeyCode::Escape) {

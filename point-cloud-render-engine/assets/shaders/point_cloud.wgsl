@@ -71,8 +71,8 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     let up = cross(right, to_camera);
 
     // Apply interpolated billboarded quad offset
-    let point_size_min = 0.075;
-    let point_size_max = 0.3;
+    let point_size_min = 0.09;
+    let point_size_max = 0.425;
 
     let dist_min = 5.0;
     let dist_max = 100.0;
@@ -104,7 +104,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     out.color = current_rgba.rgb;
     out.connectivity_class = u32(current_rgba.a);
     out.depth = textureLoad(depth_texture, tex_coord, 0).r;
-    out.type_class = u32(current_rgba.a); // TODO organise the correct swizling
+    out.type_class = u32(current_rgba.a);
     return out;
 }
 
@@ -124,10 +124,7 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    const RENDERMODE_DISCARD_CLASS: u32 = 15u;
-
-
-    if (in.type_class == RENDERMODE_DISCARD_CLASS) {discard;};
+    if (in.type_class == 254u) {discard;};
 
     let r = length(in.quad_pos); // 0 at center, ~0.707 at corners
     let radius = 0.5;

@@ -3,6 +3,10 @@
 @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>;
 @group(0) @binding(3) var output_texture: texture_storage_2d<rgba32float, write>;
 
+const MAX_IGNORE_MASK_LENGTH: u32 = 512u;
+const MAXIMUM_POLYGON_POINTS: u32 = 2048u;
+const MAXIMUM_POLYGONS: u32 = 512u;
+
 struct ComputeUniformData {
    polygon_count: u32,
    total_points: u32,
@@ -11,8 +15,9 @@ struct ComputeUniformData {
    selection_point: vec3<f32>,
    is_selecting: u32,
    _padding: u32,
-   point_data: array<vec4<f32>, 512>,
-   polygon_info: array<vec4<f32>, 64>,
+   point_data: array<vec4<f32>, MAXIMUM_POLYGON_POINTS>,
+   polygon_info: array<vec4<f32>, MAXIMUM_POLYGONS>,
+   ignore_masks: array<vec4<u32>, MAX_IGNORE_MASK_LENGTH>,  // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values: note each u32 value is actually two 8bit values (mask and polygon index), and a mode Reclassify | Hide
 }
 
 @group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
@@ -29,7 +34,6 @@ struct BoundsData {
 const GRID_RESOLUTION: u32 = 1024u;
 const MORTON_THRESHOLD = 500u; // Empirical threshold for Morton spatial distance.
 const USE_MORTON_SPATIAL: bool = false; // Toggle: true=Morton, false=AABB
-const IGNORE_CLASS_MASK: u32 = 5u;
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -54,48 +58,89 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let morton_low = bitcast<u32>(spatial_sample.g);
 
     var final_class = original_class;
+    var found_hide_op: bool = false;
 
-    if (original_class != IGNORE_CLASS_MASK) {
-        for (var i = 0u; i < compute_data.polygon_count; i++) {
-            let poly_info = compute_data.polygon_info[i];
-            let start_idx = u32(poly_info.x);
-            let point_count = u32(poly_info.y);
-            let new_class = u32(poly_info.z);
+    for (var i: u32 = compute_data.polygon_count; i > 0u; i = i - 1u) {
+        let real_index: u32 = i - 1u;
+        let poly_info = compute_data.polygon_info[real_index];
+        let start_idx = u32(poly_info.x);
+        let point_count = u32(poly_info.y);
+        let new_class = u32(poly_info.z);
 
-            if compute_data.enable_spatial_opt == 1u {
-                // Compile-time spatial optimization method selection.
-                var should_test_polygon = false;
+        if compute_data.enable_spatial_opt == 1u {
+            // Compile-time spatial optimization method selection.
+            var should_test_polygon = false;
 
-                if USE_MORTON_SPATIAL {
-                    // Morton code spatial filtering with centroid coverage.
-                    should_test_polygon = is_point_near_polygon_morton(
-                        world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
-                    );
-                } else {
-                    // AABB spatial filtering for guaranteed coverage.
-                    should_test_polygon = is_point_near_polygon_aabb(
-                        world_pos.xz, start_idx, point_count
-                    );
-                }
-
-                if should_test_polygon {
-                    if point_in_polygon(world_pos.xz, start_idx, point_count) {
-                        final_class = new_class;
-                        break; // Early termination: first matching polygon wins.
-                    }
-                }
+            if USE_MORTON_SPATIAL {
+                // Morton code spatial filtering with centroid coverage.
+                should_test_polygon = is_point_near_polygon_morton(
+                    world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
+                );
             } else {
-                // Direct polygon testing without spatial optimization.
+                // AABB spatial filtering for guaranteed coverage.
+                should_test_polygon = is_point_near_polygon_aabb(
+                    world_pos.xz, start_idx, point_count
+                );
+            }
+
+            // since this is technically a procedural modifer stack - we should not bother performing additional hide or reclasiffy ops to a point that has been previously hidden
+            // otherwise intersecting polygons will undo hide ops when we reclassify, regardless of mask ids
+            if should_test_polygon && !found_hide_op {
+                // Here's where we check if the mask ids for the current polygon overlap AND it's inside the polygon
+                // effectivly this is our masking logic per polygon in the Reclassify polygon mode
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
-                    final_class = new_class;
-                    break;
+                    // update the final class for points inside the polygon, with it's masks considered for reclassification
+                    if contains_value(real_index, original_class, 1u) {
+                        final_class = new_class;
+                    }
+
+                    // set the final class for points inside the polygon, with masks considered to a magic number that our fragment shader will ignore and discard 'hiding' non-destructivly
+                    if contains_value(real_index, original_class, 0u) {
+                        found_hide_op = true;
+                        final_class = 254u;
+                        break;
+                    }
+
                 }
+            }
+        } else {
+            // Direct polygon testing without spatial optimization.
+            if point_in_polygon(world_pos.xz, start_idx, point_count) {
+                final_class = new_class;
+                break;
             }
         }
     }
 
     let final_color = apply_render_mode(original_rgb, original_class, final_class, world_pos, coords, morton_low, morton_high, point_connectivity_class_id);
     textureStore(output_texture, coords, final_color);
+}
+
+fn decode_mask(encoded: u32) -> vec3<u32> {
+    let mask_id  = encoded & 0xFFu;
+    let poly_idx = (encoded >> 8) & 0xFFFFu;
+    let mode     = (encoded >> 24) & 0xFFu;
+    return vec3<u32>(poly_idx, mask_id, mode);
+}
+
+
+fn contains_value(poly_idx: u32, mask_id: u32, mode: u32) -> bool {
+    for (var i = 0u; i < MAX_IGNORE_MASK_LENGTH; i++) {
+        let mask_vec = compute_data.ignore_masks[i];
+        for (var j = 0u; j < 4u; j++) {
+            let encoded = mask_vec[j];
+            let dec_mask_id  = encoded & 0xFFu;
+            let dec_poly_idx = (encoded >> 8) & 0xFFFFu;
+            let dec_mode     = (encoded >> 24) & 0xFFu;
+
+            if (dec_poly_idx == poly_idx &&
+                dec_mask_id == mask_id &&
+                dec_mode == mode) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Morton-based spatial filtering with centroid coverage for large polygons.
@@ -174,7 +219,7 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
-            return vec4<f32>(classification_to_color(final_class), f32(original_class));
+            return vec4<f32>(classification_to_color(final_class), f32(final_class));
         }
         case 2u: { // RGB
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
@@ -212,7 +257,7 @@ fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: 
             }
         }
         case 5u: {
-            return vec4<f32>(classification_to_color(point_connectivity_class_id), f32(point_connectivity_class_id));
+            return vec4<f32>(classification_to_random_color(point_connectivity_class_id), f32(point_connectivity_class_id));
         }
         default: {
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));
@@ -237,7 +282,7 @@ fn point_in_polygon(point: vec2<f32>, start_idx: u32, point_count: u32) -> bool 
     return inside;
 }
 
-fn classification_to_color(classification: u32) -> vec3<f32> {
+fn classification_to_random_color(classification: u32) -> vec3<f32> {
     let c = classification & 255u;
     let hash1 = (c * 73u) % 255u;
     let hash2 = (c * 151u + 17u) % 255u;
@@ -248,6 +293,25 @@ fn classification_to_color(classification: u32) -> vec3<f32> {
         f32(hash2) / 255.0,
         f32(hash3) / 255.0
     );
+}
+
+fn classification_to_color(classification: u32) -> vec3<f32> {
+    switch classification {
+        case 0u: { return vec3<f32>(0.85, 0.85, 0.85); }     // never classified
+        case 1u: { return vec3<f32>(0.73, 0.73, 0.73); }     // unclassified
+        case 2u: { return vec3<f32>(1.0, 0.6, 0.0); }        // sidewalk
+        case 3u: { return vec3<f32>(0.28, 0.70, 0.28); }     // low vegetation
+        case 4u: { return vec3<f32>(0.0, 0.8, 0.0); }        // medium vegetation
+        case 5u: { return vec3<f32>(0.0, 0.6, 0.0); }        // high vegetation
+        case 6u: { return vec3<f32>(0.92, 1.0, 0.0); }       // buildings
+        case 8u: { return vec3<f32>(0.2, 0.0, 1.0); }        // street furniture
+        case 10u: { return vec3<f32>(1.0, 1.0, 1.0); }       // street markings
+        case 11u: { return vec3<f32>(0.18, 0.18, 0.18); }    // street surface
+        case 13u: { return vec3<f32>(1.0, 0.95, 0.0); }      // non-permanent
+        case 15u: { return vec3<f32>(1.0, 0.0, 0.0); }       // cars
+        case 20u: { return vec3<f32>(0.7, 0.5, 0.8); }       // highlight
+        default: { return vec3<f32>(0.5, 0.5, 0.5); }        // fallback for unknown classifications
+    }
 }
 
 fn morton_to_debug_color_blended(morton_high: u32, morton_low: u32) -> vec3<f32> {

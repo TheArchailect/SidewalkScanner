@@ -94,7 +94,7 @@ cargo run --bin point-cloud-pre-processing <path to your input laz file>.laz <as
 
 This generates:
 
-- `input_file_position_2048x2048.dds` - RGBA32F: XYZ coordinates + connectivity class id (a unique id for instances of a classification)
+- `input_file_position_2048x2048.dds` - RGBA32F: XYZ coordinates + connectivitcay class id (a unique id for instances of a classification)
 - `input_file_colour_class_2048x2048.dds` - RGBA32F: RGB colour + classification
 - `input_file_spatial_index_2048x2048.dds` - RGBA32F: Morton codes + spatial data
 - `input_file_heightmap_2048x2048.dds` - R32F: Road surface elevation
@@ -124,9 +124,12 @@ npm run dev
 ### Camera Navigation
 
 - **Mouse Wheel**: Zoom in/out
-- **Middle Mouse + Drag**: Pan view
-- **Space**: Follow mouse cursor on terrain
-- **A/D**: Rotate around focus point
+- **Right Mouse + Drag**: Free look
+- **WASD**: Move around
+- **Q/E**: Up and down
+- **Hold + Shift**: Move faster
+- **Hold + Ctrl**: Move slower
+
 
 ### Render Modes
 

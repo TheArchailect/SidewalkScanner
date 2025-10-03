@@ -4,16 +4,17 @@ use crate::atlas::generate_programmatic_name;
 use crate::bounds::PointCloudBounds;
 use crate::constants::{
     COLOUR_DETECTION_SAMPLE_SIZE, COORDINATE_TRANSFORM, MAX_POINTS, ROAD_CLASSIFICATIONS,
-    TEXTURE_SIZE,
+    TEXTURE_SIZE, get_class_name,
 };
 use crate::dds_writer::write_f32_texture;
 use crate::heightmap::HeightmapGenerator;
-use crate::manifest::{ManifestGenerator, TerrainInfo, TerrainTextureFiles};
+use crate::manifest::{ClassificationInfo, ManifestGenerator, TerrainInfo, TerrainTextureFiles};
 use crate::spatial_layout::SpatialTextureGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
 use rayon::prelude::*;
 use serde_json;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -92,7 +93,7 @@ impl PointCloudConverter {
         println!("Starting terrain and asset library processing...");
 
         // Process main terrain point cloud.
-        let terrain_info = self.process_main_terrain()?;
+        let (terrain_info, classes) = self.process_main_terrain()?;
 
         // Process asset library if available.
         let asset_atlas_info = if let Some(asset_dir) = &self.asset_library_dir {
@@ -104,7 +105,7 @@ impl PointCloudConverter {
 
         // Generate unified manifest linking terrain and assets.
         let manifest_gen = ManifestGenerator::new(&self.output_dir, &self.output_name);
-        manifest_gen.generate_unified_manifest(terrain_info, asset_atlas_info)?;
+        manifest_gen.generate_unified_manifest(terrain_info, asset_atlas_info, classes)?;
 
         println!("Asset library processing complete!");
         Ok(())
@@ -126,7 +127,7 @@ impl PointCloudConverter {
         let bounds = self.calculate_bounds(&self.main_cloud_path)?;
         self.print_bounds(&bounds);
 
-        let (stats, road_points) =
+        let (stats, road_points, classes) =
             self.generate_textures(&self.main_cloud_path, &bounds, has_colour)?;
 
         // Generate heightmap and save legacy metadata.
@@ -139,7 +140,9 @@ impl PointCloudConverter {
 
     /// Processes the main terrain point cloud for organized output.
     /// Returns terrain information for manifest generation.
-    fn process_main_terrain(&self) -> Result<TerrainInfo, Box<dyn std::error::Error>> {
+    fn process_main_terrain(
+        &self,
+    ) -> Result<(TerrainInfo, ClassificationInfo), Box<dyn std::error::Error>> {
         println!(
             "Processing main terrain: {}",
             self.main_cloud_path.display()
@@ -152,7 +155,7 @@ impl PointCloudConverter {
         self.print_bounds(&bounds);
 
         // Generate textures and save them to disk.
-        let (stats, road_points) =
+        let (stats, road_points, classes) =
             self.generate_textures(&self.main_cloud_path, &bounds, has_colour)?;
 
         // Generate heightmap using road surface points.
@@ -187,12 +190,15 @@ impl PointCloudConverter {
             ),
         };
 
-        Ok(TerrainInfo {
-            texture_files,
-            bounds,
-            point_count: stats.loaded_points,
-            has_colour,
-        })
+        Ok((
+            TerrainInfo {
+                texture_files,
+                bounds,
+                point_count: stats.loaded_points,
+                has_colour,
+            },
+            classes,
+        ))
     }
 
     /// Organizes terrain files into programmatic directory structure.
@@ -347,9 +353,13 @@ impl PointCloudConverter {
         file_path: &Path,
         bounds: &PointCloudBounds,
         has_colour: bool,
-    ) -> Result<(ProcessingStats, Vec<(f32, f32, f32)>), Box<dyn std::error::Error>> {
+    ) -> Result<
+        (ProcessingStats, Vec<(f32, f32, f32)>, ClassificationInfo),
+        Box<dyn std::error::Error>,
+    > {
         let mut reader = self.create_reader(file_path)?;
         let total_points = reader.header().number_of_points() as usize;
+
         let sampling_ratio = if total_points > MAX_POINTS {
             MAX_POINTS as f64 / total_points as f64
         } else {
@@ -377,6 +387,10 @@ impl PointCloudConverter {
                 .progress_chars("▉▊▋▌▍▎▏ "),
         );
         pb.set_message("Processing points spatially");
+
+        let mut classes = ClassificationInfo {
+            class_types: HashMap::new(),
+        };
 
         for (point_idx, point_result) in reader.points().enumerate() {
             expected_loaded += sampling_ratio;
@@ -407,6 +421,13 @@ impl PointCloudConverter {
                 0.0
             };
 
+            // Store unique point class combinations in our class info struct
+            classes.insert_or_update(
+                classification,
+                get_class_name(classification),
+                object_number as u32,
+            );
+
             // Add to spatial structure for Z-order organization.
             spatial_gen.add_point((x, y, z), classification, color, object_number);
 
@@ -428,6 +449,8 @@ impl PointCloudConverter {
 
         pb.finish_with_message("Points processed");
 
+        println!("Found Class Info: {:?}", classes);
+
         // Apply spatial sorting and generate textures.
         println!("Applying Z-order spatial sorting...");
         spatial_gen.sort_spatially();
@@ -441,7 +464,7 @@ impl PointCloudConverter {
         // Save generated textures with programmatic names.
         self.save_textures(&position_data, &colour_class_data, &spatial_index_data)?;
 
-        Ok((stats, road_points))
+        Ok((stats, road_points, classes))
     }
 
     /// Generate flood-fill heightmap from road surface points.

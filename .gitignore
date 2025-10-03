@@ -11,7 +11,6 @@ Cargo.lock
 # =============================================================================
 # Dependencies
 node_modules
-frontend/package-lock.json
 
 # Build output
 /*/dist
@@ -31,9 +30,6 @@ lerna-debug.log*
 # Local environment files
 *.local
 
-# Lock files (except package-lock.json which should typically be committed)
-*.lock
-
 # =============================================================================
 # EDITORS & IDEs
 # =============================================================================
@@ -46,6 +42,7 @@ lerna-debug.log*
 .idea
 
 # Visual Studio
+.vs/
 *.suo
 *.ntvs*
 *.njsproj
@@ -62,7 +59,7 @@ lerna-debug.log*
 # PROJECT-SPECIFIC
 # =============================================================================
 # Asset files
-point-cloud-render-engine/assets/pre_processor_data/*
+point-cloud-render-engine/assets/output/*
 assets/*
 frontend/public/renderer/*
 # Data files
@@ -70,3 +67,6 @@ frontend/public/renderer/*
 *.dds
 *.las
 *.laz
+# lazy files
+build_everything.bat
+

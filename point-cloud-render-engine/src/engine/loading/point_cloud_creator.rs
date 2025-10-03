@@ -6,7 +6,7 @@ use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::loading::progress::LoadingProgress;
 use crate::engine::mesh::point_index_mesh::PointCloud;
 use crate::engine::mesh::point_index_mesh::create_point_index_mesh;
-use crate::engine::point_cloud_render_pipeline::PointCloudRenderable;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderable;
 use crate::engine::scene::gizmos::create_direction_gizmo;
 use crate::engine::scene::grid::GridCreated;
 use crate::engine::scene::grid::create_ground_grid;

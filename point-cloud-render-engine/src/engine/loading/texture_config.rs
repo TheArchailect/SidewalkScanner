@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::constants::texture::TEXTURE_SIZE;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::loading::progress::LoadingProgress;
 
@@ -34,8 +35,8 @@ pub fn configure_loaded_textures(
         // Create depth texture
         let mut depth_image = Image::new_uninit(
             bevy::render::render_resource::Extent3d {
-                width: 2048,
-                height: 2048,
+                width: TEXTURE_SIZE as u32,
+                height: TEXTURE_SIZE as u32,
                 depth_or_array_layers: 1,
             },
             bevy::render::render_resource::TextureDimension::D2,

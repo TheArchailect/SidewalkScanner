@@ -1,6 +1,6 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
-use crate::engine::point_cloud_render_pipeline::PointCloudRenderState;
+use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderState;
 use bevy::prelude::*;
 
 /// System to extract point cloud render state from main world to render world.
