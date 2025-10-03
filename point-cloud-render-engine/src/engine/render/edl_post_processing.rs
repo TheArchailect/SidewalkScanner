@@ -1,4 +1,3 @@
-use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderLabel;
 use bevy::{
     core_pipeline::{
         core_3d::graph::{Core3d, Node3d},

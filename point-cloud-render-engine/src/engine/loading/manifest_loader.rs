@@ -13,7 +13,6 @@ pub struct ManifestLoader {
 
 // Start the loading process
 pub fn start_loading(mut manifest_loader: ResMut<ManifestLoader>, asset_server: Res<AssetServer>) {
-    // let bounds_path = get_bounds_path();
     let manifest_path = format!("{}/manifest.json", RELATIVE_MANIFEST_PATH);
     manifest_loader.handle = Some(asset_server.load(&manifest_path));
 }

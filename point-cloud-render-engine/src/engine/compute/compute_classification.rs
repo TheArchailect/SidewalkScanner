@@ -1,4 +1,7 @@
 use crate::RenderModeState;
+use crate::constants::procedural_shader::{
+    MAXIMUM_POLYGON_MASKS, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
+};
 use crate::engine::assets::bounds::BoundsData;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
@@ -18,7 +21,6 @@ use bevy::render::{
     renderer::{RenderDevice, RenderQueue},
     texture::GpuImage,
 };
-
 pub struct ComputeClassificationPlugin;
 
 #[derive(Resource, Default, ExtractResource, Clone)]
@@ -114,11 +116,6 @@ pub fn run_classification_compute(
     );
 
     state.should_recompute = false;
-    // println!(
-    //     "GPU classification updated: {} polygons, mode: {:?}",
-    //     classification_data.polygons.len(),
-    //     render_mode.current_mode
-    // );
 }
 
 fn initialise_compute_pipeline(
@@ -292,13 +289,13 @@ fn create_compute_buffer(
         selection_point: [f32; 4],
         is_selecting: u32,
         _padding: [u32; 3],
-        point_data: [[f32; 4]; 512],
-        polygon_info: [[f32; 4]; 64],
-        ignore_masks: [[u32; 4]; 128], // 128 × 4 = 512 u32 values
+        point_data: [[f32; 4]; MAXIMUM_POLYGON_POINTS],
+        polygon_info: [[f32; 4]; MAXIMUM_POLYGONS],
+        ignore_masks: [[u32; 4]; MAXIMUM_POLYGON_MASKS], // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values
     }
 
     let mut uniform = ComputeUniformData::zeroed();
-    uniform.polygon_count = polygons.len().min(64) as u32;
+    uniform.polygon_count = polygons.len() as u32;
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
 
@@ -306,7 +303,7 @@ fn create_compute_buffer(
     // note: we're currently using mask_id.0 which is the major class id or 'parent' class type,
     // we do however have the finegrained child object id class available
     let mut mask_offset = 0;
-    for (poly_idx, polygon) in polygons.iter().enumerate().take(64) {
+    for (poly_idx, polygon) in polygons.iter().enumerate().take(MAXIMUM_POLYGONS) {
         for (mask_idx, &mask_id) in polygon.masks.iter().enumerate() {
             let encoded = encode_mask(poly_idx as u32, mask_id.0, polygon.mode.clone() as u32);
             let i = mask_offset + mask_idx;
@@ -315,7 +312,7 @@ fn create_compute_buffer(
         mask_offset += polygon.masks.len();
     }
 
-    info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
+    // info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
 
     uniform.selection_point = selection_state
         .selection_point
@@ -334,7 +331,7 @@ fn create_compute_buffer(
         ];
 
         for point in &polygon.points {
-            if point_offset < 512 {
+            if point_offset < MAXIMUM_POLYGON_POINTS {
                 uniform.point_data[point_offset] = [point.x, point.z, 0.0, 0.0];
                 point_offset += 1;
             }

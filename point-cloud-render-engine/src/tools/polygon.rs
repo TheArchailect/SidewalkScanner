@@ -1,3 +1,4 @@
+use crate::constants::procedural_shader::MAXIMUM_POLYGONS;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -54,11 +55,6 @@ fn process_poloygon_hide_requests(
     viewport_camera: ResMut<ViewportCamera>,
 ) {
     for e in ev.read() {
-        info!(
-            "[POLY] hide request received; {} filter pairs",
-            e.source_items.len()
-        );
-
         let should_complete = polygon_tool.current_polygon.len() >= 3;
         if should_complete {
             let resampled_points = resample_polygon_uniform(
@@ -79,15 +75,9 @@ fn process_poloygon_hide_requests(
                 masks: e.source_items.clone(),
             };
 
-            info!("Hide Polygon Data: {:?}", class_polygon);
-
             // Add to classification data with GPU memory constraint validation.
             if classification_data.polygons.len() < classification_data.max_polygons {
                 classification_data.polygons.push(class_polygon);
-                println!(
-                    "Added classification polygon {} with class {}",
-                    polygon_id, polygon_tool.current_class
-                );
 
                 // Create visual representation using standard material pipeline.
                 create_completed_polygon(
@@ -97,12 +87,6 @@ fn process_poloygon_hide_requests(
                     viewport_camera.ground_height,
                     &mut meshes,
                     &mut materials,
-                );
-
-                println!(
-                    "Polygon {} completed with {} points",
-                    polygon_id,
-                    polygon_tool.current_polygon.len()
                 );
 
                 // Notify frontend of successful completion
@@ -116,7 +100,7 @@ fn process_poloygon_hide_requests(
                     }),
                 );
             } else {
-                println!(
+                warn!(
                     "Warning: Maximum polygon limit reached ({})",
                     classification_data.max_polygons
                 );
@@ -274,7 +258,7 @@ impl Default for PolygonClassificationData {
     fn default() -> Self {
         Self {
             polygons: Vec::new(),
-            max_polygons: 64, // Conservative limit for GPU uniform storage.
+            max_polygons: MAXIMUM_POLYGONS,
         }
     }
 }

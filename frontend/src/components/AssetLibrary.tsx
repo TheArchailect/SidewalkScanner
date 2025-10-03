@@ -286,6 +286,29 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         </div>
       </div>
 
+      <div
+        style={{
+          padding: theme.spacing[5],
+          borderBottom: `1px solid ${theme.colors.border.default}`,
+        }}
+      >
+        <div
+          style={{
+            ...styleUtils.text.caption(),
+            textAlign: "center",
+            lineHeight: "1.4",
+            background: theme.colors.background.card,
+            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+            borderRadius: theme.radius.base,
+            border: `1px solid ${theme.colors.border.light}`,
+          }}
+        >
+          Select an asset and left click in the world to place it. When you
+          right click a previously placed asset in the world you can use the
+          mouse wheel to rotate it.
+        </div>
+      </div>
+
       {/* Search Bar */}
       <div style={{ padding: `${theme.spacing[4]} ${theme.spacing[5]}` }}>
         <input

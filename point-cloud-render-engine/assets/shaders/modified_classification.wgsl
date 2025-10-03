@@ -3,6 +3,10 @@
 @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>;
 @group(0) @binding(3) var output_texture: texture_storage_2d<rgba32float, write>;
 
+const MAX_IGNORE_MASK_LENGTH: u32 = 512u;
+const MAXIMUM_POLYGON_POINTS: u32 = 2048u;
+const MAXIMUM_POLYGONS: u32 = 512u;
+
 struct ComputeUniformData {
    polygon_count: u32,
    total_points: u32,
@@ -11,9 +15,9 @@ struct ComputeUniformData {
    selection_point: vec3<f32>,
    is_selecting: u32,
    _padding: u32,
-   point_data: array<vec4<f32>, 512>,
-   polygon_info: array<vec4<f32>, 64>,
-   ignore_masks: array<vec4<u32>, 128>,  // 128 × 4 = 512 u32 values: note each u32 value is actually two 8bit values (mask and polygon index), and a mode Reclassify | Hide
+   point_data: array<vec4<f32>, MAXIMUM_POLYGON_POINTS>,
+   polygon_info: array<vec4<f32>, MAXIMUM_POLYGONS>,
+   ignore_masks: array<vec4<u32>, MAX_IGNORE_MASK_LENGTH>,  // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values: note each u32 value is actually two 8bit values (mask and polygon index), and a mode Reclassify | Hide
 }
 
 @group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
@@ -30,7 +34,6 @@ struct BoundsData {
 const GRID_RESOLUTION: u32 = 1024u;
 const MORTON_THRESHOLD = 500u; // Empirical threshold for Morton spatial distance.
 const USE_MORTON_SPATIAL: bool = false; // Toggle: true=Morton, false=AABB
-const IGNORE_CLASS_MASK: u32 = 5u;
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -55,8 +58,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let morton_low = bitcast<u32>(spatial_sample.g);
 
     var final_class = original_class;
+    var found_hide_op: bool = false;
+
     for (var i: u32 = compute_data.polygon_count; i > 0u; i = i - 1u) {
-        let poly_info = compute_data.polygon_info[i];
+        let real_index: u32 = i - 1u;
+        let poly_info = compute_data.polygon_info[real_index];
         let start_idx = u32(poly_info.x);
         let point_count = u32(poly_info.y);
         let new_class = u32(poly_info.z);
@@ -77,20 +83,24 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 );
             }
 
-            if should_test_polygon {
+            // since this is technically a procedural modifer stack - we should not bother performing additional hide or reclasiffy ops to a point that has been previously hidden
+            // otherwise intersecting polygons will undo hide ops when we reclassify, regardless of mask ids
+            if should_test_polygon && !found_hide_op {
                 // Here's where we check if the mask ids for the current polygon overlap AND it's inside the polygon
                 // effectivly this is our masking logic per polygon in the Reclassify polygon mode
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
                     // update the final class for points inside the polygon, with it's masks considered for reclassification
-                    if contains_value(i, original_class, 1u) {
+                    if contains_value(real_index, original_class, 1u) {
                         final_class = new_class;
                     }
 
                     // set the final class for points inside the polygon, with masks considered to a magic number that our fragment shader will ignore and discard 'hiding' non-destructivly
-                    if contains_value(i, original_class, 0u) {
+                    if contains_value(real_index, original_class, 0u) {
+                        found_hide_op = true;
                         final_class = 254u;
+                        break;
                     }
-                    break;
+
                 }
             }
         } else {
@@ -115,7 +125,7 @@ fn decode_mask(encoded: u32) -> vec3<u32> {
 
 
 fn contains_value(poly_idx: u32, mask_id: u32, mode: u32) -> bool {
-    for (var i = 0u; i < 128u; i++) {
+    for (var i = 0u; i < MAX_IGNORE_MASK_LENGTH; i++) {
         let mask_vec = compute_data.ignore_masks[i];
         for (var j = 0u; j < 4u; j++) {
             let encoded = mask_vec[j];

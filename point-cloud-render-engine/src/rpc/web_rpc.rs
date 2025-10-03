@@ -479,6 +479,7 @@ fn handle_get_asset_categories(
     assets: &Res<PointCloudAssets>,
     manifests: &Res<Assets<SceneManifest>>,
 ) -> Result<serde_json::Value, RpcError> {
+    // TODO: include actuall asset categories, they would likely be part of the manifest json, generated during pre-processing
     let manifest = assets
         .manifest
         .as_ref()
