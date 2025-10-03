@@ -340,6 +340,13 @@ export function TutorialOverlay({ isOpen, onClose }: TutorialOverlayProps) {
                 </div>
 
                 <div style={styles.controlItem}>
+                  <span style={styles.controlKey}>Page Up / Page Down</span>
+                  <span style={styles.controlDesc}>
+                    Pitch around focus point
+                  </span>
+                </div>
+
+                <div style={styles.controlItem}>
                   <span style={styles.controlKey}>ESC</span>
                   <span style={styles.controlDesc}>
                     Clear current tool selection
