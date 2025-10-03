@@ -13,7 +13,7 @@ struct ComputeUniformData {
    _padding: u32,
    point_data: array<vec4<f32>, 512>,
    polygon_info: array<vec4<f32>, 64>,
-   ignore_masks: array<vec4<u32>, 128>,  // 128 × 4 = 512 u32 values
+   ignore_masks: array<vec4<u32>, 128>,  // 128 × 4 = 512 u32 values: note each u32 value is actually two 8bit values (mask and polygon index), and a mode Reclassify | Hide
 }
 
 @group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
@@ -55,52 +55,82 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let morton_low = bitcast<u32>(spatial_sample.g);
 
     var final_class = original_class;
+    for (var i: u32 = compute_data.polygon_count; i > 0u; i = i - 1u) {
+        let poly_info = compute_data.polygon_info[i];
+        let start_idx = u32(poly_info.x);
+        let point_count = u32(poly_info.y);
+        let new_class = u32(poly_info.z);
 
-    if (original_class != IGNORE_CLASS_MASK) {
-        for (var i = 0u; i < compute_data.polygon_count; i++) {
-            let poly_info = compute_data.polygon_info[i];
-            let start_idx = u32(poly_info.x);
-            let point_count = u32(poly_info.y);
-            let new_class = u32(poly_info.z);
+        if compute_data.enable_spatial_opt == 1u {
+            // Compile-time spatial optimization method selection.
+            var should_test_polygon = false;
 
-            if compute_data.enable_spatial_opt == 1u {
-                // Compile-time spatial optimization method selection.
-                var should_test_polygon = false;
-
-                if USE_MORTON_SPATIAL {
-                    // Morton code spatial filtering with centroid coverage.
-                    should_test_polygon = is_point_near_polygon_morton(
-                        world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
-                    );
-                } else {
-                    // AABB spatial filtering for guaranteed coverage.
-                    should_test_polygon = is_point_near_polygon_aabb(
-                        world_pos.xz, start_idx, point_count
-                    );
-                }
-
-                if should_test_polygon {
-                    if point_in_polygon(world_pos.xz, start_idx, point_count) {
-                        final_class = new_class;
-
-                        // if we detect a collision, we need to know if it was in hide mode or not
-                        // collision_detected = true;
-
-                        break; // Early termination: first matching polygon wins.
-                    }
-                }
+            if USE_MORTON_SPATIAL {
+                // Morton code spatial filtering with centroid coverage.
+                should_test_polygon = is_point_near_polygon_morton(
+                    world_pos.xz, start_idx, point_count, bounds.min_bounds.xz, bounds.max_bounds.xz
+                );
             } else {
-                // Direct polygon testing without spatial optimization.
+                // AABB spatial filtering for guaranteed coverage.
+                should_test_polygon = is_point_near_polygon_aabb(
+                    world_pos.xz, start_idx, point_count
+                );
+            }
+
+            if should_test_polygon {
+                // Here's where we check if the mask ids for the current polygon overlap AND it's inside the polygon
+                // effectivly this is our masking logic per polygon in the Reclassify polygon mode
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
-                    final_class = new_class;
+                    // update the final class for points inside the polygon, with it's masks considered for reclassification
+                    if contains_value(i, original_class, 1u) {
+                        final_class = new_class;
+                    }
+
+                    // set the final class for points inside the polygon, with masks considered to a magic number that our fragment shader will ignore and discard 'hiding' non-destructivly
+                    if contains_value(i, original_class, 0u) {
+                        final_class = 254u;
+                    }
                     break;
                 }
+            }
+        } else {
+            // Direct polygon testing without spatial optimization.
+            if point_in_polygon(world_pos.xz, start_idx, point_count) {
+                final_class = new_class;
+                break;
             }
         }
     }
 
     let final_color = apply_render_mode(original_rgb, original_class, final_class, world_pos, coords, morton_low, morton_high, point_connectivity_class_id);
     textureStore(output_texture, coords, final_color);
+}
+
+fn decode_mask(encoded: u32) -> vec3<u32> {
+    let mask_id  = encoded & 0xFFu;
+    let poly_idx = (encoded >> 8) & 0xFFFFu;
+    let mode     = (encoded >> 24) & 0xFFu;
+    return vec3<u32>(poly_idx, mask_id, mode);
+}
+
+
+fn contains_value(poly_idx: u32, mask_id: u32, mode: u32) -> bool {
+    for (var i = 0u; i < 128u; i++) {
+        let mask_vec = compute_data.ignore_masks[i];
+        for (var j = 0u; j < 4u; j++) {
+            let encoded = mask_vec[j];
+            let dec_mask_id  = encoded & 0xFFu;
+            let dec_poly_idx = (encoded >> 8) & 0xFFFFu;
+            let dec_mode     = (encoded >> 24) & 0xFFu;
+
+            if (dec_poly_idx == poly_idx &&
+                dec_mask_id == mask_id &&
+                dec_mode == mode) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// Morton-based spatial filtering with centroid coverage for large polygons.
@@ -173,27 +203,13 @@ fn is_point_near_polygon_aabb(
            point.y >= (min_z - margin) && point.y <= (max_z + margin);
 }
 
-fn contains_value(needle: u32, ignore_masks: array<vec4<u32>, 128>) -> bool {
-    for (var i = 0u; i < 128u; i++) {
-        let mask = ignore_masks[i];
-        if (mask.x == needle || mask.y == needle ||
-            mask.z == needle || mask.w == needle) {
-            return true;
-        }
-    }
-    return false;
-}
-
 fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
     switch compute_data.render_mode {
         case 0u: { // Original classification
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));
         }
         case 1u: { // Modified classification
-            if (contains_value(original_class, compute_data.ignore_masks)) {
-                return vec4<f32>(classification_to_color(final_class), f32(254u));
-            }
-            return vec4<f32>(classification_to_color(final_class), f32(original_class));
+            return vec4<f32>(classification_to_color(final_class), f32(final_class));
         }
         case 2u: { // RGB
             return vec4<f32>(original_rgb, f32(point_connectivity_class_id));

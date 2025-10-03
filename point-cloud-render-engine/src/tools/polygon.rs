@@ -79,6 +79,8 @@ fn process_poloygon_hide_requests(
                 masks: e.source_items.clone(),
             };
 
+            info!("Hide Polygon Data: {:?}", class_polygon);
+
             // Add to classification data with GPU memory constraint validation.
             if classification_data.polygons.len() < classification_data.max_polygons {
                 classification_data.polygons.push(class_polygon);
@@ -182,6 +184,8 @@ fn process_polygon_reclassify_requests(
                 masks: e.source_items.clone(),
             };
 
+            info!("Reclassify Polygon Data: {:?}", class_polygon);
+
             // Add to classification data with GPU memory constraint validation.
             if classification_data.polygons.len() < classification_data.max_polygons {
                 classification_data.polygons.push(class_polygon);
@@ -240,10 +244,11 @@ fn process_polygon_reclassify_requests(
     }
 }
 
+#[repr(u32)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Polygon definition for point cloud classification operations.
 /// Contains spatial coordinates and target classification metadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum PolygonMode {
+pub enum PolygonMode {
     Hide,
     Reclassify,
 }

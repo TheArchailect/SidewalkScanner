@@ -270,6 +270,10 @@ fn execute_compute_shader(
     render_queue.submit([encoder.finish()]);
 }
 
+fn encode_mask(poly_idx: u32, mask_id: u32, mode: u32) -> u32 {
+    ((mode & 0xFF) << 24) | ((poly_idx & 0xFFFF) << 8) | (mask_id & 0xFF)
+}
+
 fn create_compute_buffer(
     render_device: &RenderDevice,
     polygons: &[ClassificationPolygon],
@@ -298,15 +302,17 @@ fn create_compute_buffer(
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
 
-    if polygons.len() > 0 {
-        polygons[0]
-            .masks
-            .iter()
-            .flat_map(|&(a, b)| [a, b])
-            .enumerate()
-            .for_each(|(i, val)| {
-                uniform.ignore_masks[i / 4][i % 4] = val;
-            });
+    // Encode our mask id's along with the polygon index so we can decode the relationships on the GPU
+    // note: we're currently using mask_id.0 which is the major class id or 'parent' class type,
+    // we do however have the finegrained child object id class available
+    let mut mask_offset = 0;
+    for (poly_idx, polygon) in polygons.iter().enumerate().take(64) {
+        for (mask_idx, &mask_id) in polygon.masks.iter().enumerate() {
+            let encoded = encode_mask(poly_idx as u32, mask_id.0, polygon.mode.clone() as u32);
+            let i = mask_offset + mask_idx;
+            uniform.ignore_masks[i / 4][i % 4] = encoded;
+        }
+        mask_offset += polygon.masks.len();
     }
 
     info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
