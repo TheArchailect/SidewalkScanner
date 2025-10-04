@@ -1,6 +1,6 @@
 /// Fast parallel heightmap generation with smooth blending
 use crate::constants::TEXTURE_SIZE;
-use crate::dds_writer::write_r32f_texture;
+use crate::dds_writer::write_f32_texture;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::collections::VecDeque;
@@ -36,8 +36,6 @@ impl HeightmapGenerator {
         };
 
         println!("Using median road elevation: {:.3}", median_elevation);
-
-        // Initialize heightmap and validity mask
         let mut heightmap = vec![median_elevation; TEXTURE_SIZE * TEXTURE_SIZE];
         let mut valid_mask = vec![false; TEXTURE_SIZE * TEXTURE_SIZE];
 
@@ -62,7 +60,12 @@ impl HeightmapGenerator {
             "{}_heightmap_{}x{}.dds",
             self.output_stem, TEXTURE_SIZE, TEXTURE_SIZE
         );
-        write_r32f_texture(&heightmap_path, TEXTURE_SIZE, &smoothed_heightmap)?;
+        write_f32_texture(
+            &heightmap_path,
+            TEXTURE_SIZE,
+            &smoothed_heightmap,
+            ddsfile::DxgiFormat::R32_Float,
+        )?;
         println!("Saved {} (R32F heightmap)", heightmap_path);
 
         Ok(())
@@ -87,7 +90,7 @@ impl HeightmapGenerator {
         let mut filled_mask = valid_mask.to_vec();
         let mut queue = VecDeque::new();
 
-        // Initialize queue with all valid points
+        // Initialise queue with all valid points
         for z in 0..TEXTURE_SIZE {
             for x in 0..TEXTURE_SIZE {
                 let idx = z * TEXTURE_SIZE + x;

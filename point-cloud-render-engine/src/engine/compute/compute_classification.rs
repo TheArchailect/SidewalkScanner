@@ -1,7 +1,11 @@
 use crate::RenderModeState;
-/// GPU-accelerated polygon classification compute pipeline (MVP)
-use crate::engine::point_cloud::{PointCloudAssets, PointCloudBounds};
-use crate::engine::render_mode::RenderMode;
+use crate::constants::procedural_shader::{
+    MAXIMUM_POLYGON_MASKS, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
+};
+use crate::engine::assets::bounds::BoundsData;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::systems::render_mode::RenderMode;
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
 use bevy::prelude::*;
@@ -17,8 +21,14 @@ use bevy::render::{
     renderer::{RenderDevice, RenderQueue},
     texture::GpuImage,
 };
-
 pub struct ComputeClassificationPlugin;
+
+#[derive(Resource, Default, ExtractResource, Clone)]
+pub struct ComputeClassificationState {
+    pub should_recompute: bool,
+    pub pipeline: Option<CachedComputePipelineId>,
+    pub bind_group_layout: Option<BindGroupLayout>,
+}
 
 impl Plugin for ComputeClassificationPlugin {
     fn build(&self, app: &mut App) {
@@ -26,17 +36,8 @@ impl Plugin for ComputeClassificationPlugin {
             .add_systems(Update, trigger_classification_compute)
             .add_plugins(ExtractResourcePlugin::<ComputeClassificationState>::default())
             .add_plugins(ExtractResourcePlugin::<PolygonClassificationData>::default())
-            .add_plugins(ExtractResourcePlugin::<PointCloudAssets>::default())
-            .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default())
-            .add_plugins(ExtractResourcePlugin::<RenderModeState>::default());
+            .add_plugins(ExtractResourcePlugin::<ClassSelectionState>::default());
     }
-}
-
-#[derive(Resource, Default, ExtractResource, Clone)]
-pub struct ComputeClassificationState {
-    pub should_recompute: bool,
-    pub pipeline: Option<CachedComputePipelineId>,
-    pub bind_group_layout: Option<BindGroupLayout>,
 }
 
 pub fn trigger_classification_compute(
@@ -57,9 +58,10 @@ pub fn run_classification_compute(
     render_device: Res<RenderDevice>,
     mut render_queue: ResMut<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
-    mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    gpu_images: ResMut<RenderAssets<GpuImage>>,
     assets: Res<PointCloudAssets>,
     asset_server: Res<AssetServer>,
+    manifest: Res<SceneManifest>,
 ) {
     let should_update = classification_data.is_changed()
         || render_mode.is_changed()
@@ -71,7 +73,7 @@ pub fn run_classification_compute(
     }
 
     if state.bind_group_layout.is_none() {
-        initialize_compute_pipeline(&mut state, &render_device, &pipeline_cache, &asset_server);
+        initialise_compute_pipeline(&mut state, &render_device, &pipeline_cache, &asset_server);
     }
 
     let Some(bind_group_layout) = &state.bind_group_layout else {
@@ -109,19 +111,14 @@ pub fn run_classification_compute(
         final_gpu,
         &classification_data.polygons,
         &selection_state,
-        &assets.bounds,
+        manifest.terrain_bounds(), // Pass terrain bounds directly from manifest.
         render_mode.current_mode,
     );
 
     state.should_recompute = false;
-    println!(
-        "GPU classification updated: {} polygons, mode: {:?}",
-        classification_data.polygons.len(),
-        render_mode.current_mode
-    );
 }
 
-fn initialize_compute_pipeline(
+fn initialise_compute_pipeline(
     state: &mut ComputeClassificationState,
     render_device: &RenderDevice,
     pipeline_cache: &PipelineCache,
@@ -219,12 +216,12 @@ fn execute_compute_shader(
     final_gpu: &GpuImage,
     polygons: &[ClassificationPolygon],
     selection_state: &ClassSelectionState,
-    bounds: &Option<PointCloudBounds>,
+    terrain_bounds: &BoundsData, // Accept terrain bounds directly.
     current_mode: RenderMode,
 ) {
     let compute_buffer =
         create_compute_buffer(render_device, polygons, selection_state, current_mode);
-    let bounds_buffer = create_bounds_buffer(render_device, bounds);
+    let bounds_buffer = create_terrain_bounds_buffer(render_device, terrain_bounds);
 
     let bind_group = render_device.create_bind_group(
         "classification_compute_bind_group",
@@ -270,6 +267,10 @@ fn execute_compute_shader(
     render_queue.submit([encoder.finish()]);
 }
 
+fn encode_mask(poly_idx: u32, mask_id: u32, mode: u32) -> u32 {
+    ((mode & 0xFF) << 24) | ((poly_idx & 0xFFFF) << 8) | (mask_id & 0xFF)
+}
+
 fn create_compute_buffer(
     render_device: &RenderDevice,
     polygons: &[ClassificationPolygon],
@@ -285,22 +286,39 @@ fn create_compute_buffer(
         total_points: u32,
         render_mode: u32,
         enable_spatial_opt: u32,
-        selection_point: [f32; 2],
+        selection_point: [f32; 4],
         is_selecting: u32,
-        _padding: u32,
-        point_data: [[f32; 4]; 512],
-        polygon_info: [[f32; 4]; 64],
+        _padding: [u32; 3],
+        point_data: [[f32; 4]; MAXIMUM_POLYGON_POINTS],
+        polygon_info: [[f32; 4]; MAXIMUM_POLYGONS],
+        ignore_masks: [[u32; 4]; MAXIMUM_POLYGON_MASKS], // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values
     }
 
     let mut uniform = ComputeUniformData::zeroed();
-    uniform.polygon_count = polygons.len().min(64) as u32;
+    uniform.polygon_count = polygons.len() as u32;
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
 
+    // Encode our mask id's along with the polygon index so we can decode the relationships on the GPU
+    // note: we're currently using mask_id.0 which is the major class id or 'parent' class type,
+    // we do however have the finegrained child object id class available
+    let mut mask_offset = 0;
+    for (poly_idx, polygon) in polygons.iter().enumerate().take(MAXIMUM_POLYGONS) {
+        for (mask_idx, &mask_id) in polygon.masks.iter().enumerate() {
+            let encoded = encode_mask(poly_idx as u32, mask_id.0, polygon.mode.clone() as u32);
+            let i = mask_offset + mask_idx;
+            uniform.ignore_masks[i / 4][i % 4] = encoded;
+        }
+        mask_offset += polygon.masks.len();
+    }
+
+    // info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
+
     uniform.selection_point = selection_state
         .selection_point
-        .map(|p| [p.x, p.y])
-        .unwrap_or([0.0, 0.0]);
+        .map(|p| [p.x, p.y, p.z, 0.0])
+        .unwrap_or([0.0, 0.0, 0.0, 0.0]);
+
     uniform.is_selecting = if selection_state.is_selecting { 1 } else { 0 };
 
     let mut point_offset = 0;
@@ -313,7 +331,7 @@ fn create_compute_buffer(
         ];
 
         for point in &polygon.points {
-            if point_offset < 512 {
+            if point_offset < MAXIMUM_POLYGON_POINTS {
                 uniform.point_data[point_offset] = [point.x, point.z, 0.0, 0.0];
                 point_offset += 1;
             }
@@ -329,42 +347,39 @@ fn create_compute_buffer(
     })
 }
 
-fn create_bounds_buffer(
+/// Create uniform buffer from terrain bounds data without legacy conversion.
+fn create_terrain_bounds_buffer(
     render_device: &RenderDevice,
-    bounds: &Option<PointCloudBounds>,
+    terrain_bounds: &BoundsData,
 ) -> bevy::render::render_resource::Buffer {
     use bytemuck::{Pod, Zeroable};
 
     #[repr(C)]
     #[derive(Pod, Zeroable, Copy, Clone)]
-    struct BoundsUniform {
+    struct TerrainBoundsUniform {
         min_bounds: [f32; 3],
         _padding1: f32,
         max_bounds: [f32; 3],
         _padding2: f32,
     }
 
-    let uniform = if let Some(bounds) = bounds {
-        BoundsUniform {
-            min_bounds: [
-                bounds.min_x() as f32,
-                bounds.min_y() as f32,
-                bounds.min_z() as f32,
-            ],
-            _padding1: 0.0,
-            max_bounds: [
-                bounds.max_x() as f32,
-                bounds.max_y() as f32,
-                bounds.max_z() as f32,
-            ],
-            _padding2: 0.0,
-        }
-    } else {
-        BoundsUniform::zeroed()
+    let uniform = TerrainBoundsUniform {
+        min_bounds: [
+            terrain_bounds.min_x as f32,
+            terrain_bounds.min_y as f32,
+            terrain_bounds.min_z as f32,
+        ],
+        _padding1: 0.0,
+        max_bounds: [
+            terrain_bounds.max_x as f32,
+            terrain_bounds.max_y as f32,
+            terrain_bounds.max_z as f32,
+        ],
+        _padding2: 0.0,
     };
 
     render_device.create_buffer_with_data(&bevy::render::render_resource::BufferInitDescriptor {
-        label: Some("bounds_data"),
+        label: Some("terrain_bounds_data"),
         contents: bytemuck::cast_slice(&[uniform]),
         usage: BufferUsages::UNIFORM,
     })

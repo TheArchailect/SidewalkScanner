@@ -58,7 +58,6 @@ fn fragment(input: FragmentInput) -> @location(0) vec4<f32> {
             let neighbor_depth = neighbor_sample.a;
 
             if neighbor_depth > 0.0 {
-                // // Calculate depth difference in log space
                 // let log_current = log2(max(current_depth, 0.001));
                 // let log_neighbor = log2(max(neighbor_depth, 0.001));
                 // let depth_diff = max(0.0, log_current - log_neighbor);

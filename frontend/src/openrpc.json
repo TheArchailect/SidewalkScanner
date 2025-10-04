@@ -1,0 +1,270 @@
+// ASSET MANAGEMENT SCHEMA
+
+{
+  "openrpc": "1.8.0",
+  "info": {
+    "title": "Bevy Engine React RPC",
+    "version": "1.0.0",
+    "description": "Simplified JSON-RPC interface for core asset management between React frontend and Bevy/WASM engine."
+  },
+  "methods": [
+
+
+    {
+        "name": "get_asset_category",
+        "summary": "Assets class group",
+        "params": [],
+        "result": {
+            "name": "asset_category",
+            "schema": {
+                "type": "array",
+                "items": "object",
+                "properties": {
+                    "id": { "type": "string" },
+                    "name": { "type": "string" },
+                    "count": { "type": "number" }
+                },
+                "required": ["id", "name", "count"]
+            }
+        }
+    },
+
+
+    {
+      "name": "get_available_assets",
+      "summary": "Load all available assets from the asset library",
+      "params": [],
+      "result": {
+        "name": "asset",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "category": { "type": "string" },
+              "type": { "type": "string" }
+            },
+            "required": ["id", "name", "category", "type"]
+          }
+        }
+      }
+    },
+
+
+    {
+      "name": "select_asset",
+      "summary": "Select an asset for placement",
+      "params": [
+        {
+          "name": "asset_id",
+          "required": true,
+          "schema": { "type": "string" },
+          "description": "ID of the asset to select"
+        }
+      ],
+      "result": {
+        "name": "success",
+        "schema": { "type": "boolean" }
+      }
+    },
+
+
+    {
+      "name": "place_asset_at_position",
+      "summary": "Place the selected asset at a specific 3D position",
+      "params": [
+        {
+          "name": "x",
+          "required": true,
+          "schema": { "type": "number" },
+          "description": "X coordinate in world space"
+        },
+
+        {
+          "name": "y",
+          "required": true,
+          "schema": { "type": "number" },
+          "description": "Y coordinate in world space"
+        },
+
+        {
+          "name": "z",
+          "required": true,
+          "schema": { "type": "number" },
+          "description": "Z coordinate in world space"
+        }
+      ],
+      "result": {
+        "name": "success",
+        "schema": { "type": "boolean" }
+      }
+    },
+
+
+    {
+      "name": "clear_all_assets",
+      "summary": "Remove all placed asset instances from the scene",
+      "params": [],
+      "result": {
+        "name": "success",
+        "schema": { "type": "boolean" }
+      }
+    },
+
+
+    {
+      "name": "get_fps",
+      "summary": "Get current FPS for performance monitoring",
+      "params": [],
+      "result": {
+        "name": "fps",
+        "schema": { "type": "number" }
+      }
+    },
+
+
+    {
+      "name": "tool_selection",
+      "summary": "Select a tool for interaction",
+      "params": [
+        {
+          "name": "tool",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": ["Polygon", "Measure", "Assets"]
+          },
+          "description": "Tool to select"
+        }
+      ],
+      "result": {
+        "name": "success",
+        "schema": { "type": "boolean" }
+      }
+    },
+
+
+    // POLYGON FUNCTION SCHEMA
+
+    {
+      "name": "get_classification_categories",
+      "summary": "Get the available asset classification categories and their item counts",
+      "params": [],
+      "result": {
+        "name": "classification_categories",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "color": { "type": "string" },
+              "items": {
+                "type": "array",
+                "items": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "count": { "type": "number" }
+                },
+                "required": ["id", "name", "count"]
+              }
+            },
+            "required": ["id", "name", "color", "items"]
+          }
+        }
+      }
+    },
+
+
+    {
+      "name": "hide_points_in_polygon",
+      "summary": "Hide specific class types within polygon selection",
+      "params": [
+        {
+          "name": "source_items",       // source_items refers to the category id and item id to specify which point cloud classification types should be targeted in the operation within the polygon
+          "required": true,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category_id": { "type": "string" },
+                "item_id": { "type": "string" }
+              },
+              "required": ["category_id", "item_id"]
+            }
+          },
+          "description": "Array of the classification items to hide. An empty array indicates to hide ALL points in polygon"
+        }
+      ],
+      "result": {
+        "name": "operation_result",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "points_affected": { "type": "number" },
+            "message": { "type": "string" }
+          },
+          "required": ["success", "points_affected", "message"]
+        }
+      }
+    },
+
+
+    {
+     "name": "reclassify_points_in_polygon",
+     "summary": "Reclassify specific class types to a new classification within polygon",
+     "params": [
+      {
+        "name": "source_items",
+        "required": true,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category_id": { "type": "string" },
+              "item_id": { "type": "string" }
+            },
+            "required": ["category_id", "item_id"]
+          }
+        },
+        "description": "Array of the classification items to reclassify. Empty array indicates reclassify ALL in polygon"
+      },
+      {
+        "name": "target_category_id",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Target category ID to reclassify to"
+      },
+      {
+        "name": "target_item_id",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Target item ID to reclassify to"
+      },
+      {
+        "result": {
+          "name": "operation_result",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "success": { "type": "boolean" },
+              "points_affected": { "type": "number" },
+              "message": { "type": "string" }
+            },
+            "required": ["success", "points_affected", "message"]
+          }
+        }
+      }
+     ] 
+    }
+  ]
+}
+
+// FUTURE SCHEMAS

@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use super::camera::ViewportCamera;
-use super::point_cloud::PointCloudAssets;
+use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::engine::assets::scene_manifest::SceneManifest;
+use crate::engine::camera::viewport_camera::ViewportCamera;
 
 #[derive(Component)]
 pub struct MouseIntersectionGizmo;
@@ -36,11 +37,16 @@ pub fn update_direction_gizmo(
     windows: Query<&Window, With<PrimaryWindow>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
     if let (Ok(mut gizmo_transform), Ok((camera_global_transform, camera))) =
         (gizmo_query.single_mut(), camera_query.single())
     {
         let window = windows.single();
+
+        let Some(bounds) = assets.get_bounds(&manifests) else {
+            return;
+        };
 
         if let Some(cursor_pos) = window.unwrap().cursor_position() {
             if let Some(intersection) = maps_camera.mouse_to_ground_plane(
@@ -48,7 +54,7 @@ pub fn update_direction_gizmo(
                 camera,
                 camera_global_transform,
                 images.get(&assets.heightmap_texture),
-                assets.bounds.as_ref(),
+                &bounds,
             ) {
                 gizmo_transform.translation =
                     Vec3::new(intersection.x, intersection.y + 1.0, intersection.z);
@@ -73,7 +79,12 @@ pub fn update_mouse_intersection_gizmo(
     windows: Query<&Window, With<PrimaryWindow>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
+    manifests: Res<Assets<SceneManifest>>,
 ) {
+    let Some(bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
+
     if let (
         Ok((mut gizmo_transform, mut gizmo_visibility)),
         Ok((camera_global_transform, camera)),
@@ -87,7 +98,7 @@ pub fn update_mouse_intersection_gizmo(
                 camera,
                 camera_global_transform,
                 images.get(&assets.heightmap_texture),
-                assets.bounds.as_ref(),
+                &bounds,
             ) {
                 gizmo_transform.translation = intersection;
                 *gizmo_visibility = Visibility::Visible;
