@@ -45,10 +45,13 @@ pub fn update_direction_gizmo(
     if let (Ok((mut gizmo_transform, mut gizmo_visibility)), Ok((camera_global_transform, camera))) =
         (gizmo_query.single_mut(), camera_query.single())
     {
-        let measuring = tool_manager
-            .as_ref()
-            .map_or(false, |tm| tm.is_tool_active(ToolType::Measure));
-        if measuring {
+        let hide_gizmos = tool_manager.as_ref().map_or(false, |tm| {
+            tm.is_tool_active(ToolType::Measure)
+                || tm.is_tool_active(ToolType::Polygon)
+                || tm.is_tool_active(ToolType::AssetPlacement)
+        });
+
+        if hide_gizmos {
             *gizmo_visibility = Visibility::Hidden;
             return;
         } else {
@@ -104,10 +107,13 @@ pub fn update_mouse_intersection_gizmo(
         Ok((camera_global_transform, camera)),
     ) = (gizmo_query.single_mut(), camera_query.single())
     {
-        let measuring = tool_manager
-            .as_ref()
-            .map_or(false, |tm| tm.is_tool_active(ToolType::Measure));
-        if measuring {
+        let hide_gizmos = tool_manager.as_ref().map_or(false, |tm| {
+            tm.is_tool_active(ToolType::Measure)
+                || tm.is_tool_active(ToolType::Polygon)
+                || tm.is_tool_active(ToolType::AssetPlacement)
+        });
+
+        if hide_gizmos {
             *gizmo_visibility = Visibility::Hidden;
             return;
         }

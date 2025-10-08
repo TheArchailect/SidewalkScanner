@@ -186,8 +186,8 @@ const ScannerApp: React.FC = () => {
 
     const cursorForTool: Record<string, string> = {
       measure: "/icons/measure_cursor.svg",
-      polygon: "/icons/polygon.svg",
-      assets: "/icons/assets.svg",
+      polygon: "/icons/polygon_cursor.svg",
+      assets: "/icons/assets_cursor.svg",
     };
 
     const url =
