@@ -80,6 +80,38 @@ const ScannerApp: React.FC = () => {
     });
   }, [onNotification]);
 
+  // Function to refocus the canvas inside iframe
+  const refocusCanvas = () => {
+    const iframe = canvasRef.current;
+    try {
+      const sel = window.getSelection?.();
+      sel?.removeAllRanges();
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    } catch {}
+
+    const focusDeep = () => {
+      try {
+        iframe?.focus();
+        iframe?.contentWindow?.focus();
+
+        const doc = iframe?.contentDocument || iframe?.contentWindow?.document || null;
+        const canvas = doc?.querySelector("canvas") as HTMLCanvasElement | null;
+        if (canvas) {
+          if (!canvas.hasAttribute("tabindex")) {
+            canvas.setAttribute("tabindex", "-1"); 
+          }
+          (canvas as any).focus?.({ preventScroll: true });
+        }
+      } catch {}
+    };
+
+    // Do it twice across frames to cover reflows/rerenders.
+    requestAnimationFrame(() => {
+      focusDeep();
+      setTimeout(focusDeep, 0);
+    });
+  };
+
   const handleToolSelect = async (toolId: string): Promise<void> => {
     // Show asset library only when assets tool is selected
     if (toolId === "assets") {
@@ -103,6 +135,8 @@ const ScannerApp: React.FC = () => {
       console.log(`Tool ${toolId} activated`);
     } catch (error) {
       console.error(`Failed to select tool ${toolId}:`, error);
+    } finally {
+      refocusCanvas();
     }
   };
 
@@ -116,33 +150,10 @@ const ScannerApp: React.FC = () => {
     }
   };
 
-  // Drop any current selection focus to iframe.
-  const refocusCanvas = () => {
-    try {
-      const sel = window.getSelection?.();
-      sel?.removeAllRanges();
-      (document.activeElement as HTMLElement | null)?.blur?.();
-    } catch {}
-    // Do it twice across frames to cover reflows/rerenders.
-    const focusNow = () => canvasRef.current?.focus();
-    requestAnimationFrame(() => {
-      focusNow();
-      setTimeout(focusNow, 0);
-    });
-  };
-
-  // Global key handling for A/D and Escape
+  // Global key handling for A/D and Escape 
   useEffect(() => {
-    const swallow = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key;
-
-      if (k === "a" || k === "A" || k === "d" || k === "D") {
-        e.preventDefault();
-        e.stopPropagation();
-        (e as any).stopImmediatePropagation?.();
-        refocusCanvas();
-        return true;
-      }
 
       if (k === "Escape" || k === "Esc") {
         e.preventDefault();
@@ -159,33 +170,115 @@ const ScannerApp: React.FC = () => {
             setShowPolygonPanel(false);
             refocusCanvas();
           });
-        return true;
       }
-      return false;
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      swallow(e);
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (swallow(e)) refocusCanvas();
     };
 
     document.addEventListener("keydown", onKeyDown, { capture: true });
-    document.addEventListener("keyup", onKeyUp, { capture: true });
     return () => {
-      document.removeEventListener(
-        "keydown",
-        onKeyDown as any,
-        { capture: true } as any,
-      );
-      document.removeEventListener(
-        "keyup",
-        onKeyUp as any,
-        { capture: true } as any,
-      );
+      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
     };
   }, [clearTool]);
+
+  // Cursor management based on selected tool
+  useEffect(() => {
+    const root = document.documentElement;
+    const iframeEl = canvasRef.current;
+
+    const cursorForTool: Record<string, string> = {
+      measure: "/icons/measure_cursor.svg",
+      polygon: "/icons/polygon.svg",
+      assets: "/icons/assets.svg",
+    };
+
+    const url =
+      selectedTool && cursorForTool[selectedTool]
+        ? `url('${cursorForTool[selectedTool]}') 8 8, auto`
+        : "default";
+
+    root.style.cursor = url;
+    if (iframeEl) iframeEl.style.cursor = url;
+
+    // Apply inside iframe document
+    try {
+      const doc = iframeEl?.contentDocument;
+      if (doc) {
+        let styleTag = doc.getElementById("cursor-style") as HTMLStyleElement | null;
+        if (!styleTag) {
+          styleTag = doc.createElement("style");
+          styleTag.id = "cursor-style";
+          doc.head.appendChild(styleTag);
+        }
+        const cssCursor = url === "default" ? "default" : url;
+        styleTag.textContent = `html, body, canvas { cursor: ${cssCursor} !important; }`;
+      }
+    } catch {
+    }
+
+    return () => {
+      root.style.cursor = "default";
+      if (iframeEl) iframeEl.style.cursor = "default";
+      try {
+        const doc = iframeEl?.contentDocument;
+        const styleTag = doc?.getElementById("cursor-style") as HTMLStyleElement | null;
+        if (styleTag)
+          styleTag.textContent = `html, body, canvas { cursor: default !important; }`;
+      } catch {}
+    };
+  }, [selectedTool, canvasRef]);
+
+
+  // Handle Escape key inside iframe to clear tool
+  useEffect(() => {
+    const iframe = canvasRef.current;
+    if (!iframe) return;
+
+    let win: Window | null = null;
+    let doc: Document | null = null;
+
+    const onEscape = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (k === "Escape" || k === "Esc") {
+        e.preventDefault();
+        e.stopPropagation();
+        (e as any).stopImmediatePropagation?.();
+
+        clearTool()
+          .catch(console.error)
+          .finally(() => {
+            setSelectedTool(null);
+            setShowAssetLibrary(false);
+            setShowPolygonPanel(false);
+          });
+      }
+    };
+
+    const attach = () => {
+      try {
+        win = iframe.contentWindow;
+        doc = iframe.contentDocument;
+        if (!win || !doc) return;
+
+        win.addEventListener("keydown", onEscape, { capture: true });
+        doc.addEventListener("keydown", onEscape, { capture: true });
+
+      } catch {
+      }
+    };
+
+    if (iframe.contentWindow && iframe.contentDocument) {
+      attach();
+    } else {
+      iframe.addEventListener("load", attach, { once: true });
+    }
+
+    return () => {
+      try {
+        if (win) win.removeEventListener("keydown", onEscape, true as any);
+        if (doc) doc.removeEventListener("keydown", onEscape, true as any);
+        iframe.removeEventListener("load", attach as any);
+      } catch {}
+    };
+  }, [canvasRef, clearTool]);
 
   return (
     <div
@@ -206,6 +299,22 @@ const ScannerApp: React.FC = () => {
         ref={canvasRef}
         tabIndex={-1}
         src="./renderer/SidewalkScanner.html"
+        onLoad={() => {
+          try {
+            const doc = canvasRef.current?.contentDocument;
+            if (doc) {
+              if (!doc.getElementById("cursor-style")) {
+                const style = doc.createElement("style");
+                style.id = "cursor-style";
+                doc.head.appendChild(style);
+              }
+              const canvas = doc.querySelector("canvas") as HTMLCanvasElement | null;
+              if (canvas && !canvas.hasAttribute("tabindex")) {
+                canvas.setAttribute("tabindex", "-1");
+              }
+            }
+          } catch {}
+        }}
         style={{
           position: "absolute",
           top: 0,
@@ -415,7 +524,7 @@ const ScannerApp: React.FC = () => {
               <strong>Completed:</strong>
               <ul style={{ margin: 0, paddingLeft: "16px" }}>
                 {completedMeasurements.map((m) => (
-                  <li key={m.id}>~{m.distance?.toFixed(2)} m</li>
+                  <li key={m.id}>{m.distance?.toFixed(2)} m</li>
                 ))}
               </ul>
             </div>
