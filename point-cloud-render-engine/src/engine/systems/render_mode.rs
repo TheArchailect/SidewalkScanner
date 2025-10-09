@@ -14,6 +14,17 @@ impl Default for RenderModeState {
     }
 }
 
+#[derive(Resource, Clone, ExtractResource)]
+pub struct MouseEnterObjectState {
+    pub object_id: Option<u32>,
+}
+
+impl Default for MouseEnterObjectState {
+    fn default() -> Self {
+        Self { object_id: Some(0) }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderMode {
     OriginalClassification = 0,

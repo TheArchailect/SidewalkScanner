@@ -21,7 +21,6 @@ fn normalizeDepthLog(d: f32, near: f32, far: f32) -> f32 {
     return clamp(nd, 0.0, 1.0);
 }
 
-
 @group(0) @binding(3) var<uniform> edl_params: EDLUniforms;
 
 @compute @workgroup_size(8, 8, 1)

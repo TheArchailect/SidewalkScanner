@@ -8,17 +8,23 @@ const MAXIMUM_POLYGON_POINTS: u32 = 2048u;
 const MAXIMUM_POLYGONS: u32 = 512u;
 
 struct ComputeUniformData {
-   polygon_count: u32,
-   total_points: u32,
-   render_mode: u32,
-   enable_spatial_opt: u32,
-   selection_point: vec3<f32>,
-   is_selecting: u32,
-   _padding: u32,
-   point_data: array<vec4<f32>, MAXIMUM_POLYGON_POINTS>,
-   polygon_info: array<vec4<f32>, MAXIMUM_POLYGONS>,
-   ignore_masks: array<vec4<u32>, MAX_IGNORE_MASK_LENGTH>,  // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values: note each u32 value is actually two 8bit values (mask and polygon index), and a mode Reclassify | Hide
+    polygon_count: u32,        // 0
+    total_points: u32,         // 4
+    render_mode: u32,          // 8
+    enable_spatial_opt: u32,   // 12  (ends at 16, aligned)
+
+    selection_point: vec3<f32>, // 16–28
+    _sel_pad: f32,             // 28–32 (vec3 padded to vec4)
+
+    is_selecting: u32,         // 32–36
+    hover_object_id: u32,      // 36–40
+    _padding: vec2<u32>,       // 40–48  (fills out to next 16-byte boundary)
+
+    point_data: array<vec4<f32>, MAXIMUM_POLYGON_POINTS>,  // starts @ 48 → aligned(16)
+    polygon_info: array<vec4<f32>, MAXIMUM_POLYGONS>,
+    ignore_masks: array<vec4<u32>, MAX_IGNORE_MASK_LENGTH>,
 }
+
 
 @group(0) @binding(4) var<uniform> compute_data: ComputeUniformData;
 
@@ -47,7 +53,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let original_sample = textureLoad(original_texture, coords, 0);
     let position_sample = textureLoad(position_texture, coords, 0);
 
-    let point_connectivity_class_id = u32(position_sample.a * 255.0);
+    // let point_connectivity_class_id = u32(position_sample.a * 255.0);
+    let point_connectivity_class_id = u32(position_sample.a * 121.0);
     let world_pos = bounds.min_bounds + position_sample.xyz * (bounds.max_bounds - bounds.min_bounds);
     let original_rgb = original_sample.rgb;
     let original_class = u32(original_sample.a * 255.0);
@@ -122,7 +129,6 @@ fn decode_mask(encoded: u32) -> vec3<u32> {
     let mode     = (encoded >> 24) & 0xFFu;
     return vec3<u32>(poly_idx, mask_id, mode);
 }
-
 
 fn contains_value(poly_idx: u32, mask_id: u32, mode: u32) -> bool {
     for (var i = 0u; i < MAX_IGNORE_MASK_LENGTH; i++) {
@@ -214,6 +220,11 @@ fn is_point_near_polygon_aabb(
 }
 
 fn apply_render_mode(original_rgb: vec3<f32>, original_class: u32, final_class: u32, world_pos: vec3<f32>, coords: vec2<u32>, morton_low: u32, morton_high: u32, point_connectivity_class_id: u32) -> vec4<f32> {
+    // we always override the colour, if the on-hover clown-pass id is provided and is the current point:
+    if point_connectivity_class_id == compute_data.hover_object_id {
+        return vec4<f32>(vec3(1.0, 1.0, 1.0), f32(point_connectivity_class_id));
+    }
+
     switch compute_data.render_mode {
         case 0u: { // Original classification
             return vec4<f32>(classification_to_color(original_class), f32(point_connectivity_class_id));

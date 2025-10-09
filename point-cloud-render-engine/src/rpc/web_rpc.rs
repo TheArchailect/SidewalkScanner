@@ -1,6 +1,6 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
-use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
+use crate::engine::systems::render_mode::{MouseEnterObjectState, RenderMode, RenderModeState};
 use crate::tools::asset_manager::PlaceAssetBoundState;
 use crate::tools::polygon::{PolygonHideRequestEvent, PolygonReclassifyRequestEvent};
 use crate::tools::tool_manager::{
@@ -30,6 +30,12 @@ struct ReclassifyParams {
     masked_classes: Vec<SourceItem>,
     target_class_id: u32,
     target_object_id: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OnHoverParams {
+    #[serde(default)]
+    object_id: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -218,6 +224,7 @@ fn handle_rpc_messages(
     mut clear_events: EventWriter<ClearToolEvent>,
     mut polygon_hide_events: EventWriter<PolygonHideRequestEvent>, // Polygon event writer to handle Hide request
     mut polygon_reclassify_events: EventWriter<PolygonReclassifyRequestEvent>, // Polygon event writer to handle Reclassify request
+    mut current_mouse_enter_object_id: ResMut<MouseEnterObjectState>,
 ) {
     for event in events.read() {
         // Parse as generic JSON first to check for 'id' field
@@ -237,6 +244,7 @@ fn handle_rpc_messages(
                         &mut clear_events,
                         &mut polygon_hide_events, // Polygon Hide event writer
                         &mut polygon_reclassify_events, // Polygon Reclassify writer
+                        &mut current_mouse_enter_object_id, // on hover mouse events highlighting of clown pass objects
                     ) {
                         rpc_interface.queue_response(response);
                     }
@@ -275,6 +283,7 @@ fn handle_rpc_request(
     clear_events: &mut EventWriter<ClearToolEvent>,
     polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>, // Accept Polygon Hide writer
     polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>, // Accept Polygon Reclassify writer
+    current_mouse_enter_object_id: &mut ResMut<MouseEnterObjectState>,
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
@@ -302,6 +311,19 @@ fn handle_rpc_request(
         }
         "reclassify_points_in_polygon" => {
             handle_reclassify_points_in_polygon(&request.params, polygon_reclassify_events)
+        }
+        "set_hover_object_id" => {
+            info!(
+                "set_hover_object_id request params incomming: {:?}",
+                &request.params
+            );
+
+            handle_mouse_enter_object_id(&request.params, current_mouse_enter_object_id);
+
+            Ok(serde_json::json!({
+                "success": true,
+                "message": "test"
+            }))
         }
         _ => {
             warn!("Unknown RPC method: {}", request.method);
@@ -354,6 +376,7 @@ fn handle_tool_selection(
             source: ToolSelectionSource::Rpc,
         });
         info!("Tool cleared via RPC");
+
         return Ok(serde_json::json!({
             "success": true,
             "active_tool": "none"
@@ -713,6 +736,7 @@ fn handle_rpc_notification(
                 let new_mode = match mode_str {
                     "original" => RenderMode::OriginalClassification,
                     "modified" => RenderMode::ModifiedClassification,
+                    "connectivity" => RenderMode::ClassSelection,
                     "RGB" => RenderMode::RgbColour,
                     _ => {
                         warn!("Unknown render mode: {}", mode_str);
@@ -820,4 +844,21 @@ fn handle_reclassify_points_in_polygon(
         points_affected: 0,
         message: "Reclassify operation queued".to_string(),
     }))
+}
+
+/// Handle RPC notifications
+fn handle_mouse_enter_object_id(
+    params: &Value,
+    mouse_enter_object_id: &mut ResMut<MouseEnterObjectState>,
+) {
+    if let Ok(p) = serde_json::from_value::<OnHoverParams>(params.clone()) {
+        mouse_enter_object_id.object_id = Some(p.object_id);
+        info!(
+            "Updated Hover Params: {:?}",
+            mouse_enter_object_id.object_id
+        );
+    } else {
+        eprintln!("Failed to deserialize OnHoverParams: {:?}", params);
+    }
+    ()
 }

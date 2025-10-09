@@ -84,6 +84,10 @@ export interface ClassificationCategory {
   object_ids: Array<number>;
 }
 
+export interface ClassificationObjectID {
+  object_id: number;
+}
+
 // Polygon operations feedback interface
 interface PolygonOperationResult {
   success: boolean; // show success/failure e.g display green/red status
@@ -470,6 +474,22 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     }
   }, [sendRequest]);
 
+  const setOnMouseEnterObjectID = useCallback(
+    async (objId: number): Promise<any> => {
+      try {
+        const result = await sendRequest<ClassificationObjectID>(
+          "set_hover_object_id",
+          {
+            object_id: objId,
+          },
+        );
+      } catch (error) {
+        console.error("Failed to set on-hover object id:", error);
+      }
+    },
+    [sendRequest],
+  );
+
   // Hide selected class types within polygon selection
   const hidePointsInPolygon = useCallback(
     async (
@@ -546,8 +566,9 @@ export const useWebRpc = (canvasRef: RefObject<HTMLIFrameElement | null>) => {
     placeAssetAtPosition,
     toggleAssetPlacementMode,
     clearAllAssets,
-    // Polygon
 
+    // Polygon
+    setOnMouseEnterObjectID,
     getClassificationCategories,
     hidePointsInPolygon,
     reclassifyPointsInPolygon,

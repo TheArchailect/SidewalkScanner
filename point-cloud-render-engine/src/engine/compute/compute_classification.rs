@@ -1,13 +1,14 @@
-use crate::RenderModeState;
 use crate::constants::procedural_shader::{
-    MAXIMUM_POLYGON_MASKS, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
+    MAX_IGNORE_MASK_LENGTH, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
 };
 use crate::engine::assets::bounds::BoundsData;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::systems::render_mode::RenderMode;
+use crate::engine::systems::render_mode::{MouseEnterObjectState, RenderModeState};
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
+
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};
 use bevy::render::{
@@ -44,8 +45,12 @@ pub fn trigger_classification_compute(
     mut state: ResMut<ComputeClassificationState>,
     classification_data: Res<PolygonClassificationData>,
     render_mode: Res<RenderModeState>,
+    mouse_enter_object_id: Res<MouseEnterObjectState>,
 ) {
-    if classification_data.is_changed() || render_mode.is_changed() {
+    if classification_data.is_changed()
+        || render_mode.is_changed()
+        || mouse_enter_object_id.is_changed()
+    {
         state.should_recompute = true;
     }
 }
@@ -55,6 +60,7 @@ pub fn run_classification_compute(
     classification_data: Res<PolygonClassificationData>,
     selection_state: Res<ClassSelectionState>,
     render_mode: Res<RenderModeState>,
+    mouse_enter_object_id: Res<MouseEnterObjectState>,
     render_device: Res<RenderDevice>,
     mut render_queue: ResMut<RenderQueue>,
     pipeline_cache: Res<PipelineCache>,
@@ -65,6 +71,7 @@ pub fn run_classification_compute(
 ) {
     let should_update = classification_data.is_changed()
         || render_mode.is_changed()
+        || mouse_enter_object_id.is_changed()
         || state.should_recompute
         || selection_state.is_changed();
 
@@ -113,6 +120,7 @@ pub fn run_classification_compute(
         &selection_state,
         manifest.terrain_bounds(), // Pass terrain bounds directly from manifest.
         render_mode.current_mode,
+        mouse_enter_object_id.object_id,
     );
 
     state.should_recompute = false;
@@ -218,9 +226,15 @@ fn execute_compute_shader(
     selection_state: &ClassSelectionState,
     terrain_bounds: &BoundsData, // Accept terrain bounds directly.
     current_mode: RenderMode,
+    mouse_enter_object_id: Option<u32>,
 ) {
-    let compute_buffer =
-        create_compute_buffer(render_device, polygons, selection_state, current_mode);
+    let compute_buffer = create_compute_buffer(
+        render_device,
+        polygons,
+        selection_state,
+        current_mode,
+        mouse_enter_object_id,
+    );
     let bounds_buffer = create_terrain_bounds_buffer(render_device, terrain_bounds);
 
     let bind_group = render_device.create_bind_group(
@@ -276,25 +290,39 @@ fn create_compute_buffer(
     polygons: &[ClassificationPolygon],
     selection_state: &ClassSelectionState,
     current_mode: RenderMode,
+    mouse_enter_object_id: Option<u32>,
 ) -> bevy::render::render_resource::Buffer {
     use bytemuck::{Pod, Zeroable};
 
     #[repr(C)]
-    #[derive(Pod, Zeroable, Copy, Clone)]
-    struct ComputeUniformData {
-        polygon_count: u32,
-        total_points: u32,
-        render_mode: u32,
-        enable_spatial_opt: u32,
-        selection_point: [f32; 4],
-        is_selecting: u32,
-        _padding: [u32; 3],
-        point_data: [[f32; 4]; MAXIMUM_POLYGON_POINTS],
-        polygon_info: [[f32; 4]; MAXIMUM_POLYGONS],
-        ignore_masks: [[u32; 4]; MAXIMUM_POLYGON_MASKS], // MAX_IGNORE_MASK_LENGTH × 4 = 512 u32 values
+    #[derive(Clone, Copy, Pod, Zeroable)]
+    pub struct ComputeUniformData {
+        pub polygon_count: u32,      // 0
+        pub total_points: u32,       // 4
+        pub render_mode: u32,        // 8
+        pub enable_spatial_opt: u32, // 12
+
+        pub selection_point: [f32; 4], // 16 (vec3 + pad)
+        pub is_selecting: u32,         // 32
+        pub hover_object_id: u32,      // 36
+        pub _padding: [u32; 2],        // 40 (8 bytes → next @48)
+
+        pub point_data: [[f32; 4]; MAXIMUM_POLYGON_POINTS], // 48, stride 16
+        pub polygon_info: [[f32; 4]; MAXIMUM_POLYGONS],     // after that
+        pub ignore_masks: [[u32; 4]; MAX_IGNORE_MASK_LENGTH],
     }
 
     let mut uniform = ComputeUniformData::zeroed();
+
+    if let Some(id) = mouse_enter_object_id {
+        info!("Recieved updated hover ID at compute shader: {:?}", id);
+        uniform.hover_object_id = id as u32;
+    } else {
+        info!("Default compute hove selection");
+        uniform.hover_object_id = 0;
+    }
+    // uniform.hover_object_id = 2;
+
     uniform.polygon_count = polygons.len() as u32;
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
@@ -311,8 +339,6 @@ fn create_compute_buffer(
         }
         mask_offset += polygon.masks.len();
     }
-
-    // info!("Compute Uniform - Mask Data: {:?}", uniform.ignore_masks);
 
     uniform.selection_point = selection_state
         .selection_point

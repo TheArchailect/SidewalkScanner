@@ -421,30 +421,34 @@ impl PointCloudConverter {
                 0.0
             };
 
-            // Store unique point class combinations in our class info struct
-            classes.insert_or_update(
-                classification,
-                get_class_name(classification),
-                object_number as u32,
-            );
+            if object_number == 0.0 {
+                println!("found point with no object number scalar feild");
+            } else {
+                // Store unique point class combinations in our class info struct
+                classes.insert_or_update(
+                    classification,
+                    get_class_name(classification),
+                    object_number as u32,
+                );
 
-            // Add to spatial structure for Z-order organization.
-            spatial_gen.add_point((x, y, z), classification, color, object_number);
+                // Add to spatial structure for Z-order organization.
+                spatial_gen.add_point((x, y, z), classification, color, object_number);
 
-            // Track road points for heightmap generation.
-            if ROAD_CLASSIFICATIONS.contains(&classification) {
-                let norm_x = bounds.normalize_x(x);
-                let norm_z = bounds.normalize_z(z);
-                let norm_y = bounds.normalize_y(y);
-                road_points.push((norm_x, norm_z, norm_y));
+                // Track road points for heightmap generation.
+                if ROAD_CLASSIFICATIONS.contains(&classification) {
+                    let norm_x = bounds.normalize_x(x);
+                    let norm_z = bounds.normalize_z(z);
+                    let norm_y = bounds.normalize_y(y);
+                    road_points.push((norm_x, norm_z, norm_y));
+                }
+
+                // Update processing statistics.
+                if color.is_some() {
+                    stats.colour_points += 1;
+                }
+                stats.total_elevation += y;
+                stats.loaded_points += 1;
             }
-
-            // Update processing statistics.
-            if color.is_some() {
-                stats.colour_points += 1;
-            }
-            stats.total_elevation += y;
-            stats.loaded_points += 1;
         }
 
         pb.finish_with_message("Points processed");

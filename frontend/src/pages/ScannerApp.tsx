@@ -17,6 +17,7 @@ const ScannerApp: React.FC = () => {
   const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
   const [renderMode, setRenderMode] = useState<string>("RGB");
   const [showTutorial, setShowTutorial] = useState(true);
+  const [hasSelection, setHasSelection] = useState(false);
 
   // Create ref and pass to hook
   const canvasRef = useRef<HTMLIFrameElement | null>(null);
@@ -94,11 +95,12 @@ const ScannerApp: React.FC = () => {
         iframe?.focus();
         iframe?.contentWindow?.focus();
 
-        const doc = iframe?.contentDocument || iframe?.contentWindow?.document || null;
+        const doc =
+          iframe?.contentDocument || iframe?.contentWindow?.document || null;
         const canvas = doc?.querySelector("canvas") as HTMLCanvasElement | null;
         if (canvas) {
           if (!canvas.hasAttribute("tabindex")) {
-            canvas.setAttribute("tabindex", "-1"); 
+            canvas.setAttribute("tabindex", "-1");
           }
           (canvas as any).focus?.({ preventScroll: true });
         }
@@ -122,6 +124,8 @@ const ScannerApp: React.FC = () => {
 
     if (toolId === "polygon") {
       setShowPolygonPanel(true);
+      setRenderMode("modified");
+      handleRenderModeChange("modified");
     } else {
       setShowPolygonPanel(false);
     }
@@ -150,7 +154,7 @@ const ScannerApp: React.FC = () => {
     }
   };
 
-  // Global key handling for A/D and Escape 
+  // Global key handling for A/D and Escape
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key;
@@ -175,7 +179,11 @@ const ScannerApp: React.FC = () => {
 
     document.addEventListener("keydown", onKeyDown, { capture: true });
     return () => {
-      document.removeEventListener("keydown", onKeyDown as any, { capture: true } as any);
+      document.removeEventListener(
+        "keydown",
+        onKeyDown as any,
+        { capture: true } as any,
+      );
     };
   }, [clearTool]);
 
@@ -202,7 +210,9 @@ const ScannerApp: React.FC = () => {
     try {
       const doc = iframeEl?.contentDocument;
       if (doc) {
-        let styleTag = doc.getElementById("cursor-style") as HTMLStyleElement | null;
+        let styleTag = doc.getElementById(
+          "cursor-style",
+        ) as HTMLStyleElement | null;
         if (!styleTag) {
           styleTag = doc.createElement("style");
           styleTag.id = "cursor-style";
@@ -211,21 +221,21 @@ const ScannerApp: React.FC = () => {
         const cssCursor = url === "default" ? "default" : url;
         styleTag.textContent = `html, body, canvas { cursor: ${cssCursor} !important; }`;
       }
-    } catch {
-    }
+    } catch {}
 
     return () => {
       root.style.cursor = "default";
       if (iframeEl) iframeEl.style.cursor = "default";
       try {
         const doc = iframeEl?.contentDocument;
-        const styleTag = doc?.getElementById("cursor-style") as HTMLStyleElement | null;
+        const styleTag = doc?.getElementById(
+          "cursor-style",
+        ) as HTMLStyleElement | null;
         if (styleTag)
           styleTag.textContent = `html, body, canvas { cursor: default !important; }`;
       } catch {}
     };
   }, [selectedTool, canvasRef]);
-
 
   // Handle Escape key inside iframe to clear tool
   useEffect(() => {
@@ -260,9 +270,7 @@ const ScannerApp: React.FC = () => {
 
         win.addEventListener("keydown", onEscape, { capture: true });
         doc.addEventListener("keydown", onEscape, { capture: true });
-
-      } catch {
-      }
+      } catch {}
     };
 
     if (iframe.contentWindow && iframe.contentDocument) {
@@ -308,7 +316,9 @@ const ScannerApp: React.FC = () => {
                 style.id = "cursor-style";
                 doc.head.appendChild(style);
               }
-              const canvas = doc.querySelector("canvas") as HTMLCanvasElement | null;
+              const canvas = doc.querySelector(
+                "canvas",
+              ) as HTMLCanvasElement | null;
               if (canvas && !canvas.hasAttribute("tabindex")) {
                 canvas.setAttribute("tabindex", "-1");
               }
@@ -432,7 +442,7 @@ const ScannerApp: React.FC = () => {
           >
             Render Mode:
           </span>
-          {["original", "modified", "RGB"].map((mode) => (
+          {["original", "modified", "connectivity", "RGB"].map((mode) => (
             <button
               key={mode}
               onClick={() => handleRenderModeChange(mode)}
@@ -488,7 +498,11 @@ const ScannerApp: React.FC = () => {
 
       {/* Asset Library Panel */}
       <AssetLibrary isVisible={showAssetLibrary} canvasRef={canvasRef} />
-      <PolygonToolPanel isVisible={showPolygonPanel} canvasRef={canvasRef} />
+      <PolygonToolPanel
+        isVisible={showPolygonPanel}
+        setHasSelection={setHasSelection}
+        canvasRef={canvasRef}
+      />
       {!showLoadingPanel && (
         <TutorialOverlay
           isOpen={showTutorial}
