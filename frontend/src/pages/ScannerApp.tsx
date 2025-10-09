@@ -521,7 +521,6 @@ const ScannerApp: React.FC = () => {
           )}
           {completedMeasurements.length > 0 && (
             <div style={{ marginTop: "8px" }}>
-              <strong>Completed:</strong>
               <ul style={{ margin: 0, paddingLeft: "16px" }}>
                 {completedMeasurements.map((m) => (
                   <li key={m.id}>{m.distance?.toFixed(2)} m</li>
