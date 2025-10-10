@@ -269,11 +269,12 @@ pub fn camera_controller(
         };
 
         // Control yaw
-        if keyboard.pressed(KeyCode::PageDown) {
+        if keyboard.pressed(KeyCode::PageDown) || keyboard.pressed(KeyCode::KeyF) {
             let rotation_speed = 1.0 * time.delta_secs();
             viewport_camera.pitch = (viewport_camera.pitch + rotation_speed).clamp(-1.4, -0.1);
         }
-        if keyboard.pressed(KeyCode::PageUp) {
+
+        if keyboard.pressed(KeyCode::PageUp) || keyboard.pressed(KeyCode::KeyR) {
             let rotation_speed = 1.0 * time.delta_secs();
             viewport_camera.pitch = (viewport_camera.pitch - rotation_speed).clamp(-1.4, -0.1);
         }

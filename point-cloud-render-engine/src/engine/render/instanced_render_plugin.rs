@@ -191,6 +191,7 @@ fn prepare_instanced_asset_bind_groups(
     };
 
     let camera_pos = render_state.camera_position;
+
     let camera_uniform = render_device.create_buffer_with_data(&BufferInitDescriptor {
         label: Some("camera_uniform"),
         contents: bytemuck::cast_slice(&[camera_pos.x, camera_pos.y, camera_pos.z, 0.0f32]),

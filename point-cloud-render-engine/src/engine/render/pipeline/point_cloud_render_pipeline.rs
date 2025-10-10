@@ -1,7 +1,7 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_state::{AppState, PipelineDebugState};
 use crate::engine::render::extraction::render_state::extract_point_cloud_render_state;
-use crate::engine::systems::render_mode::RenderModeState;
+use crate::engine::systems::render_mode::{MouseEnterObjectState, RenderModeState};
 use bevy::core_pipeline::core_3d::graph::{Core3d, Node3d};
 use bevy::ecs::{
     query::QueryItem,
@@ -63,6 +63,7 @@ impl Plugin for PointCloudRenderPlugin {
             ExtractResourcePlugin::<PointCloudRenderState>::default(),
             ExtractResourcePlugin::<PointCloudAssets>::default(),
             ExtractResourcePlugin::<RenderModeState>::default(),
+            ExtractResourcePlugin::<MouseEnterObjectState>::default(),
             SortedRenderPhasePlugin::<PointCloudPhase, MeshPipeline>::new(
                 RenderDebugFlags::default(),
             ),

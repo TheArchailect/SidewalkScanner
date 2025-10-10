@@ -6,6 +6,7 @@ import { ClassificationCategory } from "../hooks/useWebRpc";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
+  setHasSelection: React.Dispatch<React.SetStateAction<boolean>>;
   canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
@@ -22,6 +23,7 @@ type Operation = "hide" | "reclassify";
 
 const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   isVisible,
+  setHasSelection,
   canvasRef,
 }) => {
   const {
@@ -31,6 +33,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     clearTool,
     hidePointsInPolygon,
     reclassifyPointsInPolygon,
+    setOnMouseEnterObjectID,
   } = useWebRpc(canvasRef);
 
   const [operation, setOperation] = useState<Operation>("hide");
@@ -83,6 +86,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           : cls,
       ),
     );
+
+    setHasSelection(true);
     returnFocusToCanvas();
   };
 
@@ -435,6 +440,12 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                       <button
                         key={`${cls.classId}-${objId}`}
                         onClick={() => toggleObjectId(cls.classId, objId)}
+                        onMouseEnter={() => {
+                          setOnMouseEnterObjectID(objId);
+                        }}
+                        onMouseLeave={() => {
+                          setOnMouseEnterObjectID(-1);
+                        }}
                         style={{
                           ...styleUtils.toolItem(
                             cls.selectedObjectIds.has(objId),
@@ -526,7 +537,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           gap: theme.spacing[3],
         }}
       >
-        <button
+        {/*<button
           onClick={handleCancel}
           style={{
             ...styleUtils.buttonGhost(),
@@ -537,7 +548,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           }}
         >
           Cancel
-        </button>
+        </button>*/}
         <button
           onClick={handleApply}
           disabled={operation === "reclassify" && !targetClassId}

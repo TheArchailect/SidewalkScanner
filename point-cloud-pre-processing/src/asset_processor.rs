@@ -160,8 +160,8 @@ impl AssetProcessor {
         Ok(())
     }
 
-    /// Loads and processes points from an asset file.
-    /// Returns spatial points and local bounds for atlas integration.
+    /// Loads and processes points from an asset file with (match size) based on full local bound
+    /// Returns worldspace points and local bounds for atlas integration.
     fn load_asset_points(
         &self,
         candidate: &AssetCandidate,
@@ -170,21 +170,38 @@ impl AssetProcessor {
         let buf_reader = BufReader::new(file);
         let mut reader = Reader::new(buf_reader)?;
 
-        let mut asset_points = Vec::new();
+        // --- First pass: collect raw coordinates & compute bounds ---
+        let mut raw_points = Vec::new();
         let mut local_bounds = PointCloudBounds::new();
 
-        // Load all points from asset file.
         for point_result in reader.points() {
             let point = point_result?;
             let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
-
-            // Update local bounds for this asset.
             local_bounds.update(x, y, z);
+            raw_points.push((point, (x, y, z)));
+        }
+
+        // --- Compute alignment offset (match size logic) ---
+        let center_x = (local_bounds.min_x + local_bounds.max_x) * 0.5;
+        let center_z = (local_bounds.min_z + local_bounds.max_z) * 0.5;
+        let offset = (-center_x, -local_bounds.min_y, -center_z);
+
+        println!(
+            "Applying match size offset: x = {}, y = {}, z = {}",
+            offset.0, offset.1, offset.2
+        );
+
+        // --- Second pass: build spatial points using adjusted positions ---
+        let mut asset_points = Vec::with_capacity(raw_points.len());
+
+        for (point, (x, y, z)) in raw_points {
+            let translated_x = x + offset.0;
+            let translated_y = y + offset.1;
+            let translated_z = z + offset.2;
 
             let classification = u8::from(point.classification);
             let color = point.color.map(|c| (c.red, c.green, c.blue));
 
-            // Extract object number from extra bytes if available.
             let object_number = if point.extra_bytes.len() >= 4 {
                 f32::from_le_bytes([
                     point.extra_bytes[0],
@@ -196,31 +213,19 @@ impl AssetProcessor {
                 0.0
             };
 
-            // Create spatial point with asset-local coordinates.
-            let spatial_point = SpatialPoint {
-                world_pos: (x, y, z),
+            asset_points.push(SpatialPoint {
+                world_pos: (translated_x, translated_y, translated_z),
                 norm_pos: (
                     local_bounds.normalize_x(x),
                     local_bounds.normalize_y(y),
                     local_bounds.normalize_z(z),
                 ),
-                morton_index: 0,    // Will be calculated if needed.
-                spatial_cell_id: 0, // Not used for asset atlas.
+                morton_index: 0,
+                spatial_cell_id: 0,
                 classification,
                 color,
                 object_number,
-            };
-
-            asset_points.push(spatial_point);
-        }
-
-        // Normalize coordinates after loading all points.
-        for point in &mut asset_points {
-            point.norm_pos = (
-                local_bounds.normalize_x(point.world_pos.0),
-                local_bounds.normalize_y(point.world_pos.1),
-                local_bounds.normalize_z(point.world_pos.2),
-            );
+            });
         }
 
         println!(
@@ -228,6 +233,7 @@ impl AssetProcessor {
             asset_points.len(),
             candidate.name
         );
+
         Ok((asset_points, local_bounds))
     }
 
