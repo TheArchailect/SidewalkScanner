@@ -96,6 +96,7 @@ pub fn place_cube_on_world_click(
     let mut sx = (lb.max_x - lb.min_x) as f32;
     let mut sy = (lb.max_y - lb.min_y) as f32;
     let mut sz = (lb.max_z - lb.min_z) as f32;
+
     if !sx.is_finite() || !sy.is_finite() || !sz.is_finite() {
         return;
     }

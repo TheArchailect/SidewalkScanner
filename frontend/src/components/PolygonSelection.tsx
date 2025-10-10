@@ -443,6 +443,9 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                         onMouseEnter={() => {
                           setOnMouseEnterObjectID(objId);
                         }}
+                        onMouseLeave={() => {
+                          setOnMouseEnterObjectID(-1);
+                        }}
                         style={{
                           ...styleUtils.toolItem(
                             cls.selectedObjectIds.has(objId),

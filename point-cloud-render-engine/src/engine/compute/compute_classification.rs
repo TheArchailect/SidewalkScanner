@@ -1,3 +1,37 @@
+/// Phase 1 Compute Pipeline: Procedural Texture Reclassification
+///
+/// This compute pass is the first stage of the rendering pipeline. It procedurally modifies
+/// encoded textures (e.g., classification and RGB data) using user-defined polygon masks and
+/// spatial filtering, producing a new classification texture used downstream.
+///
+/// ### Inputs:
+/// - `original_texture`: Source RGB + classification (stored in alpha)
+/// - `position_texture`: Normalized world positions (xyz) + connectivity class ID (a)
+/// - `spatial_index_texture`: Precomputed Morton codes for optional spatial acceleration
+/// - `compute_data` (uniform): Contains polygon definitions, mask entries, selection info, etc.
+/// - `bounds` (uniform): World-space bounding box used for position denormalization
+///
+/// ### Outputs:
+/// - `output_texture`: A reclassified texture with updated classification values per point
+///
+/// ### Behavior:
+/// - Applies reclassification or hide operations to points inside polygons, using a modifier-stack-like logic
+/// - Supports optional spatial filtering via Morton codes or AABBs to accelerate large polygon tests
+/// - Ensures hidden points (class `254`) are not reprocessed by later polygons
+/// - Honors per-polygon masking rules through encoded ignore-mask IDs
+///
+/// ### Special Modes:
+/// - `render_mode` controls the output format: raw RGB, reclassified view, morton debug, spatial debug, etc.
+/// - Hover/selection highlights can override classification color during user interaction for UX feedback
+///
+/// ### Notes:
+/// - This compute pass is *non-destructive*: classification overrides are written to a separate output texture.
+/// - Hidden points are indicated via classification value `254`, which downstream passes interpret as "discard".
+/// - Must be executed before any shading or rendering passes that rely on classification data.
+///
+/// ### Performance:
+/// - Spatial filtering significantly reduces cost on large point clouds
+/// - Morton filtering is more granular but computationally heavier than AABB mode
 use crate::constants::procedural_shader::{
     MAX_IGNORE_MASK_LENGTH, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
 };
@@ -24,6 +58,16 @@ use bevy::render::{
 };
 pub struct ComputeClassificationPlugin;
 
+/// Runtime state for controlling classification compute pipeline execution.
+///
+/// This resource tracks:
+/// - Whether a recomputation should occur (`should_recompute`)
+/// - Cached pipeline ID and bind group layout
+///
+/// The state is initialised by the plugin and shared across systems that
+/// prepare or trigger compute dispatches.
+///
+/// Used by the render extract phase to synchronise data to the GPU side.
 #[derive(Resource, Default, ExtractResource, Clone)]
 pub struct ComputeClassificationState {
     pub should_recompute: bool,
@@ -41,6 +85,16 @@ impl Plugin for ComputeClassificationPlugin {
     }
 }
 
+/// System that flags when the classification compute pipeline should re-run.
+///
+/// It checks for changes in:
+/// - Polygon classification data
+/// - Render mode (RGB | Original | Modified | Connectivity)
+/// - Mouse hover object selection for use feedback
+///
+/// If any of these change, `should_recompute` is set to `true` in the shared state.
+///
+/// This helps defer compute shader execution until it's required, improving efficiency.
 pub fn trigger_classification_compute(
     mut state: ResMut<ComputeClassificationState>,
     classification_data: Res<PolygonClassificationData>,
@@ -55,6 +109,31 @@ pub fn trigger_classification_compute(
     }
 }
 
+/// Executes the classification compute shader when relevant state has changed.
+///
+/// This function:
+/// - Lazily initialises the compute pipeline if needed
+/// - Retrieves necessary GPU textures
+/// - Creates uniform buffers for polygons and terrain bounds
+/// - Dispatches the WGSL compute shader
+///
+/// ### WGSL expectations:
+/// The WGSL shader bound at `shaders/modified_classification.wgsl` expects:
+/// - 3 input textures: colour class, position, and spatial index
+/// - 1 writable output texture
+/// - 2 uniform buffers:
+///   - Polygon + mask metadata
+///   - Scene bounds
+///
+/// These are mapped to bindings 0–5 in the WGSL:
+/// ```wgsl
+/// @group(0) @binding(0) var colour_texture: texture_2d<f32>;
+/// @group(0) @binding(1) var position_texture: texture_2d<f32>;
+/// @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>;
+/// @group(0) @binding(3) var result_texture: texture_storage_2d<rgba32float, write>;
+/// @group(0) @binding(4) var<uniform> polygon_data: PolygonUniform;
+/// @group(0) @binding(5) var<uniform> terrain_bounds: TerrainBounds;
+/// ```
 pub fn run_classification_compute(
     mut state: ResMut<ComputeClassificationState>,
     classification_data: Res<PolygonClassificationData>,
@@ -126,6 +205,14 @@ pub fn run_classification_compute(
     state.should_recompute = false;
 }
 
+/// Creates the compute pipeline and bind group layout used for classification.
+///
+/// Sets up the following bindings:
+/// 0–2: Input textures (read-only)
+/// 3:   Output texture (write-only)
+/// 4–5: Uniform buffers (polygon data + terrain bounds)
+///
+/// Expects the shader to be located at `shaders/modified_classification.wgsl`.
 fn initialise_compute_pipeline(
     state: &mut ComputeClassificationState,
     render_device: &RenderDevice,
@@ -281,8 +368,29 @@ fn execute_compute_shader(
     render_queue.submit([encoder.finish()]);
 }
 
-fn encode_mask(poly_idx: u32, mask_id: u32, mode: u32) -> u32 {
-    ((mode & 0xFF) << 24) | ((poly_idx & 0xFFFF) << 8) | (mask_id & 0xFF)
+/// encode a polygon tool operation ```polygon | class | object_id | mode```
+/// this will be decoded on the gpu to perform procedural non-destructive modifications
+fn encode_mask(poly_idx: u32, mask_id0: u32, mask_id1: u32, mode: u32) -> u32 {
+    assert!(
+        poly_idx < MAXIMUM_POLYGONS as u32,
+        "poly_idx must be < MAXIMUM_POLYGONS"
+    );
+    assert!(
+        mask_id0 < MAX_IGNORE_MASK_LENGTH as u32,
+        "mask_id.0 must be < MAX_IGNORE_MASK_LENGTH"
+    );
+    assert!(
+        mask_id1 < MAX_IGNORE_MASK_LENGTH as u32,
+        "mask_id.1 must be < MAX_IGNORE_MASK_LENGTH"
+    );
+    assert!(mode <= 1, "mode must be 0 or 1");
+
+    let encoded: u32 = (mask_id0 & 0x1FF) |              // bits 0–8
+        ((mask_id1 & 0x1FF) << 9) |       // bits 9–17
+        ((poly_idx & 0x1FF) << 18) |      // bits 18–26
+        ((mode & 0x1) << 27); // bit 27
+
+    encoded
 }
 
 fn create_compute_buffer(
@@ -321,20 +429,30 @@ fn create_compute_buffer(
         info!("Default compute hove selection");
         uniform.hover_object_id = 0;
     }
-    // uniform.hover_object_id = 2;
 
     uniform.polygon_count = polygons.len() as u32;
     uniform.render_mode = current_mode as u32;
     uniform.enable_spatial_opt = 1;
 
-    // Encode our mask id's along with the polygon index so we can decode the relationships on the GPU
-    // note: we're currently using mask_id.0 which is the major class id or 'parent' class type,
-    // we do however have the finegrained child object id class available
+    // Encode our mask id's along with the polygon index and polygon mode (hide or reclassify)
+    // so we can decode these complicated operations and relationships on the GPU in a per-point context
     let mut mask_offset = 0;
     for (poly_idx, polygon) in polygons.iter().enumerate().take(MAXIMUM_POLYGONS) {
-        for (mask_idx, &mask_id) in polygon.masks.iter().enumerate() {
-            let encoded = encode_mask(poly_idx as u32, mask_id.0, polygon.mode.clone() as u32);
+        for (mask_idx, &(mask_id0, mask_id1)) in polygon.masks.iter().enumerate() {
+            let encoded = encode_mask(
+                poly_idx as u32,
+                mask_id0,
+                mask_id1,
+                polygon.mode.clone() as u32,
+            );
+
             let i = mask_offset + mask_idx;
+            assert!(
+                (i as usize) < MAX_IGNORE_MASK_LENGTH * 4,
+                "mask array overflow: i={} capacity={}",
+                i,
+                MAX_IGNORE_MASK_LENGTH * 4
+            );
             uniform.ignore_masks[i / 4][i % 4] = encoded;
         }
         mask_offset += polygon.masks.len();

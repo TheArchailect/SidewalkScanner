@@ -858,7 +858,9 @@ fn handle_mouse_enter_object_id(
             mouse_enter_object_id.object_id
         );
     } else {
+        // since we only accept u32 a value a -1 for the object mask should always fail here, and we can clear the hover mask to some default value
         eprintln!("Failed to deserialize OnHoverParams: {:?}", params);
+        mouse_enter_object_id.object_id = Some(254); // HACK:(archailect) this should be a global default value or the phase 1 classification shader should inteligently handle an Optional value.
     }
     ()
 }

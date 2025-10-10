@@ -268,9 +268,9 @@ impl AtlasTextureGenerator {
 
                 if pixel_idx + 3 < position_data.len() {
                     // Position data.
-                    position_data[pixel_idx] = point.norm_pos.0;
-                    position_data[pixel_idx + 1] = point.norm_pos.1;
-                    position_data[pixel_idx + 2] = point.norm_pos.2;
+                    position_data[pixel_idx] = point.world_pos.0 as f32;
+                    position_data[pixel_idx + 1] = point.world_pos.1 as f32;
+                    position_data[pixel_idx + 2] = point.world_pos.2 as f32;
                     position_data[pixel_idx + 3] = point.object_number / 121.0;
 
                     // Color and classification data.

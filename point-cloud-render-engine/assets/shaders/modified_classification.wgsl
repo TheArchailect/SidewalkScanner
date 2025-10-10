@@ -1,3 +1,37 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Compute Classification Shader — Phase 1 of Render Pipeline
+//
+// This compute pass procedurally modifies the original encoded textures based
+// on polygon-based reclassification masks. It applies both spatial and logical
+// filtering to determine per-point visibility and classification, writing
+// results into a new output texture.
+//
+// Input Textures:
+//   - original_texture: Encoded RGB + original classification (A)
+//   - position_texture: Normalized world-space coordinates + connectivity class ID
+//   - spatial_index_texture: Precomputed morton codes for spatial acceleration
+//
+// Uniform Data:
+//   - compute_data: Packed structure with classification polygons, masks, modes
+//   - bounds: World-space bounding box for position denormalization
+//
+// Features:
+//   - Supports two spatial filtering modes: AABB (default) and Morton (toggleable)
+//   - Applies point-in-polygon masking and allows reclassification or hiding
+//   - Avoids redundant operations on already-hidden points (modifier stack logic)
+//   - Outputs reclassified points and/or filtered ones to `output_texture`
+//   - Supports on mouse hover debug, spatial debug, morton debug, and multiple render modes
+//
+// Notes:
+//   - Final output color encodes classification state for downstream shaders
+//   - Classification ID 254 is treated as "hidden" (non-destructive hide) (note this may need to be extended upon in the future)
+//   - Morton mode is optional but used for coarse-grained spatial filtering (note for long, thin polygons this is much more efficient than an AABB and in the future i would recommend a hybrid approach with some huristic)
+//
+// This pass sets up the modified textures used by all subsequent stages in the
+// render pipeline.
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 @group(0) @binding(0) var original_texture: texture_2d<f32>;
 @group(0) @binding(1) var position_texture: texture_2d<f32>;
 @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>;
@@ -97,12 +131,12 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 // effectivly this is our masking logic per polygon in the Reclassify polygon mode
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
                     // update the final class for points inside the polygon, with it's masks considered for reclassification
-                    if contains_value(real_index, original_class, 1u) {
+                    if contains_value(real_index, original_class, point_connectivity_class_id, 1u) {
                         final_class = new_class;
                     }
 
                     // set the final class for points inside the polygon, with masks considered to a magic number that our fragment shader will ignore and discard 'hiding' non-destructivly
-                    if contains_value(real_index, original_class, 0u) {
+                    if contains_value(real_index, original_class, point_connectivity_class_id, 0u) {
                         found_hide_op = true;
                         final_class = 254u;
                         break;
@@ -123,29 +157,34 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     textureStore(output_texture, coords, final_color);
 }
 
-fn decode_mask(encoded: u32) -> vec3<u32> {
-    let mask_id  = encoded & 0xFFu;
-    let poly_idx = (encoded >> 8) & 0xFFFFu;
-    let mode     = (encoded >> 24) & 0xFFu;
-    return vec3<u32>(poly_idx, mask_id, mode);
-}
+// decode packed masks, index and mode and checks if both masks intersect (note mask id1 is the optional refinement)
+fn contains_value(poly_idx: u32, mask_id0: u32, mask_id1: u32, mode: u32) -> bool {
+    var index: u32 = 0u;
+    loop {
+        if (index >= MAX_IGNORE_MASK_LENGTH) {
+            break;
+        }
 
-fn contains_value(poly_idx: u32, mask_id: u32, mode: u32) -> bool {
-    for (var i = 0u; i < MAX_IGNORE_MASK_LENGTH; i++) {
-        let mask_vec = compute_data.ignore_masks[i];
-        for (var j = 0u; j < 4u; j++) {
-            let encoded = mask_vec[j];
-            let dec_mask_id  = encoded & 0xFFu;
-            let dec_poly_idx = (encoded >> 8) & 0xFFFFu;
-            let dec_mode     = (encoded >> 24) & 0xFFu;
+        let mask_vec = compute_data.ignore_masks[index];
+        for (var j: u32 = 0u; j < 4u; j = j + 1u) {
+            let encoded: u32 = bitcast<u32>(mask_vec[j]);
+
+            let dec_mask_id0: u32 = encoded & 0x1FFu;
+            let dec_mask_id1: u32 = (encoded >> 9u) & 0x1FFu;
+            let dec_poly_idx: u32 = (encoded >> 18u) & 0x1FFu;
+            let dec_mode: u32     = (encoded >> 27u) & 0x1u;
 
             if (dec_poly_idx == poly_idx &&
-                dec_mask_id == mask_id &&
+                dec_mask_id0 == mask_id0 &&
+                dec_mask_id1 == mask_id1 &&
                 dec_mode == mode) {
                 return true;
             }
         }
+
+        index = index + 1u;
     }
+
     return false;
 }
 
