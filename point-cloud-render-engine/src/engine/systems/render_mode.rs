@@ -21,7 +21,12 @@ pub struct MouseEnterObjectState {
 
 impl Default for MouseEnterObjectState {
     fn default() -> Self {
-        Self { object_id: Some(0) }
+        Self {
+            // this is a default hard coded initial mask id.
+            // note: ideally we would move to a true Optional value.
+            // however the shader requires something as it is, so we choose a likely out of range class for the time being
+            object_id: Some(254),
+        }
     }
 }
 

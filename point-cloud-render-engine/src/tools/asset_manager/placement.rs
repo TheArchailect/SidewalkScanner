@@ -1,16 +1,19 @@
+use super::state::*;
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::render::instanced_render_plugin::{InstanceData, InstancedAssetData};
 use bevy::prelude::*;
-use bevy::render::alpha::AlphaMode;
-use bevy::render::view::NoFrustumCulling;
-
-use super::state::*;
 use bevy::prelude::{Mesh3d, MeshMaterial3d};
+use bevy::render::alpha::AlphaMode;
 use bevy::render::mesh::Mesh;
+use bevy::render::view::NoFrustumCulling;
+use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
+
+#[derive(Component)]
+pub struct AssetPreview;
 
 // Click in world to place bounds & update instanced renderer
 pub fn place_cube_on_world_click(
@@ -27,29 +30,30 @@ pub fn place_cube_on_world_click(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut placed_assets: ResMut<PlacedAssetInstances>,
     mut existing_instances: Query<&mut InstancedAssetData>,
+    existing_preview: Query<Entity, With<AssetPreview>>,
 ) {
+    // Validate prereqs (camera, window, cursor pos, scene bounds, heightmap, etc)
     // Only run if placement mode is active and right mouse was just clicked
-    if !place.active || !buttons.just_pressed(MouseButton::Left) {
+    if !place.active {
         return;
     }
 
-    // Validate prereqs (camera, window, cursor pos, scene bounds, heightmap, etc)
-    let Some(mut maps_camera) = maps_camera else {
-        return;
-    };
     let Ok(window) = windows.single() else {
-        return;
-    };
-    let Some(cursor_pos) = window.cursor_position() else {
-        return;
-    };
-    let Ok((cam_xform, camera)) = cameras.single() else {
         return;
     };
     let Some(scene_bounds) = assets.get_bounds(&manifests) else {
         return;
     };
     let Some(height_img) = images.get(&assets.heightmap_texture) else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Some(mut maps_camera) = maps_camera else {
+        return;
+    };
+    let Ok((cam_xform, camera)) = cameras.single() else {
         return;
     };
 
@@ -65,6 +69,29 @@ pub fn place_cube_on_world_click(
         return;
     };
 
+    // Clean up existing preview entities to prevent accumulation.
+    for entity in existing_preview.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    commands.spawn((
+        Mesh3d(meshes.add(Sphere::new(0.05))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::hsv(0., 1., 1.),
+            emissive: LinearRgba::new(1., 1., 1., 1.),
+            depth_bias: 0.0,
+            unlit: true,
+            ..default()
+        })),
+        Transform::from_translation(hit),
+        AssetPreview,
+        RenderLayers::layer(1),
+    ));
+
+    if !buttons.just_pressed(MouseButton::Left) {
+        return;
+    }
+
     // Lookup which asset is currently selected in the manifest
     let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) else {
         return;
@@ -78,14 +105,6 @@ pub fn place_cube_on_world_click(
     } else {
         return;
     };
-
-    // we shouldn't have a default chosen asset for placement
-    // else {
-    //     manifest
-    //         .asset_atlas
-    //         .as_ref()
-    //         .and_then(|aa| aa.assets.first())
-    // };
 
     let Some(asset_meta) = picked else {
         return;
