@@ -1,4 +1,7 @@
 use super::state::*;
+use crate::constants::render_settings::{
+    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
+};
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
@@ -11,7 +14,6 @@ use bevy::render::mesh::Mesh;
 use bevy::render::view::NoFrustumCulling;
 use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
-
 #[derive(Component)]
 pub struct AssetPreview;
 
@@ -21,7 +23,7 @@ pub fn place_cube_on_world_click(
     place: Res<PlaceAssetBoundState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    maps_camera: Option<ResMut<ViewportCamera>>,
+    viewport_camera: Option<ResMut<ViewportCamera>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
@@ -50,7 +52,7 @@ pub fn place_cube_on_world_click(
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    let Some(mut maps_camera) = maps_camera else {
+    let Some(mut viewport_camera) = viewport_camera else {
         return;
     };
     let Ok((cam_xform, camera)) = cameras.single() else {
@@ -58,7 +60,7 @@ pub fn place_cube_on_world_click(
     };
 
     // Raycast from mouse to ground plane
-    let hit = maps_camera.mouse_to_ground_plane(
+    let hit = viewport_camera.mouse_to_ground_plane(
         cursor_pos,
         camera,
         cam_xform,
@@ -74,8 +76,9 @@ pub fn place_cube_on_world_click(
         commands.entity(entity).despawn();
     }
 
+    // mouse ray case visualisation
     commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.05))),
+        Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::hsv(0., 1., 1.),
             emissive: LinearRgba::new(1., 1., 1., 1.),

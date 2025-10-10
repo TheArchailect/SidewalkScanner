@@ -1,4 +1,7 @@
 use crate::constants::procedural_shader::MAXIMUM_POLYGONS;
+use crate::constants::render_settings::{
+    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
+};
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -678,7 +681,7 @@ fn create_completed_polygon(
         // Create vertex markers with emissive material for visibility.
         for (i, point) in points.iter().enumerate() {
             commands.spawn((
-                Mesh3d(meshes.add(Sphere::new(0.05))),
+                Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -706,7 +709,7 @@ fn create_completed_polygon(
                 let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
                 commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
+                    Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::hsv(0., 1., 1.),
                         emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -725,7 +728,7 @@ fn create_completed_polygon(
         let _fill_mesh = create_polygon_mesh(points, ground_height);
 
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.05))),
+            Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -760,7 +763,7 @@ pub fn update_polygon_preview(
     // Create preview cursor visualization at mouse intersection point.
     if let Some(preview_point) = polygon_tool.preview_point {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.05))),
+            Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -783,7 +786,7 @@ pub fn update_polygon_preview(
                 let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
                 commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
+                    Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::hsv(0., 1., 1.),
                         emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -847,7 +850,7 @@ pub fn update_polygon_render(
     // Render vertex markers for current polygon construction.
     for (_i, point) in polygon_tool.current_polygon.iter().enumerate() {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.1))),
+            Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 0.5, 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -874,7 +877,7 @@ pub fn update_polygon_render(
         if distance > 0.1 {
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.045, 0.045))),
+                Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),

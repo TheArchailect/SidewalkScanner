@@ -537,7 +537,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           gap: theme.spacing[3],
         }}
       >
-        <button
+        {/*<button
           onClick={handleCancel}
           style={{
             ...styleUtils.buttonGhost(),
@@ -548,7 +548,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           }}
         >
           Cancel
-        </button>
+        </button>*/}
         <button
           onClick={handleApply}
           disabled={operation === "reclassify" && !targetClassId}

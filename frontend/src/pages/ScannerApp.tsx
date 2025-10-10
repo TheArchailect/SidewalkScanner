@@ -15,6 +15,7 @@ const ScannerApp: React.FC = () => {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [showAssetLibrary, setShowAssetLibrary] = useState<boolean>(false);
   const [showPolygonPanel, setShowPolygonPanel] = useState<boolean>(false);
+  const [showMeasurePanel, setShowMeasurePanel] = useState<boolean>(false);
   const [renderMode, setRenderMode] = useState<string>("RGB");
   const [showTutorial, setShowTutorial] = useState(true);
   const [hasSelection, setHasSelection] = useState(false);
@@ -34,10 +35,6 @@ const ScannerApp: React.FC = () => {
     completedMeasurements,
   } = useWebRpc(canvasRef);
 
-  useEffect(() => {
-    console.log("[ScannerApp] canvasRef current:", canvasRef.current);
-  }, [canvasRef.current]);
-
   // listen for the message that all files are loaded.
   useEffect(() => {
     onNotification("loading", (params?: Record<string, number>) => {
@@ -48,35 +45,6 @@ const ScannerApp: React.FC = () => {
       } else {
         setShowLoadingPanel(false);
         console.log("Everything loaded:", params);
-      }
-    });
-  }, [onNotification]);
-
-  // Listen for tool state changes from Bevy
-  useEffect(() => {
-    onNotification("tool_state_changed", (params?: Record<string, any>) => {
-      console.log("Tool state changed from Bevy:", params);
-
-      if (!params?.active || params?.tool === "none") {
-        setSelectedTool(null);
-        setShowAssetLibrary(false);
-        setShowPolygonPanel(false);
-        return;
-      }
-
-      // Reflect active tool in UI
-      if (params?.tool === "polygon" && params?.active) {
-        setSelectedTool("polygon");
-        setShowPolygonPanel(true);
-        setShowAssetLibrary(false);
-      } else if (params?.tool === "assets" && params?.active) {
-        setSelectedTool("assets");
-        setShowAssetLibrary(true);
-        setShowPolygonPanel(false);
-      } else if (params?.tool === "measure" && params?.active) {
-        setSelectedTool("measure");
-        setShowAssetLibrary(false);
-        setShowPolygonPanel(false);
       }
     });
   }, [onNotification]);
@@ -115,30 +83,33 @@ const ScannerApp: React.FC = () => {
   };
 
   const handleToolSelect = async (toolId: string): Promise<void> => {
-    // Show asset library only when assets tool is selected
-    if (toolId === "assets") {
-      setShowAssetLibrary(true);
-    } else {
-      setShowAssetLibrary(false);
-    }
+    const isSameTool = selectedTool === toolId;
+    const newTool = isSameTool ? null : toolId;
+    setSelectedTool(newTool);
 
-    if (toolId === "polygon") {
-      setShowPolygonPanel(true);
+    // Panels visibility
+    setShowAssetLibrary(newTool === "assets");
+    setShowPolygonPanel(newTool === "polygon");
+    setShowMeasurePanel(newTool === "measure");
+
+    // Render mode adjustment only when enabling polygon
+    if (toolId === "polygon" && !isSameTool) {
       setRenderMode("modified");
-      handleRenderModeChange("modified");
-    } else {
-      setShowPolygonPanel(false);
+      await handleRenderModeChange("modified");
     }
 
-    // Always select the clicked tool (each tool is either on or off)
-    setSelectedTool(toolId);
-
-    // Send tool selection to Bevy via RPC
     try {
-      await selectTool(toolId);
-      console.log(`Tool ${toolId} activated`);
+      if (isSameTool) {
+        // Deselecting same tool
+        await clearTool();
+        console.log(`Tool ${toolId} deactivated`);
+      } else {
+        // Selecting new tool
+        await selectTool(toolId);
+        console.log(`Tool ${toolId} activated`);
+      }
     } catch (error) {
-      console.error(`Failed to select tool ${toolId}:`, error);
+      console.error(`Failed to update tool ${toolId}:`, error);
     } finally {
       refocusCanvas();
     }
@@ -511,7 +482,7 @@ const ScannerApp: React.FC = () => {
       )}
 
       {/* Measurement Overlay */}
-      {selectedTool === "measure" && (
+      {selectedTool === "measure" && showMeasurePanel && (
         <div
           style={{
             position: "fixed",
@@ -535,7 +506,6 @@ const ScannerApp: React.FC = () => {
           )}
           {completedMeasurements.length > 0 && (
             <div style={{ marginTop: "8px" }}>
-              <strong>Completed:</strong>
               <ul style={{ margin: 0, paddingLeft: "16px" }}>
                 {completedMeasurements.map((m) => (
                   <li key={m.id}>{m.distance?.toFixed(2)} m</li>
