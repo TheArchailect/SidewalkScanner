@@ -27,7 +27,7 @@ use interactions::{
 };
 use placement::place_cube_on_world_click;
 use rotation::{rotate_active_bounds_on_scroll, drag_move_active_bounds};
-use selection::{deselect_on_escape, reflect_selection_lock, toggle_select_on_click};
+use selection::{deselect_on_escape, delete_selected_on_delete, reflect_selection_lock, toggle_select_on_click};
 
 // Registers the Asset Manager panel, resources, and systems.
 pub struct AssetManagerUiPlugin;
@@ -59,6 +59,7 @@ impl Plugin for AssetManagerUiPlugin {
                     drag_move_active_bounds,
                     reflect_selection_lock,
                     deselect_on_escape,
+                    delete_selected_on_delete,
                     reset_scroll_capture,
                 ),
             );
