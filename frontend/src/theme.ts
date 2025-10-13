@@ -7,14 +7,14 @@ export const theme = {
   },
 
   fontSizes: {
-    xs: "10px",
-    sm: "11px",
-    base: "12px",
-    md: "13px",
-    lg: "14px",
-    xl: "16px",
-    "2xl": "18px",
-    "3xl": "24px",
+    xs: "12px",
+    sm: "13px",
+    base: "14px",
+    md: "15px",
+    lg: "16px",
+    xl: "20px",
+    "2xl": "20px",
+    "3xl": "26px",
   },
 
   fontWeights: {

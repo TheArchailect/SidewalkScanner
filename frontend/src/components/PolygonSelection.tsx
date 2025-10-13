@@ -172,6 +172,32 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     getClassificationCategories();
   }, [isVisible]);
 
+  // Handle double-click
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const onDblClick = () => {
+      if (operation === "reclassify" && targetClassId < 0 && sourceClasses.length > 0) {
+        setTargetClassId(sourceClasses[0].classId);
+        setTimeout(() => {
+          handleApply();
+        }, 0);
+        return;
+      }
+      handleApply();
+    };
+
+    window.addEventListener("dblclick", onDblClick, true);
+
+    const w = canvasRef.current && canvasRef.current.contentWindow;
+    if (w) w.addEventListener("dblclick", onDblClick, true);
+
+    return () => {
+      window.removeEventListener("dblclick", onDblClick, true);
+      if (w) w.removeEventListener("dblclick", onDblClick, true);
+    };
+  }, [isVisible, handleApply, canvasRef]);
+
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (isVisible) panelRef.current?.focus();
