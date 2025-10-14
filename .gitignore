@@ -4,6 +4,7 @@
 # Build output directories
 /*/target
 /target
+!/docs
 Cargo.lock
 
 # =============================================================================
@@ -69,4 +70,3 @@ frontend/public/renderer/*
 *.laz
 # lazy files
 build_everything.bat
-

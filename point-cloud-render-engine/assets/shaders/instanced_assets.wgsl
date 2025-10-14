@@ -95,10 +95,11 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     }
 
     // Get local position from texture (normalized -1 to 1)
-    let local_pos = pos_sample.rgb * 2.0 - 1.0;
+    // let local_pos = pos_sample.rgb * 2.0 - 1.0;
+    let original_world_pos = pos_sample.rgb;
 
     // Apply instance rotation to local position
-    let rotated_pos = quat_rotate_vec3(vertex.i_rotation, local_pos);
+    let rotated_pos = quat_rotate_vec3(vertex.i_rotation, original_world_pos);
 
     // Transform to world space
     let world_pos = vertex.i_position + rotated_pos;

@@ -2,17 +2,18 @@
 use crate::asset_processor::AssetProcessor;
 use crate::atlas::generate_programmatic_name;
 use crate::bounds::PointCloudBounds;
+use crate::bounds::calculate_bounds;
 use crate::constants::{
     COLOUR_DETECTION_SAMPLE_SIZE, COORDINATE_TRANSFORM, MAX_POINTS, ROAD_CLASSIFICATIONS,
     TEXTURE_SIZE, get_class_name,
 };
+use crate::coordinates::transform_coordinates;
 use crate::dds_writer::write_f32_texture;
 use crate::heightmap::HeightmapGenerator;
 use crate::manifest::{ClassificationInfo, ManifestGenerator, TerrainInfo, TerrainTextureFiles};
 use crate::spatial_layout::SpatialTextureGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
-use rayon::prelude::*;
 use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -89,7 +90,7 @@ impl PointCloudConverter {
 
     /// Executes complete preprocessing pipeline for terrain and assets.
     /// Generates both terrain textures and asset atlas with unified manifest.
-    pub fn convert_with_assets(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn convert(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("Starting terrain and asset library processing...");
 
         // Process main terrain point cloud.
@@ -111,34 +112,7 @@ impl PointCloudConverter {
         Ok(())
     }
 
-    /// Legacy convert method for single file processing.
-    /// Maintains compatibility with existing workflows.
-    pub fn convert(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!(
-            "Converting {} to unified texture set ({}x{})...",
-            self.main_cloud_path.display(),
-            TEXTURE_SIZE,
-            TEXTURE_SIZE
-        );
-
-        self.log_file_info(&self.main_cloud_path)?;
-
-        let has_colour = self.detect_colour_data(&self.main_cloud_path)?;
-        let bounds = self.calculate_bounds(&self.main_cloud_path)?;
-        self.print_bounds(&bounds);
-
-        let (stats, road_points, classes) =
-            self.generate_textures(&self.main_cloud_path, &bounds, has_colour)?;
-
-        // Generate heightmap and save legacy metadata.
-        self.generate_flood_fill_heightmap(&road_points)?;
-        self.save_legacy_metadata(&bounds, &stats, has_colour)?;
-
-        println!("Conversion complete!");
-        Ok(())
-    }
-
-    /// Processes the main terrain point cloud for organized output.
+    /// Processes the main terrain point cloud for organised output.
     /// Returns terrain information for manifest generation.
     fn process_main_terrain(
         &self,
@@ -151,7 +125,7 @@ impl PointCloudConverter {
         self.log_file_info(&self.main_cloud_path)?;
 
         let has_colour = self.detect_colour_data(&self.main_cloud_path)?;
-        let bounds = self.calculate_bounds(&self.main_cloud_path)?;
+        let bounds = calculate_bounds(&self.main_cloud_path)?;
         self.print_bounds(&bounds);
 
         // Generate textures and save them to disk.
@@ -280,72 +254,6 @@ impl PointCloudConverter {
         Ok(has_colour)
     }
 
-    /// Calculate coordinate bounds from all points with parallel processing.
-    /// Uses chunked parallel computation for efficient large dataset handling.
-    fn calculate_bounds(
-        &self,
-        file_path: &Path,
-    ) -> Result<PointCloudBounds, Box<dyn std::error::Error>> {
-        let mut reader = self.create_reader(file_path)?;
-        let total_points = reader.header().number_of_points() as usize;
-
-        // Load points with progress tracking.
-        let pb = ProgressBar::new(total_points as u64);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("[{bar:40.cyan/blue}] {pos}/{len} points ({percent}%) {msg}")
-                .unwrap()
-                .progress_chars("▉▊▋▌▍▎▏ "),
-        );
-        pb.set_message("Loading points");
-
-        let mut all_points = Vec::with_capacity(total_points);
-        for (idx, point_result) in reader.points().enumerate() {
-            all_points.push(point_result?);
-
-            if idx % 50_000 == 0 {
-                pb.set_position(idx as u64);
-            }
-        }
-        pb.finish_with_message("Points loaded");
-
-        // Process bounds calculation in parallel chunks for efficiency.
-        let pb = ProgressBar::new(all_points.len() as u64);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("[{bar:40.green/blue}] {pos}/{len} chunks ({percent}%) {msg}")
-                .unwrap()
-                .progress_chars("▉▊▋▌▍▎▏ "),
-        );
-        pb.set_message("Calculating bounds");
-
-        let bounds = all_points
-            .par_chunks(25_000)
-            .map(|chunk| {
-                let mut local_bounds = PointCloudBounds::new();
-                for point in chunk {
-                    let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
-                    local_bounds.update(x, y, z);
-                }
-
-                pb.inc(chunk.len() as u64);
-                local_bounds
-            })
-            .reduce_with(|mut a, b| {
-                a.min_x = a.min_x.min(b.min_x);
-                a.max_x = a.max_x.max(b.max_x);
-                a.min_y = a.min_y.min(b.min_y);
-                a.max_y = a.max_y.max(b.max_y);
-                a.min_z = a.min_z.min(b.min_z);
-                a.max_z = a.max_z.max(b.max_z);
-                a
-            })
-            .unwrap_or_else(PointCloudBounds::new);
-
-        pb.finish_with_message("Bounds calculated");
-        Ok(bounds)
-    }
-
     /// Generate spatial textures using Z-order layout and sampling.
     /// Returns processing statistics and road points for heightmap generation.
     fn generate_textures(
@@ -405,7 +313,7 @@ impl PointCloudConverter {
             }
 
             let point = point_result?;
-            let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
+            let (x, y, z) = transform_coordinates(point.x, point.y, point.z);
             let classification = u8::from(point.classification);
             let color = point.color.map(|c| (c.red, c.green, c.blue));
 
@@ -486,21 +394,6 @@ impl PointCloudConverter {
         std::env::set_current_dir(original_dir)?;
 
         result
-    }
-
-    /// Apply coordinate transformation matrix to ensure consistency.
-    /// Transforms input coordinates using predefined transformation matrix.
-    fn transform_coordinates(&self, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
-        let input = [x, y, z];
-        let mut output = [0.0; 3];
-
-        for i in 0..3 {
-            for j in 0..3 {
-                output[i] += COORDINATE_TRANSFORM[i][j] * input[j];
-            }
-        }
-
-        (output[0], output[1], output[2])
     }
 
     /// Save position, color+classification, and spatial index textures.

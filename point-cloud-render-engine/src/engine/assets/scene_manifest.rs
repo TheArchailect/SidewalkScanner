@@ -48,8 +48,8 @@ pub struct SceneManifest {
     /// Optional asset atlas configuration and metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_atlas: Option<AssetAtlasData>,
-    /// Global scene bounds encompassing terrain and all assets.
-    pub scene_bounds: BoundsData,
+    // /// Global scene bounds encompassing terrain and all assets.
+    // pub scene_bounds: BoundsData,
     /// Describes the class types and object id's found in the specific dataset
     pub classes: ClassificationInfo,
 }

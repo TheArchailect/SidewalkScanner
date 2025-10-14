@@ -4,7 +4,9 @@ use crate::atlas::{
     AtlasTextureGenerator, discover_asset_files,
 };
 use crate::bounds::PointCloudBounds;
+use crate::bounds::calculate_bounds;
 use crate::constants::{COORDINATE_TRANSFORM, TEXTURE_SIZE};
+use crate::coordinates::transform_coordinates;
 use crate::dds_writer::write_f32_texture;
 use crate::spatial_layout::SpatialPoint;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -13,7 +15,6 @@ use serde_json::json;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::Path;
-
 /// Asset library processor for generating texture atlases.
 /// Handles discovery, validation, and atlas generation for GPU rendering.
 pub struct AssetProcessor {
@@ -40,18 +41,13 @@ impl AssetProcessor {
         asset_dir: &Path,
     ) -> Result<AssetAtlasInfo, Box<dyn std::error::Error>> {
         println!("Processing asset library: {}", asset_dir.display());
-
-        // Discover and validate asset files.
         let candidates = discover_asset_files(asset_dir)?;
         println!("Found {} asset candidates", candidates.len());
-
         if candidates.is_empty() {
             return Err("No valid asset files found in library directory".into());
         }
 
         let mut atlas_gen = AtlasTextureGenerator::new();
-
-        // Process each asset with progress tracking.
         let pb = ProgressBar::new(candidates.len() as u64);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -60,17 +56,15 @@ impl AssetProcessor {
                 .progress_chars("█▉▊▋▌▍▎▏"),
         );
         pb.set_message("Processing assets");
-
         for (idx, candidate) in candidates.iter().enumerate() {
             println!(
                 "Processing #{}: {} -> will assign to tile",
                 idx, candidate.name
             );
-            let (asset_points, local_bounds) = self.load_asset_points(&candidate)?;
-            atlas_gen.add_asset(&asset_points, candidate.name.clone(), local_bounds)?;
+            let (asset_points, asset_bound) = self.load_asset_points(&candidate)?;
+            atlas_gen.add_asset(&asset_points, candidate.name.clone(), asset_bound)?;
             pb.inc(1);
         }
-
         pb.finish_with_message("Assets processed");
 
         // Generate and save atlas textures.
@@ -133,32 +127,32 @@ impl AssetProcessor {
 
         println!("Saved asset atlas textures");
 
-        // Save atlas metadata for debugging and validation.
-        self.save_atlas_metadata(&asset_dir_path, atlas_gen)?;
+        // // Save atlas metadata for debugging and validation.
+        // self.save_atlas_metadata(&asset_dir_path, atlas_gen)?;
 
         Ok(())
     }
 
-    /// Saves atlas metadata including configuration and asset details.
-    /// Provides debugging information and validation data.
-    fn save_atlas_metadata(
-        &self,
-        asset_dir: &Path,
-        atlas_gen: &AtlasTextureGenerator,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let metadata = json!({
-            "atlas_config": atlas_gen.get_config(),
-            "assets": atlas_gen.get_asset_metadata(),
-            "texture_format": "RGBA32F",
-            "coordinate_transform": COORDINATE_TRANSFORM
-        });
+    // /// Saves atlas metadata including configuration and asset details.
+    // /// Provides debugging information and validation data.
+    // fn save_atlas_metadata(
+    //     &self,
+    //     asset_dir: &Path,
+    //     atlas_gen: &AtlasTextureGenerator,
+    // ) -> Result<(), Box<dyn std::error::Error>> {
+    //     let metadata = json!({
+    //         "atlas_config": atlas_gen.get_config(),
+    //         "assets": atlas_gen.get_asset_metadata(),
+    //         "texture_format": "RGBA32F",
+    //         "coordinate_transform": COORDINATE_TRANSFORM
+    //     });
 
-        let metadata_path = asset_dir.join("atlas_metadata.json");
-        fs::write(&metadata_path, metadata.to_string())?;
-        println!("Saved atlas metadata: {}", metadata_path.display());
+    //     let metadata_path = asset_dir.join("atlas_metadata.json");
+    //     fs::write(&metadata_path, metadata.to_string())?;
+    //     println!("Saved atlas metadata: {}", metadata_path.display());
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     /// Loads and processes points from an asset file with (match size) based on full local bound
     /// Returns worldspace points and local bounds for atlas integration.
@@ -167,38 +161,35 @@ impl AssetProcessor {
         candidate: &AssetCandidate,
     ) -> Result<(Vec<SpatialPoint>, PointCloudBounds), Box<dyn std::error::Error>> {
         let file = File::open(&candidate.path)?;
+
         let buf_reader = BufReader::new(file);
         let mut reader = Reader::new(buf_reader)?;
 
         // --- First pass: collect raw coordinates & compute bounds ---
         let mut raw_points = Vec::new();
-        let mut local_bounds = PointCloudBounds::new();
+        let asset_bound = calculate_bounds(&candidate.path).unwrap();
+
+        // let mut local_bounds = PointCloudBounds::new();
 
         for point_result in reader.points() {
             let point = point_result?;
-            let (x, y, z) = self.transform_coordinates(point.x, point.y, point.z);
-            local_bounds.update(x, y, z);
+            let (x, y, z) = transform_coordinates(point.x, point.y, point.z);
+            // local_bounds.update(x, y, z);
             raw_points.push((point, (x, y, z)));
         }
 
-        // --- Compute alignment offset (match size logic) ---
-        let center_x = (local_bounds.min_x + local_bounds.max_x) * 0.5;
-        let center_z = (local_bounds.min_z + local_bounds.max_z) * 0.5;
-        let offset = (-center_x, -local_bounds.min_y, -center_z);
-
-        println!(
-            "Applying match size offset: x = {}, y = {}, z = {}",
-            offset.0, offset.1, offset.2
-        );
+        // Center all axes including Y (not ground-aligned)
+        let center_x = (asset_bound.min_x + asset_bound.max_x) * 0.5;
+        let center_y = (asset_bound.min_y + asset_bound.max_y) * 0.5; // Center Y, not min
+        let center_z = (asset_bound.min_z + asset_bound.max_z) * 0.5;
 
         // --- Second pass: build spatial points using adjusted positions ---
         let mut asset_points = Vec::with_capacity(raw_points.len());
 
         for (point, (x, y, z)) in raw_points {
-            let translated_x = x + offset.0;
-            let translated_y = y + offset.1;
-            let translated_z = z + offset.2;
-
+            let centered_x = x - center_x;
+            let centered_y = y - center_y; // Shifts min_y to 0
+            let centered_z = z - center_z;
             let classification = u8::from(point.classification);
             let color = point.color.map(|c| (c.red, c.green, c.blue));
 
@@ -214,11 +205,11 @@ impl AssetProcessor {
             };
 
             asset_points.push(SpatialPoint {
-                world_pos: (translated_x, translated_y, translated_z),
+                world_pos: (centered_x, centered_y, centered_z),
                 norm_pos: (
-                    local_bounds.normalize_x(x),
-                    local_bounds.normalize_y(y),
-                    local_bounds.normalize_z(z),
+                    asset_bound.normalize_x(x),
+                    asset_bound.normalize_y(y),
+                    asset_bound.normalize_z(z),
                 ),
                 morton_index: 0,
                 spatial_cell_id: 0,
@@ -234,21 +225,6 @@ impl AssetProcessor {
             candidate.name
         );
 
-        Ok((asset_points, local_bounds))
-    }
-
-    /// Apply coordinate transformation matrix to point coordinates.
-    /// Ensures consistency with main terrain coordinate system.
-    fn transform_coordinates(&self, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
-        let input = [x, y, z];
-        let mut output = [0.0; 3];
-
-        for i in 0..3 {
-            for j in 0..3 {
-                output[i] += COORDINATE_TRANSFORM[i][j] * input[j];
-            }
-        }
-
-        (output[0], output[1], output[2])
+        Ok((asset_points, asset_bound))
     }
 }

@@ -3,8 +3,10 @@ mod atlas;
 mod bounds;
 mod constants;
 mod converter;
+mod coordinates;
 mod dds_writer;
 mod heightmap;
+mod laz;
 mod manifest;
 mod spatial_layout;
 use converter::PointCloudConverter;
@@ -47,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut converter =
                 PointCloudConverter::with_asset_library(main_cloud, asset_library_dir, output_dir)?;
-            converter.convert_with_assets()?;
+            converter.convert()?;
         }
         _ => {
             eprintln!("Usage:");

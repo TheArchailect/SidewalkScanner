@@ -177,7 +177,11 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     if (!isVisible) return;
 
     const onDblClick = () => {
-      if (operation === "reclassify" && targetClassId < 0 && sourceClasses.length > 0) {
+      if (
+        operation === "reclassify" &&
+        targetClassId < 0 &&
+        sourceClasses.length > 0
+      ) {
         setTargetClassId(sourceClasses[0].classId);
         setTimeout(() => {
           handleApply();
@@ -554,64 +558,19 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         )}
       </div>
 
-      {/* Footer Actions */}
+      {/* Footer */}
       <div
         style={{
-          padding: `${theme.spacing[4]} ${theme.spacing[5]}`,
-          borderTop: `1px solid ${theme.colors.border.default}`,
-          display: "flex",
-          gap: theme.spacing[3],
+          ...styleUtils.text.caption(),
+          textAlign: "center",
+          lineHeight: "1.4",
+          background: theme.colors.background.card,
+          padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+          borderRadius: theme.radius.base,
+          border: `1px solid ${theme.colors.border.light}`,
         }}
       >
-        {/*<button
-          onClick={handleCancel}
-          style={{
-            ...styleUtils.buttonGhost(),
-            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
-            fontSize: theme.fontSizes.sm,
-            fontWeight: theme.fontWeights.semibold,
-            flex: "1",
-          }}
-        >
-          Cancel
-        </button>*/}
-        <button
-          onClick={handleApply}
-          disabled={operation === "reclassify" && !targetClassId}
-          style={{
-            ...styleUtils.buttonBase(),
-            background:
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.background.card
-                : theme.colors.background.overlay,
-            border: `1px solid ${
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.border.light
-                : theme.colors.border.orangeStrong
-            }`,
-            color:
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.gray[600]
-                : theme.colors.primary.orangeLight,
-            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
-            fontSize: theme.fontSizes.sm,
-            fontWeight: theme.fontWeights.semibold,
-            cursor:
-              operation === "reclassify" && !targetClassId
-                ? "not-allowed"
-                : "pointer",
-            transition: theme.transitions.fast,
-            flex: "2",
-          }}
-        >
-          {operation === "hide"
-            ? hasAnySelection
-              ? "Hide Selected"
-              : "Hide All"
-            : hasAnySelection
-              ? "Reclassify Selected"
-              : "Reclassify All"}
-        </button>
+        Double click with left mouse button to complete the operation.
       </div>
     </div>
   );

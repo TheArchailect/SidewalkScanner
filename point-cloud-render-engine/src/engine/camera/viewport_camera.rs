@@ -216,7 +216,7 @@ pub fn camera_controller(
     cap: Res<ScrollCapture>,
 ) {
     if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
-        // Update cursor position if we're not rotating some asset
+        // Update cursor zoom if we're not rotating some asset
         if !cap.lock_zoom_this_frame {
             for cursor in cursor_moved.read() {
                 viewport_camera.last_mouse_pos = cursor.position;
