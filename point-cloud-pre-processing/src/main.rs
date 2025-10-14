@@ -12,9 +12,6 @@ mod atlas;
 /// Point cloud coordinate bounds calculation and normalisation.
 mod bounds;
 
-/// Shared configuration constants for texture resolution and processing parameters.
-use constants;
-
 /// Main point cloud converter orchestrating terrain and asset processing pipelines.
 mod converter;
 

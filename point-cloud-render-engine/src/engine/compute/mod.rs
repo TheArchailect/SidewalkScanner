@@ -1,36 +1,70 @@
-/// Phase 1 Compute Pipeline: Procedural Texture Reclassification
+//! GPU compute pipeline modules for point cloud processing.
+//!
+//! Implements procedural texture modification and depth computation for the rendering pipeline.
+//! All compute operations are non-destructive, writing results to separate output textures.
+//!
+//! ## Pipeline Architecture
+//!
+//! ### Phase 1: Classification Compute (`compute_classification`)
+//! Procedurally modifies point classifications using user-defined polygon masks and spatial filtering.
+//!
+//! **Input textures:**
+//! - `colour_class_texture`: RGB + classification (alpha channel)
+//! - `position_texture`: Normalised XYZ + connectivity class ID
+//! - `spatial_index_texture`: Morton codes for spatial acceleration
+//!
+//! **Output:**
+//! - `result_texture`: Reclassified points with updated classification values
+//!
+//! **Features:**
+//! - Polygon-based point selection with spatial AABB/Morton filtering
+//! - Hide/reclassify operations with mask-based ignore rules
+//! - Hover/selection highlighting for user feedback
+//! - Hidden points marked with classification `254`
+//!
+//! ### Phase 2: Depth Compute (`edl_compute_depth`)
+//! Calculates depth values from classified points for eye-dome lighting (EDL) shading.
+//!
+//! **Input textures:**
+//! - `position_texture`: Point positions in world space
+//! - `result_texture`: Classified RGB + depth
+//!
+//! **Output:**
+//! - `depth_texture`: R32F depth buffer for EDL processing
+//!
+//! ## WGSL Shader Bindings
+//!
+//! Classification compute shader expects:
+//! ```wgsl
+//! @group(0) @binding(0) var colour_texture: texture_2d<f32>;      // Input: RGB + class
+//! @group(0) @binding(1) var position_texture: texture_2d<f32>;    // Input: XYZ + ID
+//! @group(0) @binding(2) var spatial_index_texture: texture_2d<f32>; // Input: Morton codes
+//! @group(0) @binding(3) var result_texture: texture_storage_2d<rgba32float, write>; // Output
+//! @group(0) @binding(4) var<uniform> polygon_data: PolygonUniform; // Polygon definitions
+//! @group(0) @binding(5) var<uniform> terrain_bounds: TerrainBounds; // World bounds
+//! ```
+//!
+//! Depth compute shader expects:
+//! ```wgsl
+//! @group(0) @binding(0) var position_texture: texture_2d<f32>;    // Input: world positions
+//! @group(0) @binding(1) var colour_texture: texture_2d<f32>;      // Input: classified RGB
+//! @group(0) @binding(2) var depth_output: texture_storage_2d<r32float, write>; // Output
+//! @group(0) @binding(3) var<uniform> camera_data: CameraUniforms;  // View/projection
+//! ```
+//!
+//! ## Performance Considerations
+//!
+//! - Spatial filtering significantly reduces cost on large point clouds
+//! - Morton filtering provides granular culling but higher compute overhead
+//! - AABB mode offers faster broad-phase rejection for simple polygons
+//! - Compute shaders only execute when state changes (trigger systems)
+
+/// Procedural point classification using polygon masks and spatial filtering.
 ///
-/// This compute pass is the first stage of the rendering pipeline. It procedurally modifies
-/// encoded textures (e.g., classification and RGB data) using user-defined polygon masks and
-/// spatial filtering, producing a new classification texture used downstream.
-///
-/// ### Inputs:
-/// - `original_texture`: Source RGB + classification (stored in alpha)
-/// - `position_texture`: Normalized world positions (xyz) + connectivity class ID (a)
-/// - `spatial_index_texture`: Precomputed Morton codes for optional spatial acceleration
-/// - `compute_data` (uniform): Contains polygon definitions, mask entries, selection info, etc.
-/// - `bounds` (uniform): World-space bounding box used for position denormalization
-///
-/// ### Outputs:
-/// - `output_texture`: A reclassified texture with updated classification values per point
-///
-/// ### Behavior:
-/// - Applies reclassification or hide operations to points inside polygons, using a modifier-stack-like logic
-/// - Supports optional spatial filtering via Morton codes or AABBs to accelerate large polygon tests
-/// - Ensures hidden points (class `254`) are not reprocessed by later polygons
-/// - Honors per-polygon masking rules through encoded ignore-mask IDs
-///
-/// ### Special Modes:
-/// - `render_mode` controls the output format: raw RGB, reclassified view, morton debug, spatial debug, etc.
-/// - Hover/selection highlights can override classification color during user interaction for UX feedback
-///
-/// ### Notes:
-/// - This compute pass is *non-destructive*: classification overrides are written to a separate output texture.
-/// - Hidden points are indicated via classification value `254`, which downstream passes interpret as "discard".
-/// - Must be executed before any shading or rendering passes that rely on classification data.
-///
-/// ### Performance:
-/// - Spatial filtering significantly reduces cost on large point clouds
-/// - Morton filtering is more granular but computationally heavier than AABB mode
+/// Non-destructive reclassification with hide/show operations and user feedback highlighting.
 pub mod compute_classification;
+
+/// Depth buffer computation for eye-dome lighting (EDL) shader effects.
+///
+/// Generates camera-space depth from world positions for post-processing shading.
 pub mod edl_compute_depth;
