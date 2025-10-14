@@ -1,5 +1,5 @@
 /// Scene manifest generation for unified terrain and asset integration.
-use crate::atlas::{AssetAtlasInfo, AssetMetadata, AtlasConfig, AtlasTextureFiles};
+use crate::atlas::AssetAtlasInfo;
 use crate::bounds::PointCloudBounds;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -124,30 +124,6 @@ impl ManifestGenerator {
         Ok(())
     }
 
-    // /// Calculates global scene bounds encompassing terrain and all assets.
-    // /// Provides unified coordinate space for renderer camera setup.
-    // fn calculate_global_bounds(
-    //     &self,
-    //     terrain_info: &TerrainInfo,
-    //     asset_atlas_info: &Option<AssetAtlasInfo>,
-    // ) -> PointCloudBounds {
-    //     let mut global_bounds = terrain_info.bounds.clone();
-
-    //     // Expand bounds to include all asset local bounds if atlas exists.
-    //     if let Some(atlas_info) = asset_atlas_info {
-    //         for asset in &atlas_info.assets {
-    //             global_bounds.min_x = global_bounds.min_x.min(asset.local_bounds.min_x);
-    //             global_bounds.max_x = global_bounds.max_x.max(asset.local_bounds.max_x);
-    //             global_bounds.min_y = global_bounds.min_y.min(asset.local_bounds.min_y);
-    //             global_bounds.max_y = global_bounds.max_y.max(asset.local_bounds.max_y);
-    //             global_bounds.min_z = global_bounds.min_z.min(asset.local_bounds.min_z);
-    //             global_bounds.max_z = global_bounds.max_z.max(asset.local_bounds.max_z);
-    //         }
-    //     }
-
-    //     global_bounds
-    // }
-
     /// Prints manifest summary for verification and debugging.
     /// Displays key statistics about processed terrain and assets.
     fn print_manifest_summary(&self, manifest: &SceneManifest) {
@@ -175,11 +151,5 @@ impl ManifestGenerator {
         } else {
             println!("  No asset atlas generated");
         }
-
-        // let (scene_width, scene_depth, scene_height) = manifest.scene_bounds.dimensions();
-        // println!(
-        //     "  Scene dimensions: {:.2} x {:.2} x {:.2}",
-        //     scene_width, scene_depth, scene_height
-        // );
     }
 }

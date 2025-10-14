@@ -1,6 +1,3 @@
-use crate::constants::procedural_shader::{
-    MAX_IGNORE_MASK_LENGTH, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
-};
 use crate::engine::assets::bounds::BoundsData;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
@@ -8,6 +5,9 @@ use crate::engine::systems::render_mode::RenderMode;
 use crate::engine::systems::render_mode::{MouseEnterObjectState, RenderModeState};
 use crate::tools::class_selection::ClassSelectionState;
 use crate::tools::polygon::{ClassificationPolygon, PolygonClassificationData};
+use constants::procedural_shader::{
+    MAX_IGNORE_MASK_LENGTH, MAXIMUM_POLYGON_POINTS, MAXIMUM_POLYGONS,
+};
 
 use bevy::prelude::*;
 use bevy::render::extract_resource::{ExtractResource, ExtractResourcePlugin};

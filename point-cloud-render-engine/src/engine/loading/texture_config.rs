@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-use crate::constants::texture::TEXTURE_SIZE;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::loading::progress::LoadingProgress;
+use constants::texture::TEXTURE_SIZE;
 
 // Configure texture sampling and create compute-ready textures
 pub fn configure_loaded_textures(

@@ -1,7 +1,3 @@
-use crate::constants::procedural_shader::MAXIMUM_POLYGONS;
-use crate::constants::render_settings::{
-    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
-};
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -15,6 +11,10 @@ use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
+use constants::procedural_shader::MAXIMUM_POLYGONS;
+use constants::render_settings::{
+    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
+};
 use serde::{Deserialize, Serialize};
 
 /// Polygon operations events

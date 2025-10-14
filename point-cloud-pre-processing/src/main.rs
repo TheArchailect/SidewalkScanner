@@ -1,14 +1,38 @@
+//! Point cloud preprocessing pipeline for terrain and asset library processing.
+//!
+//! Converts LAS/LAZ point clouds into GPU-optimised texture atlases with spatial
+//! organisation, heightmap generation, and unified manifest output.
+
+/// Asset library processing workflow and atlas generation orchestration.
 mod asset_processor;
+
+/// Asset atlas data structures, texture generation, and tile management.
 mod atlas;
+
+/// Point cloud coordinate bounds calculation and normalisation.
 mod bounds;
-mod constants;
+
+/// Shared configuration constants for texture resolution and processing parameters.
+use constants;
+
+/// Main point cloud converter orchestrating terrain and asset processing pipelines.
 mod converter;
-mod coordinates;
+
+/// DDS texture file writer with unified 32-bit float formats.
 mod dds_writer;
+
+/// Fast parallel heightmap generation with flood-fill and Gaussian smoothing.
 mod heightmap;
+
+/// LAS/LAZ file reader creation for point cloud access.
 mod laz;
+
+/// Scene manifest generation linking terrain and asset atlas data.
 mod manifest;
+
+/// Z-order spatial layout and texture generation for point cloud data.
 mod spatial_layout;
+
 use converter::PointCloudConverter;
 use std::env;
 

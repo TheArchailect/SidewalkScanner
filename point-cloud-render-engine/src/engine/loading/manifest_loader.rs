@@ -1,10 +1,10 @@
-use crate::constants::path::RELATIVE_MANIFEST_PATH;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
 use crate::engine::loading::progress::LoadingProgress;
 use crate::load_unified_textures;
 use bevy::prelude::*;
+use constants::path::RELATIVE_MANIFEST_PATH;
 
 #[derive(Resource, Default)]
 pub struct ManifestLoader {

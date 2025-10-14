@@ -7,8 +7,8 @@ edition = "2024"
 bevy = { version = "0.16", features = [
   "bevy_ui",
   "bevy_text",
-  "bevy_winit", 
-  "bevy_pbr",    
+  "bevy_winit",
+  "bevy_pbr",
   "webgpu",
   "exr",
   "dds",
@@ -23,6 +23,7 @@ indicatif = "0.18.0"
 web-sys = { version = "0.3.78", features = ["Window", "MessageEvent", "console"] }
 wasm-bindgen = "0.2.101"
 js-sys = "0.3.78"
+constants = { workspace = true }
 
 [build-dependencies]
 serde_json = "1.0"

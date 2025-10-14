@@ -1,6 +1,6 @@
 /// Simple Z-Order spatial layout for point cloud textures
 use crate::bounds::PointCloudBounds;
-use crate::constants::TEXTURE_SIZE;
+use constants::texture::TEXTURE_SIZE;
 
 /// Point with spatial metadata for texture generation
 #[derive(Debug, Clone)]

@@ -1,17 +1,15 @@
 /// Asset library processing module for atlas generation.
 use crate::atlas::{
-    AssetAtlasInfo, AssetCandidate, AssetMetadata, AtlasConfig, AtlasTextureFiles,
-    AtlasTextureGenerator, discover_asset_files,
+    AssetAtlasInfo, AssetCandidate, AtlasTextureFiles, AtlasTextureGenerator, discover_asset_files,
 };
 use crate::bounds::PointCloudBounds;
 use crate::bounds::calculate_bounds;
-use crate::constants::{COORDINATE_TRANSFORM, TEXTURE_SIZE};
-use crate::coordinates::transform_coordinates;
 use crate::dds_writer::write_f32_texture;
 use crate::spatial_layout::SpatialPoint;
+use constants::coordinate_system::transform_coordinates;
+use constants::texture::TEXTURE_SIZE;
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
-use serde_json::json;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::Path;
@@ -126,33 +124,8 @@ impl AssetProcessor {
         )?;
 
         println!("Saved asset atlas textures");
-
-        // // Save atlas metadata for debugging and validation.
-        // self.save_atlas_metadata(&asset_dir_path, atlas_gen)?;
-
         Ok(())
     }
-
-    // /// Saves atlas metadata including configuration and asset details.
-    // /// Provides debugging information and validation data.
-    // fn save_atlas_metadata(
-    //     &self,
-    //     asset_dir: &Path,
-    //     atlas_gen: &AtlasTextureGenerator,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     let metadata = json!({
-    //         "atlas_config": atlas_gen.get_config(),
-    //         "assets": atlas_gen.get_asset_metadata(),
-    //         "texture_format": "RGBA32F",
-    //         "coordinate_transform": COORDINATE_TRANSFORM
-    //     });
-
-    //     let metadata_path = asset_dir.join("atlas_metadata.json");
-    //     fs::write(&metadata_path, metadata.to_string())?;
-    //     println!("Saved atlas metadata: {}", metadata_path.display());
-
-    //     Ok(())
-    // }
 
     /// Loads and processes points from an asset file with (match size) based on full local bound
     /// Returns worldspace points and local bounds for atlas integration.
@@ -169,12 +142,9 @@ impl AssetProcessor {
         let mut raw_points = Vec::new();
         let asset_bound = calculate_bounds(&candidate.path).unwrap();
 
-        // let mut local_bounds = PointCloudBounds::new();
-
         for point_result in reader.points() {
             let point = point_result?;
             let (x, y, z) = transform_coordinates(point.x, point.y, point.z);
-            // local_bounds.update(x, y, z);
             raw_points.push((point, (x, y, z)));
         }
 

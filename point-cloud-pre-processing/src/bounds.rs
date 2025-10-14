@@ -1,5 +1,5 @@
-use crate::coordinates::transform_coordinates;
 use crate::laz::create_reader;
+use constants::coordinate_system::transform_coordinates;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::{ParallelIterator, ParallelSlice};
 use serde::{Deserialize, Serialize};
@@ -37,15 +37,6 @@ impl PointCloudBounds {
         self.max_y = self.max_y.max(y);
         self.min_z = self.min_z.min(z);
         self.max_z = self.max_z.max(z);
-    }
-
-    /// Get world space dimensions - ADD THIS
-    pub fn dimensions(&self) -> (f64, f64, f64) {
-        (
-            self.max_x - self.min_x,
-            self.max_y - self.min_y,
-            self.max_z - self.min_z,
-        )
     }
 
     /// Normalise X coordinate to 0-1 range

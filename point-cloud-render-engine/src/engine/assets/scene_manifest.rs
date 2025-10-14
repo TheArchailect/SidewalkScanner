@@ -1,4 +1,3 @@
-use crate::constants::texture::TEXTURE_SIZE;
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::asset_definitions::AtlasConfig;
 use crate::engine::assets::bounds::BoundsData;
@@ -6,6 +5,7 @@ use crate::engine::assets::bounds::PointCloudBounds;
 use crate::engine::assets::texture_files::{AssetTextureFiles, TerrainTextureFiles};
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
+use constants::texture::TEXTURE_SIZE;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

@@ -1,16 +1,14 @@
 use bevy::prelude::*;
-
-mod constants;
 mod engine;
 mod rpc;
 mod tools;
 
-use crate::constants::path::{
-    ASSET_PATH, RELATIVE_MANIFEST_PATH, TERRAIN_PATH, TEXTURE_RESOLUTION_FILE_PATH,
-};
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::core::app_setup::create_app;
 use crate::engine::systems::render_mode::RenderModeState;
+use constants::path::{
+    ASSET_PATH, RELATIVE_MANIFEST_PATH, TERRAIN_PATH, TEXTURE_RESOLUTION_FILE_PATH,
+};
 
 fn main() {
     let mut app = create_app();

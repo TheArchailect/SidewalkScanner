@@ -1,4 +1,10 @@
-use crate::constants::COORDINATE_TRANSFORM;
+/// Coordinate transformation matrix (row-major: [x_new, y_new, z_new])
+/// Default: -90° X rotation (Z→Y, -Y→Z, X→X)
+pub const COORDINATE_TRANSFORM: [[f64; 3]; 3] = [
+    [1.0, 0.0, 0.0],  // X = X
+    [0.0, 0.0, 1.0],  // Y = Z
+    [0.0, -1.0, 0.0], // Z = -Y
+];
 
 /// Apply coordinate transformation matrix to ensure consistency.
 /// Transforms input coordinates using predefined transformation matrix.

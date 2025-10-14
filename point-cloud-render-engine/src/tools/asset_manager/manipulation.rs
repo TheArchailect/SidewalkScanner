@@ -1,7 +1,6 @@
 use super::interactions::ScrollCapture;
 use super::ray::ray_hits_obb;
 use super::state::*;
-use crate::constants::render_settings::MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE;
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
@@ -13,6 +12,7 @@ use bevy::render::alpha::AlphaMode;
 use bevy::render::mesh::Mesh;
 use bevy::render::view::{NoFrustumCulling, RenderLayers};
 use bevy::window::PrimaryWindow;
+use constants::render_settings::MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE;
 
 #[derive(Component)]
 pub struct AssetPreview;

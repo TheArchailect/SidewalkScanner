@@ -3,18 +3,15 @@ use crate::asset_processor::AssetProcessor;
 use crate::atlas::generate_programmatic_name;
 use crate::bounds::PointCloudBounds;
 use crate::bounds::calculate_bounds;
-use crate::constants::{
-    COLOUR_DETECTION_SAMPLE_SIZE, COORDINATE_TRANSFORM, MAX_POINTS, ROAD_CLASSIFICATIONS,
-    TEXTURE_SIZE, get_class_name,
-};
-use crate::coordinates::transform_coordinates;
 use crate::dds_writer::write_f32_texture;
 use crate::heightmap::HeightmapGenerator;
 use crate::manifest::{ClassificationInfo, ManifestGenerator, TerrainInfo, TerrainTextureFiles};
 use crate::spatial_layout::SpatialTextureGenerator;
+use constants::class::{ROAD_CLASSIFICATIONS, get_class_name};
+use constants::coordinate_system::transform_coordinates;
+use constants::texture::{COLOUR_DETECTION_SAMPLE_SIZE, MAX_POINTS, TEXTURE_SIZE};
 use indicatif::{ProgressBar, ProgressStyle};
 use las::Reader;
-use serde_json;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::BufReader;
@@ -439,47 +436,6 @@ impl PointCloudConverter {
         println!("Saved {} (Position RGBA32F)", pos_path.display());
         println!("Saved {} (Colour+Class RGBA32F)", colour_path.display());
         println!("Saved {} (Spatial Index RGBA32F)", spatial_path.display());
-
-        Ok(())
-    }
-
-    /// Save processing metadata as JSON for legacy single-file workflow.
-    /// Maintains backward compatibility with existing metadata format.
-    fn save_legacy_metadata(
-        &self,
-        bounds: &PointCloudBounds,
-        stats: &ProcessingStats,
-        has_colour: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let metadata = serde_json::json!({
-            "texture_size": TEXTURE_SIZE,
-            "total_points": stats.loaded_points, // Note: this was inconsistent in original
-            "loaded_points": stats.loaded_points,
-            "utilisation_percent": (stats.loaded_points as f32 / MAX_POINTS as f32) * 100.0,
-            "sampling_ratio": if stats.loaded_points > 0 {
-                stats.loaded_points as f64 / MAX_POINTS as f64
-            } else { 0.0 },
-            "has_colour": has_colour,
-            "colour_points": stats.colour_points,
-            "bounds": {
-                "min_x": bounds.min_x, "max_x": bounds.max_x,
-                "min_y": bounds.min_y, "max_y": bounds.max_y,
-                "min_z": bounds.min_z, "max_z": bounds.max_z
-            },
-            "textures": {
-                "position": "RGBA32F - XYZ coordinates + object number",
-                "colour_class": "RGBA32F - RGB colour + classification",
-                "spatial_index": "RGBA32F - Morton codes + spatial data",
-                "heightmap": format!("R32F - road surface elevation {}x{}", TEXTURE_SIZE, TEXTURE_SIZE)
-            }
-        });
-
-        let metadata_path = format!(
-            "{}_metadata_{}x{}.json",
-            self.output_name, TEXTURE_SIZE, TEXTURE_SIZE
-        );
-        std::fs::write(&metadata_path, metadata.to_string())?;
-        println!("Saved {}", metadata_path);
 
         Ok(())
     }

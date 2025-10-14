@@ -1,6 +1,6 @@
-use crate::constants::texture::TEXTURE_SIZE;
 /// Heightmap sampling utilities for terrain intersection
 use crate::engine::assets::bounds::PointCloudBounds;
+use constants::texture::TEXTURE_SIZE;
 
 use bevy::prelude::*;
 
