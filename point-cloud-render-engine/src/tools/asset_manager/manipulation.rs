@@ -25,7 +25,6 @@ pub fn handle_asset_click(
     cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
     viewport_camera: Option<ResMut<ViewportCamera>>,
     q_bounds: Query<(Entity, &GlobalTransform, &BoundsSize, Option<&Selected>), With<PlacedBounds>>,
-    q_selected: Query<Entity, (With<Selected>, With<PlacedBounds>)>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
@@ -41,6 +40,8 @@ pub fn handle_asset_click(
         commands.entity(entity).despawn();
     }
 
+    // TODO: (archailect): this is wastefull to run every frame, it should be run only when actually need ie; the state was changed sufficiently.
+    // likely all our tools need a Trait that will implement some bind and unbind functionality cleanup and config
     if !place.active {
         for (preview_entity, _, _, _) in q_bounds.iter() {
             commands.entity(preview_entity).insert(Visibility::Hidden);
@@ -53,9 +54,7 @@ pub fn handle_asset_click(
         }
     }
 
-    if !buttons.just_pressed(MouseButton::Left) {
-        return;
-    }
+    let clicked = buttons.just_pressed(MouseButton::Left);
 
     let Ok(window) = windows.single() else { return };
     let Some(cursor_pos) = window.cursor_position() else {
@@ -65,134 +64,144 @@ pub fn handle_asset_click(
         return;
     };
 
-    // Check if we clicked on an existing asset first
-    if let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) {
-        let origin = ray.origin;
-        let dir = ray.direction.as_vec3();
-
-        let mut best_hit: Option<(Entity, f32, bool)> = None;
-        for (e, xf, BoundsSize(size), selected) in &q_bounds {
-            if let Some(t) = ray_hits_obb(origin, dir, *xf, *size) {
-                if t > 0.0 && (best_hit.is_none() || t < best_hit.unwrap().1) {
-                    best_hit = Some((e, t, selected.is_some()));
-                }
-            }
-        }
-
-        // If we hit an asset, handle selection
-        if let Some((hit_e, _, was_selected)) = best_hit {
-            deselect_all(
-                q_bounds.iter().map(|(e, _gt, _bs, sel)| (e, sel)),
-                &mut commands,
-            );
-
-            // Toggle selection: if it was already selected, deselect it; otherwise select it
-            if !was_selected {
-                select_asset(&mut commands, hit_e);
-            }
+    // PLACEMENT MODE: selected_asset_name is Some
+    if let Some(ref asset_name) = place.selected_asset_name {
+        // Validate prerequisites for placement
+        let Some(scene_bounds) = assets.get_bounds(&manifests) else {
             return;
-        }
-    }
+        };
+        let Some(height_img) = images.get(&assets.heightmap_texture) else {
+            return;
+        };
+        let Some(mut viewport_camera) = viewport_camera else {
+            return;
+        };
 
-    // No asset hit - proceed with placement if mode is active and no asset is currently selected
-    if !q_selected.is_empty() {
-        return;
-    }
+        // Raycast to ground
+        let hit = viewport_camera.mouse_to_ground_plane(
+            cursor_pos,
+            camera,
+            cam_xf,
+            Some(height_img),
+            &scene_bounds,
+        );
+        let Some(hit) = hit else { return };
 
-    // Validate prerequisites for placement
-    let Some(scene_bounds) = assets.get_bounds(&manifests) else {
-        return;
-    };
-    let Some(height_img) = images.get(&assets.heightmap_texture) else {
-        return;
-    };
-    let Some(mut viewport_camera) = viewport_camera else {
-        return;
-    };
-    let Ok((cam_xform, camera)) = cameras.single() else {
-        return;
-    };
-
-    // Raycast to ground
-    let hit = viewport_camera.mouse_to_ground_plane(
-        cursor_pos,
-        camera,
-        cam_xform,
-        Some(height_img),
-        &scene_bounds,
-    );
-    let Some(hit) = hit else { return };
-
-    // Visualize placement point
-    commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::hsv(0., 1., 1.),
-            emissive: LinearRgba::new(1., 1., 1., 1.),
-            unlit: true,
-            ..default()
-        })),
-        Transform::from_translation(hit),
-        AssetPreview,
-        RenderLayers::layer(1),
-    ));
-
-    // Get selected asset metadata
-    let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) else {
-        return;
-    };
-    let asset_meta = if let Some(ref name) = place.selected_asset_name {
-        manifest
+        // Get selected asset metadata
+        let Some(manifest) = assets.manifest.as_ref().and_then(|h| manifests.get(h)) else {
+            return;
+        };
+        let asset_meta = manifest
             .asset_atlas
             .as_ref()
-            .and_then(|aa| aa.assets.iter().find(|a| a.name == *name))
-    } else {
-        return;
-    };
-    let Some(asset_meta) = asset_meta else { return };
+            .and_then(|aa| aa.assets.iter().find(|a| a.name == *asset_name));
+        let Some(asset_meta) = asset_meta else { return };
 
-    // Calculate bounds and spawn new asset
-    let size = calculate_asset_size(asset_meta);
-    let center = Vec3::new(hit.x, hit.y + size.y * 0.5, hit.z);
-    let transform = Transform::from_translation(center);
-    let uv_bounds = Vec4::new(
-        asset_meta.uv_bounds.uv_min[0],
-        asset_meta.uv_bounds.uv_min[1],
-        asset_meta.uv_bounds.uv_max[0],
-        asset_meta.uv_bounds.uv_max[1],
-    );
+        let size = calculate_asset_size(asset_meta);
+        let center = Vec3::new(hit.x, hit.y + size.y * 0.5, hit.z);
 
-    let placed_instance = PlacedAssetInstance {
-        asset_name: asset_meta.name.clone(),
-        transform,
-        uv_bounds,
-    };
-    placed_assets.instances.push(placed_instance.clone());
+        // Show preview at mouse position
+        commands.spawn((
+            Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::hsv(0., 1., 1.),
+                emissive: LinearRgba::new(1., 1., 1., 1.),
+                unlit: true,
+                ..default()
+            })),
+            Transform::from_translation(hit),
+            AssetPreview,
+            RenderLayers::layer(1),
+        ));
 
-    let entity = commands
-        .spawn((
+        // Spawn preview bounds
+        commands.spawn((
             create_wireframe_mesh_bundle(&mut meshes, &mut materials, size, center),
-            placed_instance.clone(),
-            PlacedBounds,
-            BoundsSize(size),
+            AssetPreview,
             bevy::render::view::NoIndirectDrawing,
             NoFrustumCulling,
-            Name::new(format!("{}_bounds_wire", asset_meta.name)),
-        ))
-        .id();
+            Name::new(format!("{}_preview_bounds", asset_meta.name)),
+        ));
 
-    // Auto-select newly placed asset so it enters manipulation mode
-    select_asset(&mut commands, entity);
+        // On click, place the asset (don't select it)
+        if clicked {
+            let transform = Transform::from_translation(center);
+            let uv_bounds = Vec4::new(
+                asset_meta.uv_bounds.uv_min[0],
+                asset_meta.uv_bounds.uv_min[1],
+                asset_meta.uv_bounds.uv_max[0],
+                asset_meta.uv_bounds.uv_max[1],
+            );
 
-    // Update instanced renderer
-    if let Ok(mut data) = existing_instances.single_mut() {
-        update_instance_data(&mut data, &placed_assets.instances, asset_meta);
-    } else {
-        create_new_instanced_renderer(
+            let placed_instance = PlacedAssetInstance {
+                asset_name: asset_meta.name.clone(),
+                transform,
+                uv_bounds,
+            };
+            placed_assets.instances.push(placed_instance.clone());
+
+            // Spawn the actual bounds entity (not selected, not preview)
+            commands.spawn((
+                create_wireframe_mesh_bundle(&mut meshes, &mut materials, size, center),
+                placed_instance.clone(),
+                PlacedBounds,
+                BoundsSize(size),
+                bevy::render::view::NoIndirectDrawing,
+                NoFrustumCulling,
+                Name::new(format!("{}_bounds_wire", asset_meta.name)),
+            ));
+
+            // Update instanced renderer
+            if let Ok(mut data) = existing_instances.single_mut() {
+                update_instance_data(&mut data, &placed_assets.instances, asset_meta);
+            } else {
+                create_new_instanced_renderer(
+                    &mut commands,
+                    &mut meshes,
+                    &placed_assets.instances,
+                    asset_meta,
+                );
+            }
+        }
+
+        return;
+    }
+
+    // SELECTION MODE: selected_asset_name is None
+    if clicked {
+        // Check if we clicked on an existing asset
+        if let Ok(ray) = camera.viewport_to_world(cam_xf, cursor_pos) {
+            let origin = ray.origin;
+            let dir = ray.direction.as_vec3();
+
+            let mut best_hit: Option<(Entity, f32, bool)> = None;
+            for (e, xf, BoundsSize(size), selected) in &q_bounds {
+                if let Some(t) = ray_hits_obb(origin, dir, *xf, *size) {
+                    if t > 0.0 && (best_hit.is_none() || t < best_hit.unwrap().1) {
+                        best_hit = Some((e, t, selected.is_some()));
+                    }
+                }
+            }
+
+            // If we hit an asset, handle selection
+            if let Some((hit_e, _, was_selected)) = best_hit {
+                deselect_all(
+                    q_bounds.iter().map(|(e, _gt, _bs, sel)| (e, sel)),
+                    &mut commands,
+                );
+
+                // Toggle selection: if it was already selected, deselect it; otherwise select it
+                if !was_selected {
+                    select_asset(&mut commands, hit_e);
+                }
+                return;
+            }
+        }
+
+        // Clicked on empty space, deselect all
+        deselect_all(
+            q_bounds.iter().map(|(e, _gt, _bs, sel)| (e, sel)),
             &mut commands,
-            &mut meshes,
-            &placed_assets.instances,
-            asset_meta,
         );
     }
 }
@@ -342,10 +351,11 @@ pub fn delete_selected(
     mut commands: Commands,
     mut placed_assets: ResMut<PlacedAssetInstances>,
     mut existing_instances: Query<(Entity, &mut InstancedAssetData)>,
+    place: Res<PlaceAssetBoundState>,
     manifests: Res<Assets<SceneManifest>>,
     assets: Res<PointCloudAssets>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Delete) || q_bounds.is_empty() {
+    if !keyboard.just_pressed(KeyCode::Delete) && place.active || q_bounds.is_empty() {
         return;
     }
 
@@ -368,6 +378,24 @@ pub fn delete_selected(
         });
     }
 
+    // Rebuild instance data from remaining components (which excludes deleted ones after despawn)
+    // Since we just despawned, we need to collect from what's left
+    rebuild_instances(
+        q_all_placed,
+        existing_instances,
+        commands,
+        assets,
+        manifests,
+    );
+}
+
+fn rebuild_instances(
+    q_all_placed: Query<&PlacedAssetInstance, (With<PlacedBounds>, Without<Selected>)>,
+    mut existing_instances: Query<(Entity, &mut InstancedAssetData)>,
+    mut commands: Commands,
+    assets: Res<PointCloudAssets>,
+    manifests: Res<Assets<SceneManifest>>,
+) {
     // Rebuild instance data from remaining components (which excludes deleted ones after despawn)
     // Since we just despawned, we need to collect from what's left
     if q_all_placed.is_empty() {
@@ -410,7 +438,7 @@ fn select_asset(commands: &mut Commands, entity: Entity) {
     commands
         .entity(entity)
         .insert(bevy::pbr::wireframe::WireframeColor {
-            color: Color::srgb(1.0, 1.0, 0.0),
+            color: Color::srgb(1.0, 0.0, 0.0),
         });
 }
 

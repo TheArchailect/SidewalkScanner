@@ -40,8 +40,8 @@ impl Plugin for AssetManagerPlugin {
                 (
                     // World
                     delete_selected,
-                    deselect_on_escape,
                     manipulate_selected_asset,
+                    deselect_on_escape,
                     handle_asset_click,
                 ),
             );

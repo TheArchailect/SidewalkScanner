@@ -558,20 +558,18 @@ fn handle_select_asset(
         })
         .unwrap_or(false);
 
-    if !asset_exists {
-        return Err(RpcError::invalid_params(&format!(
-            "Asset not found: {}",
-            select_params.asset_id
-        )));
-    }
+    let new_selected_asset = match asset_exists {
+        true => Some(select_params.asset_id.clone()),
+        false => None,
+    };
 
     // Update the selected asset state
-    place_asset_state.selected_asset_name = Some(select_params.asset_id.clone());
+    place_asset_state.selected_asset_name = new_selected_asset.clone();
 
     // Send asset selection event
     asset_placement_events.write(AssetPlacementEvent {
         action: AssetPlacementAction::SelectAsset,
-        asset_id: Some(select_params.asset_id.clone()),
+        asset_id: new_selected_asset,
         position: None,
     });
 
