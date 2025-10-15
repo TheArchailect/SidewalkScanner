@@ -375,7 +375,6 @@ fn handle_tool_selection(
         clear_events.write(ClearToolEvent {
             source: ToolSelectionSource::Rpc,
         });
-        info!("Tool cleared via RPC");
 
         return Ok(serde_json::json!({
             "success": true,
@@ -466,8 +465,6 @@ fn handle_get_available_assets(
 
     // Log the asset names for debugging
     let asset_names: Vec<&String> = atlas.assets.iter().map(|a| &a.name).collect();
-    info!("Found {} assets: {:?}", asset_count, asset_names);
-
     let asset_data: Vec<serde_json::Value> = atlas
         .assets
         .iter()
@@ -493,7 +490,6 @@ fn handle_get_available_assets(
         })
         .collect();
 
-    info!("Returning {} assets to frontend", asset_data.len());
     Ok(serde_json::json!(asset_data))
 }
 
@@ -573,8 +569,6 @@ fn handle_select_asset(
         position: None,
     });
 
-    info!("Asset selected: {}", select_params.asset_id);
-
     // Find and return the selected asset data
     if let Some(atlas) = manifest.asset_atlas.as_ref() {
         if let Some(asset) = atlas
@@ -632,8 +626,6 @@ fn handle_place_asset_at_position(
         asset_id: None,
         position: Some(position),
     });
-
-    info!("Asset placement requested at position: {:?}", position);
 
     Ok(serde_json::json!({
         "success": true,

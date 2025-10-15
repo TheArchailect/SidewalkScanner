@@ -389,7 +389,6 @@ fn create_compute_buffer(
     let mut uniform = ComputeUniformData::zeroed();
 
     if let Some(id) = mouse_enter_object_id {
-        info!("Recieved updated hover ID at compute shader: {:?}", id);
         uniform.hover_object_id = id as u32;
     }
 

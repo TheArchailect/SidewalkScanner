@@ -15,7 +15,8 @@ use ui::{
 };
 
 use manipulation::{
-    delete_selected, deselect_on_escape, handle_asset_click, manipulate_selected_asset,
+    RebuildInstancesEvent, delete_selected, deselect_on_escape, handle_asset_click,
+    manipulate_selected_asset, rebuild_instances_on_event,
 };
 
 use interactions::{
@@ -35,6 +36,7 @@ impl Plugin for AssetManagerPlugin {
             .init_resource::<RotationSettings>()
             .init_resource::<PlacedAssetInstances>()
             .init_resource::<ScrollCapture>()
+            .add_event::<RebuildInstancesEvent>()
             .add_systems(
                 Update,
                 (
@@ -43,6 +45,7 @@ impl Plugin for AssetManagerPlugin {
                     manipulate_selected_asset,
                     deselect_on_escape,
                     handle_asset_click,
+                    rebuild_instances_on_event,
                 ),
             );
 

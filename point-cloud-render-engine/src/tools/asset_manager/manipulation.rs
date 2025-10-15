@@ -17,6 +17,9 @@ use constants::render_settings::MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE;
 #[derive(Component)]
 pub struct AssetPreview;
 
+#[derive(Event)]
+pub struct RebuildInstancesEvent;
+
 // Unified system: handles both placement of new assets and selection of existing ones
 pub fn handle_asset_click(
     buttons: Res<ButtonInput<MouseButton>>,
@@ -31,6 +34,7 @@ pub fn handle_asset_click(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut events: EventWriter<RebuildInstancesEvent>,
     mut placed_assets: ResMut<PlacedAssetInstances>,
     mut existing_instances: Query<&mut InstancedAssetData>,
     existing_preview: Query<Entity, With<AssetPreview>>,
@@ -153,7 +157,7 @@ pub fn handle_asset_click(
 
             // Update instanced renderer
             if let Ok(mut data) = existing_instances.single_mut() {
-                update_instance_data(&mut data, &placed_assets.instances, asset_meta);
+                // update_instance_data(&mut data, &placed_assets.instances, asset_meta);
             } else {
                 create_new_instanced_renderer(
                     &mut commands,
@@ -164,6 +168,7 @@ pub fn handle_asset_click(
             }
         }
 
+        events.write(RebuildInstancesEvent);
         return;
     }
 
@@ -202,6 +207,25 @@ pub fn handle_asset_click(
         deselect_all(
             q_bounds.iter().map(|(e, _gt, _bs, sel)| (e, sel)),
             &mut commands,
+        );
+    }
+}
+
+pub fn rebuild_instances_on_event(
+    mut events: EventReader<RebuildInstancesEvent>,
+    q_selected: Query<(&mut Transform, &mut PlacedAssetInstance, &BoundsSize), With<Selected>>,
+    q_unselected: Query<&PlacedAssetInstance, (With<PlacedBounds>, Without<Selected>)>,
+    mut existing_instances: Query<&mut InstancedAssetData>,
+    manifests: Res<Assets<SceneManifest>>,
+    assets: Res<PointCloudAssets>,
+) {
+    for _event in events.read() {
+        rebuild_instances_from_both(
+            &q_selected,
+            &q_unselected,
+            &mut existing_instances,
+            &manifests,
+            &assets,
         );
     }
 }
@@ -311,7 +335,6 @@ pub fn manipulate_selected_asset(
         &scene_bounds,
     );
     let Some(hit) = hit else { return };
-
     for (mut transform, mut placed_instance, BoundsSize(size)) in &mut q {
         let new_center = Vec3::new(hit.x, hit.y + size.y * 0.5, hit.z);
         if transform.translation.distance(new_center) > 0.001 {
@@ -534,29 +557,6 @@ fn create_wireframe_mesh_bundle(
         MeshMaterial3d(materials.add(material)),
         Transform::from_translation(center),
     )
-}
-
-fn update_instance_data(
-    instance_data: &mut InstancedAssetData,
-    instances: &[PlacedAssetInstance],
-    asset_meta: &AssetDefinition,
-) {
-    instance_data.0 = instances
-        .iter()
-        .map(|placed| InstanceData {
-            position: placed.transform.translation.to_array(),
-            _padding1: 0.0,
-            rotation: [
-                placed.transform.rotation.x,
-                placed.transform.rotation.y,
-                placed.transform.rotation.z,
-                placed.transform.rotation.w,
-            ],
-            uv_bounds: placed.uv_bounds.to_array(),
-            point_count: asset_meta.point_count as f32,
-            _padding2: [0.0; 3],
-        })
-        .collect();
 }
 
 fn create_new_instanced_renderer(
