@@ -72,7 +72,7 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
     let atlas_x = point_index % safe_region_width;
     let atlas_y = point_index / safe_region_width;
 
-    // Convert to normalized UV within the region
+    // Convert to normalised UV within the region
     let local_uv = vec2<f32>(
         (f32(atlas_x) + 0.5) / f32(safe_region_width),
         (f32(atlas_y) + 0.5) / f32(safe_region_height)
@@ -82,19 +82,19 @@ fn vertex(vertex: VertexInput) -> VertexOutput {
 
     let pos_sample = textureSampleLevel(asset_position_texture, asset_position_sampler, atlas_uv, 0.0);
 
-    // // Denormalize to world space
+    // // Denormalise to world space
     // let norm_pos = pos_sample.rgb;
     // let min_pos = material.params[0].xyz;
     // let max_pos = material.params[1].xyz;
     // let world_pos = min_pos + norm_pos * (max_pos - min_pos);
 
 
-    if pos_sample.a < 0.1 {
-        out.clip_position = vec4<f32>(0.0, 0.0, -1.0, 1.0);
-        return out;
-    }
+    // if pos_sample.a < 0.1 {
+    //     out.clip_position = vec4<f32>(0.0, 0.0, -1.0, 1.0);
+    //     return out;
+    // }
 
-    // Get local position from texture (normalized -1 to 1)
+    // Get local position from texture (normalised -1 to 1)
     // let local_pos = pos_sample.rgb * 2.0 - 1.0;
     let original_world_pos = pos_sample.rgb;
 

@@ -65,7 +65,7 @@ pub struct TerrainInfo {
 }
 
 /// Terrain texture file paths with organized directory structure.
-/// References textures in terrain subdirectory for clean organization.
+/// References textures in terrain subdirectory for clean organisation.
 #[derive(Serialize, Deserialize)]
 pub struct TerrainTextureFiles {
     /// Position texture (RGBA32F) containing XYZ coordinates.
@@ -79,7 +79,7 @@ pub struct TerrainTextureFiles {
 }
 
 /// Scene manifest generator for unified terrain and asset output.
-/// Handles manifest creation, validation, and file organization.
+/// Handles manifest creation, validation, and file organisation.
 pub struct ManifestGenerator {
     /// Base output directory for all generated files.
     output_dir: std::path::PathBuf,

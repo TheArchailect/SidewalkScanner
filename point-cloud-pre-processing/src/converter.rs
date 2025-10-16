@@ -271,7 +271,7 @@ impl PointCloudConverter {
             1.0
         };
 
-        // Create spatial generator with n*n grid for Z-order organization.
+        // Create spatial generator with n*n grid for Z-order organisation.
         let mut spatial_gen = SpatialTextureGenerator::new(bounds.clone(), 1024);
         let mut road_points = Vec::new();
         let mut stats = ProcessingStats::new();
@@ -283,7 +283,7 @@ impl PointCloudConverter {
             sampling_ratio * 100.0
         );
 
-        // Process points with progress tracking and spatial organization.
+        // Process points with progress tracking and spatial organisation.
         let pb = ProgressBar::new(total_points as u64);
         pb.set_style(
             ProgressStyle::default_bar()
@@ -333,7 +333,7 @@ impl PointCloudConverter {
                 object_number as u32,
             );
 
-            // Add to spatial structure for Z-order organization.
+            // Add to spatial structure for Z-order organisation.
             spatial_gen.add_point((x, y, z), classification, color, object_number);
 
             // Track road points for heightmap generation.

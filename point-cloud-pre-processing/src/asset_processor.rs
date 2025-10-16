@@ -13,6 +13,7 @@ use las::Reader;
 use std::fs::{self, File};
 use std::io::BufReader;
 use std::path::Path;
+
 /// Asset library processor for generating texture atlases.
 /// Handles discovery, validation, and atlas generation for GPU rendering.
 pub struct AssetProcessor {
@@ -24,7 +25,7 @@ pub struct AssetProcessor {
 
 impl AssetProcessor {
     /// Creates new asset processor with output configuration.
-    /// Sets up directory structure for atlas organization.
+    /// Sets up directory structure for atlas organisation.
     pub fn new(output_dir: &Path, output_name: &str) -> Self {
         Self {
             output_dir: output_dir.to_path_buf(),
@@ -158,7 +159,7 @@ impl AssetProcessor {
 
         for (point, (x, y, z)) in raw_points {
             let centered_x = x - center_x;
-            let centered_y = y - center_y; // Shifts min_y to 0
+            let centered_y = y - center_y;
             let centered_z = z - center_z;
             let classification = u8::from(point.classification);
             let color = point.color.map(|c| (c.red, c.green, c.blue));

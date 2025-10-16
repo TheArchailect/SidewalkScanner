@@ -1,4 +1,79 @@
-/// Asset library atlas generation for efficient GPU rendering
+//! # Texture Atlas System for Instanced Point Cloud Assets
+//!
+//! This module handles **texture atlas generation and lookup** for instanced point-cloud assets.
+//! Each asset contributes a small texture tile to a shared
+//! higher-resolution atlas (typically 2048×2048). These tiles store per-point data such as
+//! position, colour, and class values that the WGSL shader reads at runtime.
+//!
+//! Unlike a traditional UV atlas where each vertex carries explicit UV coordinates,
+//! this system uses **stride-based indexing**. Each point is assigned an integer index that
+//! maps to a texel position within its allocated atlas region. The shader reconstructs UVs
+//! procedurally from the per-instance bounds provided in `i_uv_bounds`:
+//!
+//! ```wgsl
+//! // Conceptual WGSL logic
+//! let local_uv = vec2<f32>(
+//!     f32(vertex_index % stride_x) / f32(stride_x),
+//!     f32(vertex_index / stride_x) / f32(stride_y)
+//! );
+//! let atlas_uv = mix(i_uv_bounds.xy, i_uv_bounds.zw, local_uv);
+//! ```
+//!
+//! This avoids storing explicit UVs for every vertex and enables thousands of instanced assets
+//! to efficiently share a single packed atlas texture.
+//!
+//! ## Layout Example
+//!
+//! The atlas is conceptually divided into a grid of fixed-size slots:
+//!
+//! ```text
+//! ┌──────────────────────────────────────────────────────────────┐
+//! │ [0,0] Asset A  | [1,0] Asset B  | [2,0] Asset C              │
+//! │──────────────────────────────────────────────────────────────│
+//! │ [0,1] Asset D  | [1,1] Asset E  | [2,1] Asset F              │
+//! │──────────────────────────────────────────────────────────────│
+//! │ ...                                                          │
+//! └──────────────────────────────────────────────────────────────┘
+//! ```
+//!
+//! Each `AtlasRegion` defines one such slot, storing its minimum and maximum UV bounds
+//! (`uv_min`, `uv_max`) in normalised texture space (0.0–1.0). These values are uploaded as
+//! per-instance uniforms and used by the shader to reconstruct UVs for sampling.
+//!
+//! ## Adding Assets
+//!
+//! The `AtlasTextureGenerator` packs multiple `PointCloudAsset`s into the atlas texture.
+//! Each asset contributes its texel data (such as positions or colour maps) via
+//! `add_asset()`, and the generator computes a contiguous layout in atlas space.
+//!
+//! ```rust
+//! let mut atlas = AtlasTextureGenerator::new(2048, 2048);
+//! atlas.add_asset("car", &car_points);
+//! atlas.add_asset("bike", &bike_points);
+//! let texture = atlas.build_texture(&mut images, &mut materials);
+//! ```
+//!
+//! Each call to `add_asset` allocates a tile region and returns an `AtlasRegion` struct
+//! describing its UV bounds. These are attached to entity instances as `InstanceUvBounds`
+//! so the shader can reconstruct their correct sampling positions.
+//!
+//! ## Runtime Behaviour
+//!
+//! During rendering:
+//!
+//! - Each instance uses a unique `i_uv_bounds` representing its atlas region.
+//! - The vertex shader computes the atlas UVs from vertex index and bounds.
+//! - Sampling occurs directly within that subregion, without per-vertex UVs.
+//!
+//! This approach dramatically reduces GPU memory for instanced assets while maintaining
+//! flexibility for dynamic placement, batching, and visual variety.
+//!
+//! ## Key Structures
+//!
+//! - [`AtlasTextureGenerator`] — manages packing of assets into the atlas.
+//! - [`AtlasRegion`] — stores UV-space bounds of a single packed asset.
+//! - [`AtlasMetadata`] — summarises layout info such as stride and tile count.
+//!
 use crate::bounds::PointCloudBounds;
 use crate::spatial_layout::SpatialPoint;
 use constants::texture::TEXTURE_SIZE;
@@ -43,7 +118,7 @@ impl std::fmt::Display for AtlasError {
 
 impl std::error::Error for AtlasError {}
 
-/// UV coordinate bounds for atlas tile access in normalized space.
+/// UV coordinate bounds for atlas tile access in normalised space.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct AtlasRegion {
     /// Minimum UV coordinates (top-left corner).
@@ -54,7 +129,7 @@ pub struct AtlasRegion {
 
 impl AtlasRegion {
     /// Calculates UV bounds from atlas tile position and dimensions.
-    /// Grid coordinates are converted to normalized UV space for GPU sampling.
+    /// Grid coordinates are converted to normalised UV space for GPU sampling.
     pub fn from_tile_position(tile_pos: (u32, u32), tile_size: u32, atlas_size: u32) -> Self {
         let tiles_per_axis = atlas_size / tile_size;
         let u_step = 1.0 / tiles_per_axis as f32;
@@ -101,10 +176,10 @@ pub struct AtlasConfig {
 
 impl AtlasConfig {
     /// Creates atlas configuration with standard tile layout.
-    /// Uses 256x256 tiles within a 2048x2048 atlas for 64 total assets.
+    /// Uses 512x512 tiles within a 2048x2048 atlas for 16 total assets.
     pub fn standard() -> Self {
         let atlas_size = TEXTURE_SIZE as u32;
-        let tile_size = 256u32;
+        let tile_size = 512u32;
         let tiles_per_axis = atlas_size / tile_size;
         let max_assets = tiles_per_axis * tiles_per_axis;
 
@@ -158,7 +233,7 @@ pub struct AssetCandidate {
 }
 
 /// Atlas-aware texture generator for multiple point cloud assets.
-/// Manages spatial organization and texture generation for GPU rendering.
+/// Manages spatial organisation and texture generation for GPU rendering.
 pub struct AtlasTextureGenerator {
     /// Atlas configuration parameters.
     config: AtlasConfig,
@@ -185,7 +260,7 @@ impl AtlasTextureGenerator {
     }
 
     /// Adds point cloud asset to specified atlas tile position.
-    /// Normalizes coordinates to tile-local space for efficient packing.
+    /// Normalises coordinates to tile-local space for efficient packing.
     pub fn add_asset(
         &mut self,
         asset_data: &[SpatialPoint],
@@ -209,6 +284,16 @@ impl AtlasTextureGenerator {
 
         // Store asset data in the tile.
         self.asset_tiles.insert(tile_pos, asset_data.to_vec());
+
+        println!(
+            "[Atlas] Added asset '{}' at tile ({}, {}), UV=({:.3?} → {:.3?}), points={}",
+            asset_name,
+            tile_pos.0,
+            tile_pos.1,
+            uv_bounds.uv_min,
+            uv_bounds.uv_max,
+            asset_data.len()
+        );
 
         // Create metadata entry.
         let metadata = AssetMetadata {
@@ -242,6 +327,15 @@ impl AtlasTextureGenerator {
     /// Generates position and color/classification atlas textures.
     /// Spatial indexing not required for instanced asset rendering.
     pub fn generate_atlas_textures(&self) -> AtlasTextureSet {
+        println!(
+            "[Atlas] Generating textures: atlas {}x{}, tile {}x{}, total assets={}",
+            self.config.atlas_size,
+            self.config.atlas_size,
+            self.config.tile_size,
+            self.config.tile_size,
+            self.asset_metadata.len()
+        );
+
         let atlas_pixels = (self.config.atlas_size * self.config.atlas_size) as usize;
         let mut position_data = vec![0.0f32; atlas_pixels * 4]; // RGBA
         let mut colour_class_data = vec![0.0f32; atlas_pixels * 4]; // RGBA
@@ -250,6 +344,17 @@ impl AtlasTextureGenerator {
         for ((tile_x, tile_y), points) in &self.asset_tiles {
             let tile_start_x = tile_x * self.config.tile_size;
             let tile_start_y = tile_y * self.config.tile_size;
+
+            // let max_points = (self.config.tile_size * self.config.tile_size) as usize;
+            // let valid_points = points.len().min(max_points);
+
+            if points.len() > (self.config.tile_size * self.config.tile_size) as usize {
+                println!(
+                    "Asset overflow: {} points, but tile can hold only {}",
+                    points.len(),
+                    self.config.tile_size * self.config.tile_size
+                );
+            }
 
             // Fill tile with point data.
             for (point_idx, point) in points.iter().enumerate() {

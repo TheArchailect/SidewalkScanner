@@ -8,12 +8,12 @@
 //
 // Input Textures:
 //   - original_texture: Encoded RGB + original classification (A)
-//   - position_texture: Normalized world-space coordinates + connectivity class ID
+//   - position_texture: Normalised world-space coordinates + connectivity class ID
 //   - spatial_index_texture: Precomputed morton codes for spatial acceleration
 //
 // Uniform Data:
 //   - compute_data: Packed structure with classification polygons, masks, modes
-//   - bounds: World-space bounding box for position denormalization
+//   - bounds: World-space bounding box for position denormalisation
 //
 // Features:
 //   - Supports two spatial filtering modes: AABB (default) and Morton (toggleable)
@@ -390,7 +390,7 @@ fn morton_encode_2d_optimized(x: u32, z: u32) -> u32 {
 }
 
 fn encode_morton_2d_current(point: vec2<f32>, bounds_min: vec2<f32>, bounds_max: vec2<f32>) -> u32 {
-    // Normalize coordinates to match bounds normalization logic.
+    // Normalise coordinates to match bounds normalisation logic.
     let norm_x = (point.x - bounds_min.x) / (bounds_max.x - bounds_min.x);
     let norm_z = (point.y - bounds_min.y) / (bounds_max.y - bounds_min.y);
 

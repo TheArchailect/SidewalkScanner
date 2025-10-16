@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct AssetDefinition {
     pub name: String,
     pub atlas_position: [u32; 2], // Grid position in 2048x2048 atlas.
-    pub uv_bounds: UVBounds,      // Normalized texture coordinates [0.0, 1.0].
+    pub uv_bounds: UVBounds,      // Normalised texture coordinates [0.0, 1.0].
     pub local_bounds: BoundsData, // 3D bounds in asset-local space.
     pub point_count: usize,
 }
