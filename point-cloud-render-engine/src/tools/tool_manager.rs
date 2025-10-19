@@ -55,7 +55,6 @@ impl ToolManager {
 
         // Deactivate current tool before switching.
         self.active_tool = Some(tool_type);
-        info!("Tool manager activated: {}", tool_type.to_string());
         true // Tool changed.
     }
 
@@ -130,7 +129,7 @@ pub fn handle_tool_selection_events(
     mut tool_manager: ResMut<ToolManager>,
     mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
     mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
-    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>, 
+    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>,
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
     for event in events.read() {
@@ -144,7 +143,7 @@ pub fn handle_tool_selection_events(
         // Deactivate all tools first to ensure clean state.
         polygon_tool.set_active(false);
         place_asset_state.active = false;
-        measure_tool.set_active(false); 
+        measure_tool.set_active(false);
 
         // Activate the requested tool.
         match event.tool_type {
@@ -184,7 +183,7 @@ pub fn handle_tool_selection_events(
                 );
             }
             ToolType::Measure => {
-                measure_tool.set_active(true); 
+                measure_tool.set_active(true);
 
                 info!("Measure tool activated via {:?}", event.source);
 
@@ -398,7 +397,7 @@ pub fn handle_tool_keyboard_shortcuts(
         });
     }
 
-    if keyboard.just_pressed(KeyCode::KeyM) { 
+    if keyboard.just_pressed(KeyCode::KeyM) {
         tool_events.send(ToolSelectionEvent {
             tool_type: ToolType::Measure,
             source: ToolSelectionSource::Keyboard,
@@ -412,7 +411,7 @@ pub fn handle_tool_keyboard_shortcuts() {
     // No keyboard shortcuts in WASM builds - tools controlled via RPC only.
 }
 
-// Event to clear/deactivate whichever tool is currently active 
+// Event to clear/deactivate whichever tool is currently active
 #[derive(Event)]
 pub struct ClearToolEvent {
     pub source: ToolSelectionSource,
@@ -423,7 +422,7 @@ pub fn handle_clear_tool_events(
     mut tool_manager: ResMut<ToolManager>,
     mut polygon_tool: ResMut<crate::tools::polygon::PolygonTool>,
     mut place_asset_state: ResMut<crate::tools::asset_manager::PlaceAssetBoundState>,
-    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>, 
+    mut measure_tool: ResMut<crate::tools::measure::MeasureTool>,
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
 ) {
     for event in events.read() {
@@ -432,7 +431,7 @@ pub fn handle_clear_tool_events(
         // Deactivate tool states
         polygon_tool.set_active(false);
         place_asset_state.active = false;
-        measure_tool.set_active(false); 
+        measure_tool.set_active(false);
 
         info!("Cleared active tool via {:?}", event.source);
 
@@ -448,7 +447,7 @@ pub fn handle_clear_tool_events(
     }
 }
 
-// Clear the current tool 
+// Clear the current tool
 #[cfg(not(target_arch = "wasm32"))]
 pub fn clear_tool_on_escape(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -456,6 +455,8 @@ pub fn clear_tool_on_escape(
     mut ev_clear: EventWriter<ClearToolEvent>,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) && manager.active_tool().is_some() {
-        ev_clear.send(ClearToolEvent { source: ToolSelectionSource::Keyboard });
+        ev_clear.send(ClearToolEvent {
+            source: ToolSelectionSource::Keyboard,
+        });
     }
 }

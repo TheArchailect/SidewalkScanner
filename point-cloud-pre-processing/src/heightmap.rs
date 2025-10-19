@@ -1,6 +1,6 @@
-/// Fast parallel heightmap generation with smooth blending
-use crate::constants::TEXTURE_SIZE;
 use crate::dds_writer::write_f32_texture;
+/// Fast parallel heightmap generation with smooth blending
+use constants::texture::TEXTURE_SIZE;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::collections::VecDeque;

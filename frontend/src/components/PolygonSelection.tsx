@@ -6,6 +6,7 @@ import { ClassificationCategory } from "../hooks/useWebRpc";
 
 interface PolygonToolPanelProps {
   isVisible: boolean;
+  setHasSelection: React.Dispatch<React.SetStateAction<boolean>>;
   canvasRef: RefObject<HTMLIFrameElement | null>;
 }
 
@@ -22,6 +23,7 @@ type Operation = "hide" | "reclassify";
 
 const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
   isVisible,
+  setHasSelection,
   canvasRef,
 }) => {
   const {
@@ -31,6 +33,7 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     clearTool,
     hidePointsInPolygon,
     reclassifyPointsInPolygon,
+    setOnMouseEnterObjectID,
   } = useWebRpc(canvasRef);
 
   const [operation, setOperation] = useState<Operation>("hide");
@@ -83,6 +86,8 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
           : cls,
       ),
     );
+
+    setHasSelection(true);
     returnFocusToCanvas();
   };
 
@@ -166,6 +171,36 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
     selectTool("polygon").catch(console.error);
     getClassificationCategories();
   }, [isVisible]);
+
+  // Handle double-click
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const onDblClick = () => {
+      if (
+        operation === "reclassify" &&
+        targetClassId < 0 &&
+        sourceClasses.length > 0
+      ) {
+        setTargetClassId(sourceClasses[0].classId);
+        setTimeout(() => {
+          handleApply();
+        }, 0);
+        return;
+      }
+      handleApply();
+    };
+
+    window.addEventListener("dblclick", onDblClick, true);
+
+    const w = canvasRef.current && canvasRef.current.contentWindow;
+    if (w) w.addEventListener("dblclick", onDblClick, true);
+
+    return () => {
+      window.removeEventListener("dblclick", onDblClick, true);
+      if (w) w.removeEventListener("dblclick", onDblClick, true);
+    };
+  }, [isVisible, handleApply, canvasRef]);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -435,6 +470,12 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
                       <button
                         key={`${cls.classId}-${objId}`}
                         onClick={() => toggleObjectId(cls.classId, objId)}
+                        onMouseEnter={() => {
+                          setOnMouseEnterObjectID(objId);
+                        }}
+                        onMouseLeave={() => {
+                          setOnMouseEnterObjectID(-1);
+                        }}
                         style={{
                           ...styleUtils.toolItem(
                             cls.selectedObjectIds.has(objId),
@@ -517,64 +558,19 @@ const PolygonToolPanel: React.FC<PolygonToolPanelProps> = ({
         )}
       </div>
 
-      {/* Footer Actions */}
+      {/* Footer */}
       <div
         style={{
-          padding: `${theme.spacing[4]} ${theme.spacing[5]}`,
-          borderTop: `1px solid ${theme.colors.border.default}`,
-          display: "flex",
-          gap: theme.spacing[3],
+          ...styleUtils.text.caption(),
+          textAlign: "center",
+          lineHeight: "1.4",
+          background: theme.colors.background.card,
+          padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
+          borderRadius: theme.radius.base,
+          border: `1px solid ${theme.colors.border.light}`,
         }}
       >
-        <button
-          onClick={handleCancel}
-          style={{
-            ...styleUtils.buttonGhost(),
-            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
-            fontSize: theme.fontSizes.sm,
-            fontWeight: theme.fontWeights.semibold,
-            flex: "1",
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleApply}
-          disabled={operation === "reclassify" && !targetClassId}
-          style={{
-            ...styleUtils.buttonBase(),
-            background:
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.background.card
-                : theme.colors.background.overlay,
-            border: `1px solid ${
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.border.light
-                : theme.colors.border.orangeStrong
-            }`,
-            color:
-              operation === "reclassify" && !targetClassId
-                ? theme.colors.gray[600]
-                : theme.colors.primary.orangeLight,
-            padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
-            fontSize: theme.fontSizes.sm,
-            fontWeight: theme.fontWeights.semibold,
-            cursor:
-              operation === "reclassify" && !targetClassId
-                ? "not-allowed"
-                : "pointer",
-            transition: theme.transitions.fast,
-            flex: "2",
-          }}
-        >
-          {operation === "hide"
-            ? hasAnySelection
-              ? "Hide Selected"
-              : "Hide All"
-            : hasAnySelection
-              ? "Reclassify Selected"
-              : "Reclassify All"}
-        </button>
+        Double click with left mouse button to complete the operation.
       </div>
     </div>
   );

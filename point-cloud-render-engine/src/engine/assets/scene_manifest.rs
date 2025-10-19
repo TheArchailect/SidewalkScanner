@@ -1,4 +1,3 @@
-use crate::constants::texture::TEXTURE_SIZE;
 use crate::engine::assets::asset_definitions::AssetDefinition;
 use crate::engine::assets::asset_definitions::AtlasConfig;
 use crate::engine::assets::bounds::BoundsData;
@@ -6,6 +5,7 @@ use crate::engine::assets::bounds::PointCloudBounds;
 use crate::engine::assets::texture_files::{AssetTextureFiles, TerrainTextureFiles};
 use bevy::prelude::*;
 use bevy::render::extract_resource::ExtractResource;
+use constants::texture::TEXTURE_SIZE;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -48,8 +48,8 @@ pub struct SceneManifest {
     /// Optional asset atlas configuration and metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset_atlas: Option<AssetAtlasData>,
-    /// Global scene bounds encompassing terrain and all assets.
-    pub scene_bounds: BoundsData,
+    // /// Global scene bounds encompassing terrain and all assets.
+    // pub scene_bounds: BoundsData,
     /// Describes the class types and object id's found in the specific dataset
     pub classes: ClassificationInfo,
 }

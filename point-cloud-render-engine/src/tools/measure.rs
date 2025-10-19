@@ -4,6 +4,9 @@ use crate::engine::camera::viewport_camera::ViewportCamera;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
+use constants::render_settings::{
+    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +23,7 @@ pub struct MeasureTool {
     pub start_point: Option<Vec3>,
     pub preview_point: Option<Vec3>,
     pub next_id: u32,
-    pub current: Option<Measurement>, 
+    pub current: Option<Measurement>,
 }
 
 impl MeasureTool {
@@ -46,23 +49,80 @@ pub struct CompletedMeasurementTag;
 // Input/logic: click to start, move to preview, click to finish
 // Starting new measurement deletes previous one
 pub fn measure_tool_system(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     mut measure_tool: ResMut<MeasureTool>,
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    camera_q: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
-    mut viewport_camera: ResMut<ViewportCamera>,
+    cameras: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
+    viewport_camera: Option<ResMut<ViewportCamera>>,
     images: Res<Assets<Image>>,
     assets: Res<PointCloudAssets>,
     manifests: Res<Assets<SceneManifest>>,
     mut rpc_interface: ResMut<crate::rpc::web_rpc::WebRpcInterface>,
+    existing_preview: Query<Entity, With<MeasurePreview>>,
 ) {
     if !measure_tool.is_active() {
         return;
     }
 
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(scene_bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
+    let Some(height_img) = images.get(&assets.heightmap_texture) else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Some(mut viewport_camera) = viewport_camera else {
+        return;
+    };
+    let Ok((cam_xform, camera)) = cameras.single() else {
+        return;
+    };
+
+    // Raycast from mouse to ground plane
+    let hit = viewport_camera.mouse_to_ground_plane(
+        cursor_pos,
+        camera,
+        cam_xform,
+        Some(height_img),
+        &scene_bounds,
+    );
+    let Some(hit) = hit else {
+        return;
+    };
+
+    // Clean up existing preview entities to prevent accumulation.
+    for entity in existing_preview.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    // mouse ray case visualisation
+    commands.spawn((
+        Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::hsv(0., 1., 1.),
+            emissive: LinearRgba::new(1., 1., 1., 1.),
+            depth_bias: 0.0,
+            unlit: true,
+            ..default()
+        })),
+        Transform::from_translation(hit),
+        MeasurePreview,
+        RenderLayers::layer(1),
+    ));
+
     // Update cursor projection each frame for live preview
-    let Some(bounds) = assets.get_bounds(&manifests) else { return; };
-    if let (Ok((cam_tf, cam)), Ok(window)) = (camera_q.get_single(), windows.get_single()) {
+    let Some(bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
+    if let (Ok((cam_tf, cam)), Ok(window)) = (cameras.single(), windows.single()) {
         if let Some(cursor) = window.cursor_position() {
             measure_tool.preview_point = viewport_camera.mouse_to_ground_plane(
                 cursor,
@@ -159,7 +219,7 @@ pub fn update_measure_render(
     // Preview measurement before completion
     if let (Some(start), Some(preview)) = (measure_tool.start_point, measure_tool.preview_point) {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.06))),
+            Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(1.0, 1.0, 0.2),
                 emissive: LinearRgba::new(1., 1., 0.2, 1.),
@@ -177,7 +237,7 @@ pub fn update_measure_render(
             let midpoint = (start + preview) * 0.5;
             let rot = Quat::from_rotation_arc(Vec3::X, dir.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(dist, 0.02, 0.02))),
+                Mesh3d(meshes.add(Cuboid::new(dist, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(1.0, 1.0, 0.2),
                     emissive: LinearRgba::new(1., 1., 0.2, 1.),
@@ -199,7 +259,7 @@ pub fn update_measure_render(
             let midpoint = (m.start + m.end) * 0.5;
             let rot = Quat::from_rotation_arc(Vec3::X, dir.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(dist, 0.03, 0.03))),
+                Mesh3d(meshes.add(Cuboid::new(dist, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(1.0, 0.27, 0.0),
                     emissive: LinearRgba::new(1., 0.5, 0., 1.),

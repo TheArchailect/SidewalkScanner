@@ -82,7 +82,12 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
 
   const handleAssetSelection = async (asset: Asset) => {
     try {
-      await selectAsset(asset.id);
+      let id = asset.id;
+      if (selectedAsset && selectedAsset.id === asset.id) {
+        id = "None";
+      }
+
+      await selectAsset(id);
       returnFocusToCanvas();
     } catch (error) {
       console.error("Failed to select asset:", error);
@@ -295,17 +300,22 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         <div
           style={{
             ...styleUtils.text.caption(),
-            textAlign: "center",
+            textAlign: "left",
             lineHeight: "1.4",
             background: theme.colors.background.card,
             padding: `${theme.spacing[3]} ${theme.spacing[4]}`,
             borderRadius: theme.radius.base,
             border: `1px solid ${theme.colors.border.light}`,
+            whiteSpace: "pre-line",
           }}
         >
-          Select an asset and left click in the world to place it. When you
-          right click a previously placed asset in the world you can use the
-          mouse wheel to rotate it.
+          {`Select an asset and left-click in the world to place it, Scroll to rotate it.
+
+        When no asset is selected:
+        • Left-click an existing asset to edit it.
+        • Scroll to rotate.
+        • Left-click again to set it's new position.
+        • Press Delete to remove.`}
         </div>
       </div>
 

@@ -19,24 +19,25 @@ use crate::engine::{
         ComputeClassificationPlugin, ComputeClassificationState, run_classification_compute,
     },
     compute::edl_compute_depth::{EDLComputePlugin, EDLRenderState, run_edl_compute},
-    render::edl_post_processing::{EDLPostProcessPlugin, EDLSettings},
+    render::edl_post_processing::EDLPostProcessPlugin,
     render::pipeline::point_cloud_render_pipeline::{PointCloudRenderPlugin, PointCloudRenderable},
-    systems::render_mode::{RenderModeState, render_mode_system},
+    systems::render_mode::{MouseEnterObjectState, RenderModeState, render_mode_system},
 };
 // Crate tools modules
 use crate::engine::core::app_state::{AppState, PipelineDebugState};
 use crate::engine::loading::manifest_loader::{ManifestLoader, load_bounds_system, start_loading};
 use crate::engine::loading::texture_loader::check_texture_loading;
 use crate::tools::{
-    asset_manager::AssetManagerUiPlugin,
+    asset_manager::AssetManagerPlugin,
     class_selection::{
         ClassSelectionState, SelectionBuffer, handle_class_selection, update_selection_buffer,
     },
+    measure::{MeasureTool, measure_tool_system, update_measure_render},
     polygon::{
-        PolygonClassificationData, PolygonCounter, PolygonTool, polygon_tool_system,
-        update_polygon_classification_shader, update_polygon_preview, update_polygon_render, PolygonHideRequestEvent, PolygonReclassifyRequestEvent, PolygonToolPlugin
+        PolygonClassificationData, PolygonCounter, PolygonHideRequestEvent, PolygonTool,
+        PolygonToolPlugin, polygon_tool_system, update_polygon_classification_shader,
+        update_polygon_preview, update_polygon_render,
     },
-    measure::{MeasureTool, measure_tool_system, update_measure_render}, 
     tool_manager::{
         AssetPlacementEvent, ClearToolEvent, PolygonActionEvent, ToolManager, ToolSelectionEvent,
         handle_asset_placement_events, handle_clear_tool_events, handle_polygon_action_events,
@@ -97,8 +98,8 @@ pub fn create_app() -> App {
         });
 
     // Plugin for asset manager UI panel
-    app.add_plugins(AssetManagerUiPlugin);
-    
+    app.add_plugins(AssetManagerPlugin);
+
     // Plugin for Polygon
     app.add_plugins(PolygonToolPlugin);
 
@@ -110,8 +111,9 @@ pub fn create_app() -> App {
         .init_resource::<PolygonClassificationData>()
         .init_resource::<PolygonCounter>()
         .init_resource::<PolygonTool>()
-        .init_resource::<MeasureTool>() 
+        .init_resource::<MeasureTool>()
         .init_resource::<RenderModeState>()
+        .init_resource::<MouseEnterObjectState>()
         .init_resource::<PlacedAssetInstances>()
         .init_resource::<GridCreated>()
         .init_resource::<ToolManager>()
@@ -146,6 +148,7 @@ pub fn create_app() -> App {
             .init_resource::<PolygonClassificationData>()
             .init_resource::<PointCloudAssets>()
             .init_resource::<RenderModeState>()
+            .init_resource::<MouseEnterObjectState>()
             .init_resource::<PointCloudRenderState>()
             .init_resource::<ClassSelectionState>()
             .init_resource::<EDLRenderState>()
@@ -202,8 +205,8 @@ pub fn create_app() -> App {
         polygon_tool_system,
         update_polygon_preview,
         update_polygon_render,
-        measure_tool_system,  
-        update_measure_render, 
+        measure_tool_system,
+        update_measure_render,
         // Other systems
         render_mode_system,
         update_selection_buffer,
@@ -251,7 +254,7 @@ fn spawn_lighting(commands: &mut Commands) {
 }
 
 fn create_edl_post_processor_camera(commands: &mut Commands) {
-    use crate::constants::render_settings::EDL_SETTINGS;
+    use constants::render_settings::EDL_SETTINGS;
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),

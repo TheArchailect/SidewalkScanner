@@ -1,6 +1,6 @@
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
-use crate::engine::systems::render_mode::{RenderMode, RenderModeState};
+use crate::engine::systems::render_mode::{MouseEnterObjectState, RenderMode, RenderModeState};
 use crate::tools::asset_manager::PlaceAssetBoundState;
 use crate::tools::polygon::{PolygonHideRequestEvent, PolygonReclassifyRequestEvent};
 use crate::tools::tool_manager::{
@@ -30,6 +30,12 @@ struct ReclassifyParams {
     masked_classes: Vec<SourceItem>,
     target_class_id: u32,
     target_object_id: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OnHoverParams {
+    #[serde(default)]
+    object_id: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -218,6 +224,7 @@ fn handle_rpc_messages(
     mut clear_events: EventWriter<ClearToolEvent>,
     mut polygon_hide_events: EventWriter<PolygonHideRequestEvent>, // Polygon event writer to handle Hide request
     mut polygon_reclassify_events: EventWriter<PolygonReclassifyRequestEvent>, // Polygon event writer to handle Reclassify request
+    mut current_mouse_enter_object_id: ResMut<MouseEnterObjectState>,
 ) {
     for event in events.read() {
         // Parse as generic JSON first to check for 'id' field
@@ -237,6 +244,7 @@ fn handle_rpc_messages(
                         &mut clear_events,
                         &mut polygon_hide_events, // Polygon Hide event writer
                         &mut polygon_reclassify_events, // Polygon Reclassify writer
+                        &mut current_mouse_enter_object_id, // on hover mouse events highlighting of clown pass objects
                     ) {
                         rpc_interface.queue_response(response);
                     }
@@ -275,6 +283,7 @@ fn handle_rpc_request(
     clear_events: &mut EventWriter<ClearToolEvent>,
     polygon_hide_events: &mut EventWriter<PolygonHideRequestEvent>, // Accept Polygon Hide writer
     polygon_reclassify_events: &mut EventWriter<PolygonReclassifyRequestEvent>, // Accept Polygon Reclassify writer
+    current_mouse_enter_object_id: &mut ResMut<MouseEnterObjectState>,
 ) -> Option<RpcResponse> {
     // Only generate responses for requests with IDs (notifications have no ID).
     let id = request.id.clone()?;
@@ -302,6 +311,19 @@ fn handle_rpc_request(
         }
         "reclassify_points_in_polygon" => {
             handle_reclassify_points_in_polygon(&request.params, polygon_reclassify_events)
+        }
+        "set_hover_object_id" => {
+            info!(
+                "set_hover_object_id request params incomming: {:?}",
+                &request.params
+            );
+
+            handle_mouse_enter_object_id(&request.params, current_mouse_enter_object_id);
+
+            Ok(serde_json::json!({
+                "success": true,
+                "message": "test"
+            }))
         }
         _ => {
             warn!("Unknown RPC method: {}", request.method);
@@ -353,7 +375,7 @@ fn handle_tool_selection(
         clear_events.write(ClearToolEvent {
             source: ToolSelectionSource::Rpc,
         });
-        info!("Tool cleared via RPC");
+
         return Ok(serde_json::json!({
             "success": true,
             "active_tool": "none"
@@ -443,8 +465,6 @@ fn handle_get_available_assets(
 
     // Log the asset names for debugging
     let asset_names: Vec<&String> = atlas.assets.iter().map(|a| &a.name).collect();
-    info!("Found {} assets: {:?}", asset_count, asset_names);
-
     let asset_data: Vec<serde_json::Value> = atlas
         .assets
         .iter()
@@ -470,7 +490,6 @@ fn handle_get_available_assets(
         })
         .collect();
 
-    info!("Returning {} assets to frontend", asset_data.len());
     Ok(serde_json::json!(asset_data))
 }
 
@@ -535,24 +554,20 @@ fn handle_select_asset(
         })
         .unwrap_or(false);
 
-    if !asset_exists {
-        return Err(RpcError::invalid_params(&format!(
-            "Asset not found: {}",
-            select_params.asset_id
-        )));
-    }
+    let new_selected_asset = match asset_exists {
+        true => Some(select_params.asset_id.clone()),
+        false => None,
+    };
 
     // Update the selected asset state
-    place_asset_state.selected_asset_name = Some(select_params.asset_id.clone());
+    place_asset_state.selected_asset_name = new_selected_asset.clone();
 
     // Send asset selection event
     asset_placement_events.write(AssetPlacementEvent {
         action: AssetPlacementAction::SelectAsset,
-        asset_id: Some(select_params.asset_id.clone()),
+        asset_id: new_selected_asset,
         position: None,
     });
-
-    info!("Asset selected: {}", select_params.asset_id);
 
     // Find and return the selected asset data
     if let Some(atlas) = manifest.asset_atlas.as_ref() {
@@ -611,8 +626,6 @@ fn handle_place_asset_at_position(
         asset_id: None,
         position: Some(position),
     });
-
-    info!("Asset placement requested at position: {:?}", position);
 
     Ok(serde_json::json!({
         "success": true,
@@ -713,6 +726,7 @@ fn handle_rpc_notification(
                 let new_mode = match mode_str {
                     "original" => RenderMode::OriginalClassification,
                     "modified" => RenderMode::ModifiedClassification,
+                    "connectivity" => RenderMode::ClassSelection,
                     "RGB" => RenderMode::RgbColour,
                     _ => {
                         warn!("Unknown render mode: {}", mode_str);
@@ -820,4 +834,23 @@ fn handle_reclassify_points_in_polygon(
         points_affected: 0,
         message: "Reclassify operation queued".to_string(),
     }))
+}
+
+/// Handle RPC notifications
+fn handle_mouse_enter_object_id(
+    params: &Value,
+    mouse_enter_object_id: &mut ResMut<MouseEnterObjectState>,
+) {
+    if let Ok(p) = serde_json::from_value::<OnHoverParams>(params.clone()) {
+        mouse_enter_object_id.object_id = Some(p.object_id);
+        info!(
+            "Updated Hover Params: {:?}",
+            mouse_enter_object_id.object_id
+        );
+    } else {
+        // since we only accept u32 a value a -1 for the object mask should always fail here, and we can clear the hover mask to some default value
+        eprintln!("Failed to deserialize OnHoverParams: {:?}", params);
+        mouse_enter_object_id.object_id = Some(254); // HACK:(archailect) this should be a global default value or the phase 1 classification shader should inteligently handle an Optional value.
+    }
+    ()
 }

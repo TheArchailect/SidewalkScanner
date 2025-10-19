@@ -34,11 +34,6 @@ impl Default for RotationSettings {
     }
 }
 
-#[derive(Resource, Default)]
-pub struct SelectionLock {
-    pub active: bool,
-}
-
 #[derive(Resource, Clone, Default)]
 pub struct PlacedAssetInstances {
     pub instances: Vec<PlacedAssetInstance>,

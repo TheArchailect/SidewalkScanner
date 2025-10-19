@@ -1,6 +1,6 @@
-use crate::constants::texture::TEXTURE_SIZE;
 /// Heightmap sampling utilities for terrain intersection
 use crate::engine::assets::bounds::PointCloudBounds;
+use constants::texture::TEXTURE_SIZE;
 
 use bevy::prelude::*;
 
@@ -16,7 +16,7 @@ pub fn sample_heightmap_bilinear(
         .as_ref()
         .expect("Heightmap image data not available");
 
-    // Convert normalized coords to continuous pixel space
+    // Convert normalised coords to continuous pixel space
     let pixel_x_f = norm_x * (TEXTURE_SIZE - 1) as f32;
     let pixel_z_f = norm_z * (TEXTURE_SIZE - 1) as f32;
 

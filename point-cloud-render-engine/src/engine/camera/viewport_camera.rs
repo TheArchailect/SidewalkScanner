@@ -216,7 +216,7 @@ pub fn camera_controller(
     cap: Res<ScrollCapture>,
 ) {
     if let Ok((mut camera_transform, global_transform, camera)) = camera_query.single_mut() {
-        // Update cursor position if we're not rotating some asset
+        // Update cursor zoom if we're not rotating some asset
         if !cap.lock_zoom_this_frame {
             for cursor in cursor_moved.read() {
                 viewport_camera.last_mouse_pos = cursor.position;
@@ -269,11 +269,12 @@ pub fn camera_controller(
         };
 
         // Control yaw
-        if keyboard.pressed(KeyCode::PageDown) {
+        if keyboard.pressed(KeyCode::PageDown) || keyboard.pressed(KeyCode::KeyF) {
             let rotation_speed = 1.0 * time.delta_secs();
             viewport_camera.pitch = (viewport_camera.pitch + rotation_speed).clamp(-1.4, -0.1);
         }
-        if keyboard.pressed(KeyCode::PageUp) {
+
+        if keyboard.pressed(KeyCode::PageUp) || keyboard.pressed(KeyCode::KeyR) {
             let rotation_speed = 1.0 * time.delta_secs();
             viewport_camera.pitch = (viewport_camera.pitch - rotation_speed).clamp(-1.4, -0.1);
         }

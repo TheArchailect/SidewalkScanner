@@ -4,6 +4,7 @@ use bevy::window::PrimaryWindow;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
+use crate::tools::tool_manager::{ToolManager, ToolType};
 
 #[derive(Component)]
 pub struct MouseIntersectionGizmo;
@@ -26,22 +27,37 @@ pub fn create_direction_gizmo(
             alpha_mode: AlphaMode::Blend,
             ..default()
         })),
+        Visibility::Visible,
         DirectionGizmo,
     ));
 }
 
 pub fn update_direction_gizmo(
-    mut gizmo_query: Query<&mut Transform, (With<DirectionGizmo>, Without<Camera3d>)>,
+    mut gizmo_query: Query<(&mut Transform, &mut Visibility), (With<DirectionGizmo>, Without<Camera3d>)>,
     camera_query: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
     mut maps_camera: ResMut<ViewportCamera>,
     windows: Query<&Window, With<PrimaryWindow>>,
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
+    tool_manager: Option<Res<ToolManager>>,
 ) {
-    if let (Ok(mut gizmo_transform), Ok((camera_global_transform, camera))) =
+    if let (Ok((mut gizmo_transform, mut gizmo_visibility)), Ok((camera_global_transform, camera))) =
         (gizmo_query.single_mut(), camera_query.single())
     {
+        let hide_gizmos = tool_manager.as_ref().map_or(false, |tm| {
+            tm.is_tool_active(ToolType::Measure)
+                || tm.is_tool_active(ToolType::Polygon)
+                || tm.is_tool_active(ToolType::AssetPlacement)
+        });
+
+        if hide_gizmos {
+            *gizmo_visibility = Visibility::Hidden;
+            return;
+        } else {
+            *gizmo_visibility = Visibility::Visible;
+        }
+
         let window = windows.single();
 
         let Some(bounds) = assets.get_bounds(&manifests) else {
@@ -80,6 +96,7 @@ pub fn update_mouse_intersection_gizmo(
     assets: Res<PointCloudAssets>,
     images: Res<Assets<Image>>,
     manifests: Res<Assets<SceneManifest>>,
+    tool_manager: Option<Res<ToolManager>>,
 ) {
     let Some(bounds) = assets.get_bounds(&manifests) else {
         return;
@@ -90,6 +107,17 @@ pub fn update_mouse_intersection_gizmo(
         Ok((camera_global_transform, camera)),
     ) = (gizmo_query.single_mut(), camera_query.single())
     {
+        let hide_gizmos = tool_manager.as_ref().map_or(false, |tm| {
+            tm.is_tool_active(ToolType::Measure)
+                || tm.is_tool_active(ToolType::Polygon)
+                || tm.is_tool_active(ToolType::AssetPlacement)
+        });
+
+        if hide_gizmos {
+            *gizmo_visibility = Visibility::Hidden;
+            return;
+        }
+
         let window = windows.single();
 
         if let Some(cursor_pos) = window.unwrap().cursor_position() {

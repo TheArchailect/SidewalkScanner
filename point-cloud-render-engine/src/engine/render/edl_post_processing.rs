@@ -8,8 +8,7 @@ use bevy::{
     render::{
         RenderApp,
         extract_component::{
-            ComponentUniforms, DynamicUniformIndex, ExtractComponent, ExtractComponentPlugin,
-            UniformComponentPlugin,
+            ComponentUniforms, DynamicUniformIndex, ExtractComponentPlugin, UniformComponentPlugin,
         },
         render_graph::{
             NodeRunError, RenderGraphApp, RenderGraphContext, RenderLabel, ViewNode, ViewNodeRunner,
@@ -22,6 +21,7 @@ use bevy::{
         view::ViewTarget,
     },
 };
+use constants::render_settings::EDLSettings;
 
 const EDL_SHADER_PATH: &str = "shaders/edl_postprocess.wgsl";
 
@@ -64,14 +64,6 @@ impl Plugin for EDLPostProcessPlugin {
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 struct EDLPostProcessLabel;
-
-#[derive(Component, Default, Clone, Copy, ExtractComponent, ShaderType)]
-pub struct EDLSettings {
-    pub radius: f32,
-    pub strength: f32,
-    pub ambient_boost: f32,
-    pub contrast: f32,
-}
 
 #[derive(Default)]
 struct EDLPostProcessNode;

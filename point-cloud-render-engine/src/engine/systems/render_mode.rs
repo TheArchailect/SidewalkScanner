@@ -14,6 +14,22 @@ impl Default for RenderModeState {
     }
 }
 
+#[derive(Resource, Clone, ExtractResource)]
+pub struct MouseEnterObjectState {
+    pub object_id: Option<u32>,
+}
+
+impl Default for MouseEnterObjectState {
+    fn default() -> Self {
+        Self {
+            // this is a default hard coded initial mask id.
+            // note: ideally we would move to a true Optional value.
+            // however the shader requires something as it is, so we choose a likely out of range class for the time being
+            object_id: Some(254),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RenderMode {
     OriginalClassification = 0,

@@ -1,3 +1,6 @@
 [workspace]
-members = ["point-cloud-render-engine", "point-cloud-pre-processing"]
+members = ["point-cloud-render-engine", "point-cloud-pre-processing", "constants"]
 resolver = "2"
+
+[workspace.dependencies]
+constants = { path = "constants" }

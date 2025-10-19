@@ -1,4 +1,3 @@
-use crate::constants::procedural_shader::MAXIMUM_POLYGONS;
 use crate::engine::assets::point_cloud_assets::PointCloudAssets;
 use crate::engine::assets::scene_manifest::SceneManifest;
 use crate::engine::camera::viewport_camera::ViewportCamera;
@@ -12,6 +11,10 @@ use bevy::render::extract_resource::ExtractResource;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::view::RenderLayers;
 use bevy::window::PrimaryWindow;
+use constants::procedural_shader::MAXIMUM_POLYGONS;
+use constants::render_settings::{
+    DRAW_LINE_WIDTH, DRAW_VERTEX_SIZE, MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE,
+};
 use serde::{Deserialize, Serialize};
 
 /// Polygon operations events
@@ -425,66 +428,71 @@ pub fn polygon_tool_system(
         return;
     }
 
-    // Map number keys to classification IDs for user convenience.
-    for (key, class_id) in [
-        (KeyCode::Digit1, 1),
-        (KeyCode::Digit2, 2),
-        (KeyCode::Digit3, 3),
-        (KeyCode::Digit4, 4),
-        (KeyCode::Digit5, 5),
-        (KeyCode::Digit6, 6),
-        (KeyCode::Digit7, 7),
-        (KeyCode::Digit8, 8),
-        (KeyCode::Digit9, 9),
-    ] {
-        if keyboard.just_pressed(key) {
-            polygon_tool.current_class = class_id;
-            println!("Classification class set to: {}", class_id);
+    let Some(bounds) = assets.get_bounds(&manifests) else {
+        return;
+    };
 
-            // Notify frontend of class change
+    // Only allow keyboard polygon tool controlls if we're in a native context
+    // HACK(archailect): we're using #[cfg(not(target_arch = "wasm32"))] too often in the codebase to decide behaviour at some point this needs to be resolved in a more scalable way
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // Map number keys to classification IDs for user convenience.
+        for (key, class_id) in [
+            (KeyCode::Digit1, 1),
+            (KeyCode::Digit2, 2),
+            (KeyCode::Digit3, 3),
+            (KeyCode::Digit4, 4),
+            (KeyCode::Digit5, 5),
+            (KeyCode::Digit6, 6),
+            (KeyCode::Digit7, 7),
+            (KeyCode::Digit8, 8),
+            (KeyCode::Digit9, 9),
+        ] {
+            if keyboard.just_pressed(key) {
+                polygon_tool.current_class = class_id;
+                println!("Classification class set to: {}", class_id);
+
+                // Notify frontend of class change
+                rpc_interface.send_notification(
+                    "polygon_class_changed",
+                    serde_json::json!({
+                        "current_class": class_id
+                    }),
+                );
+            }
+        }
+
+        // Clear current polygon construction with 'O' key.
+        if keyboard.just_pressed(KeyCode::KeyO) {
+            polygon_tool.current_polygon.clear();
+            polygon_tool.preview_point = None;
+            polygon_tool.is_completed = false;
+            println!("Current polygon cleared.");
+
             rpc_interface.send_notification(
-                "polygon_class_changed",
+                "polygon_cleared",
                 serde_json::json!({
-                    "current_class": class_id
+                    "action": "clear_current"
+                }),
+            );
+        }
+
+        // Clear all completed polygons with 'I' key.
+        if keyboard.just_pressed(KeyCode::KeyI) {
+            polygon_tool.current_polygon.clear();
+            polygon_tool.preview_point = None;
+            polygon_tool.is_completed = false;
+            classification_data.polygons.clear();
+            println!("All polygons cleared.");
+
+            rpc_interface.send_notification(
+                "polygon_cleared",
+                serde_json::json!({
+                    "action": "clear_all"
                 }),
             );
         }
     }
-
-    // Clear current polygon construction with 'O' key.
-    if keyboard.just_pressed(KeyCode::KeyO) {
-        polygon_tool.current_polygon.clear();
-        polygon_tool.preview_point = None;
-        polygon_tool.is_completed = false;
-        println!("Current polygon cleared.");
-
-        rpc_interface.send_notification(
-            "polygon_cleared",
-            serde_json::json!({
-                "action": "clear_current"
-            }),
-        );
-    }
-
-    // Clear all completed polygons with 'I' key.
-    if keyboard.just_pressed(KeyCode::KeyI) {
-        polygon_tool.current_polygon.clear();
-        polygon_tool.preview_point = None;
-        polygon_tool.is_completed = false;
-        classification_data.polygons.clear();
-        println!("All polygons cleared.");
-
-        rpc_interface.send_notification(
-            "polygon_cleared",
-            serde_json::json!({
-                "action": "clear_all"
-            }),
-        );
-    }
-
-    let Some(bounds) = assets.get_bounds(&manifests) else {
-        return;
-    };
 
     // Update preview point for real-time cursor tracking.
     if !polygon_tool.is_completed {
@@ -527,84 +535,87 @@ pub fn polygon_tool_system(
             }
         }
 
-        // Complete polygon construction with Shift key OR via RPC completion flag
-        let should_complete = (keyboard.just_pressed(KeyCode::ShiftLeft)
-            || polygon_tool.is_completed)
-            && polygon_tool.current_polygon.len() >= 3;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            // Complete polygon construction with Shift key OR via RPC completion flag
+            let should_complete = (keyboard.just_pressed(KeyCode::ShiftLeft)
+                || polygon_tool.is_completed)
+                && polygon_tool.current_polygon.len() >= 3;
 
-        if should_complete {
-            let resampled_points = resample_polygon_uniform(
-                &polygon_tool.current_polygon,
-                polygon_tool.target_point_spacing,
-            );
-
-            // Generate unique polygon identifier for tracking.
-            let polygon_id = polygon_counter.next_id;
-            polygon_counter.next_id += 1;
-
-            // Create classification data structure for compute shader processing.
-            let class_polygon = ClassificationPolygon {
-                id: polygon_id,
-                points: resampled_points.clone(),
-                new_class: polygon_tool.current_class,
-                mode: PolygonMode::Reclassify,
-                masks: Vec::new(), // empty masks if we're running natively
-            };
-
-            // Add to classification data with GPU memory constraint validation.
-            if classification_data.polygons.len() < classification_data.max_polygons {
-                classification_data.polygons.push(class_polygon);
-                println!(
-                    "Added classification polygon {} with class {}",
-                    polygon_id, polygon_tool.current_class
+            if should_complete {
+                let resampled_points = resample_polygon_uniform(
+                    &polygon_tool.current_polygon,
+                    polygon_tool.target_point_spacing,
                 );
 
-                // Create visual representation using standard material pipeline.
-                create_completed_polygon(
-                    &mut commands,
-                    &resampled_points,
-                    polygon_id,
-                    viewport_camera.ground_height,
-                    &mut meshes,
-                    &mut materials,
-                );
+                // Generate unique polygon identifier for tracking.
+                let polygon_id = polygon_counter.next_id;
+                polygon_counter.next_id += 1;
 
-                println!(
-                    "Polygon {} completed with {} points",
-                    polygon_id,
-                    polygon_tool.current_polygon.len()
-                );
+                // Create classification data structure for compute shader processing.
+                let class_polygon = ClassificationPolygon {
+                    id: polygon_id,
+                    points: resampled_points.clone(),
+                    new_class: polygon_tool.current_class,
+                    mode: PolygonMode::Reclassify,
+                    masks: Vec::new(), // empty masks if we're running natively
+                };
 
-                // Notify frontend of successful completion
-                rpc_interface.send_notification(
-                    "polygon_completed",
-                    serde_json::json!({
-                        "polygon_id": polygon_id,
-                        "point_count": polygon_tool.current_polygon.len(),
-                        "class": polygon_tool.current_class,
-                        "total_polygons": classification_data.polygons.len()
-                    }),
-                );
-            } else {
-                println!(
-                    "Warning: Maximum polygon limit reached ({})",
-                    classification_data.max_polygons
-                );
+                // Add to classification data with GPU memory constraint validation.
+                if classification_data.polygons.len() < classification_data.max_polygons {
+                    classification_data.polygons.push(class_polygon);
+                    println!(
+                        "Added classification polygon {} with class {}",
+                        polygon_id, polygon_tool.current_class
+                    );
 
-                // Notify frontend of error
-                rpc_interface.send_notification(
-                    "polygon_error",
-                    serde_json::json!({
-                        "error": "Maximum polygon limit reached",
-                        "max_polygons": classification_data.max_polygons
-                    }),
-                );
+                    // Create visual representation using standard material pipeline.
+                    create_completed_polygon(
+                        &mut commands,
+                        &resampled_points,
+                        polygon_id,
+                        viewport_camera.ground_height,
+                        &mut meshes,
+                        &mut materials,
+                    );
+
+                    println!(
+                        "Polygon {} completed with {} points",
+                        polygon_id,
+                        polygon_tool.current_polygon.len()
+                    );
+
+                    // Notify frontend of successful completion
+                    rpc_interface.send_notification(
+                        "polygon_completed",
+                        serde_json::json!({
+                            "polygon_id": polygon_id,
+                            "point_count": polygon_tool.current_polygon.len(),
+                            "class": polygon_tool.current_class,
+                            "total_polygons": classification_data.polygons.len()
+                        }),
+                    );
+                } else {
+                    println!(
+                        "Warning: Maximum polygon limit reached ({})",
+                        classification_data.max_polygons
+                    );
+
+                    // Notify frontend of error
+                    rpc_interface.send_notification(
+                        "polygon_error",
+                        serde_json::json!({
+                            "error": "Maximum polygon limit reached",
+                            "max_polygons": classification_data.max_polygons
+                        }),
+                    );
+                }
+
+                // Reset state for next polygon creation.
+                polygon_tool.current_polygon.clear();
+                polygon_tool.preview_point = None;
+                polygon_tool.is_completed = false;
             }
-
-            // Reset state for next polygon creation.
-            polygon_tool.current_polygon.clear();
-            polygon_tool.preview_point = None;
-            polygon_tool.is_completed = false;
         }
     }
 }
@@ -661,42 +672,16 @@ fn create_completed_polygon(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
-    if points.len() < 3 {
-        return;
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if points.len() < 3 {
+            return;
+        }
 
-    // Create vertex markers with emissive material for visibility.
-    for (i, point) in points.iter().enumerate() {
-        commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.05))),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::hsv(0., 1., 1.),
-                emissive: LinearRgba::new(1., 1., 1., 1.),
-                depth_bias: 0.0,
-                unlit: true,
-                ..default()
-            })),
-            Transform::from_translation(*point),
-            CompletedPolygon { id: polygon_id },
-            RenderLayers::layer(1),
-        ));
-    }
-
-    // Create edge visualization with oriented cuboid meshes.
-    for i in 0..points.len() {
-        let start = points[i];
-        let end = points[(i + 1) % points.len()]; // Close polygon loop.
-
-        let direction = end - start;
-        let distance = direction.length();
-        let midpoint = (start + end) * 0.5;
-
-        if distance > 0.1 {
-            // Calculate edge orientation for proper cuboid alignment.
-            let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
-
+        // Create vertex markers with emissive material for visibility.
+        for (i, point) in points.iter().enumerate() {
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
+                Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -704,28 +689,57 @@ fn create_completed_polygon(
                     unlit: true,
                     ..default()
                 })),
-                Transform::from_translation(midpoint).with_rotation(rotation),
+                Transform::from_translation(*point),
                 CompletedPolygon { id: polygon_id },
                 RenderLayers::layer(1),
             ));
         }
+
+        // Create edge visualization with oriented cuboid meshes.
+        for i in 0..points.len() {
+            let start = points[i];
+            let end = points[(i + 1) % points.len()]; // Close polygon loop.
+
+            let direction = end - start;
+            let distance = direction.length();
+            let midpoint = (start + end) * 0.5;
+
+            if distance > 0.1 {
+                // Calculate edge orientation for proper cuboid alignment.
+                let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
+
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::hsv(0., 1., 1.),
+                        emissive: LinearRgba::new(1., 1., 1., 1.),
+                        depth_bias: 0.0,
+                        unlit: true,
+                        ..default()
+                    })),
+                    Transform::from_translation(midpoint).with_rotation(rotation),
+                    CompletedPolygon { id: polygon_id },
+                    RenderLayers::layer(1),
+                ));
+            }
+        }
+
+        // Create polygon fill mesh for visual feedback (optional).
+        let _fill_mesh = create_polygon_mesh(points, ground_height);
+
+        commands.spawn((
+            Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::hsv(0., 1., 1.),
+                emissive: LinearRgba::new(1., 1., 1., 1.),
+                depth_bias: 0.0,
+                unlit: true,
+                ..default()
+            })),
+            CompletedPolygon { id: polygon_id },
+            RenderLayers::layer(1),
+        ));
     }
-
-    // Create polygon fill mesh for visual feedback (optional).
-    let _fill_mesh = create_polygon_mesh(points, ground_height);
-
-    commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(0.05))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::hsv(0., 1., 1.),
-            emissive: LinearRgba::new(1., 1., 1., 1.),
-            depth_bias: 0.0,
-            unlit: true,
-            ..default()
-        })),
-        CompletedPolygon { id: polygon_id },
-        RenderLayers::layer(1),
-    ));
 }
 
 /// Manages real-time preview visualization during polygon construction.
@@ -749,7 +763,7 @@ pub fn update_polygon_preview(
     // Create preview cursor visualization at mouse intersection point.
     if let Some(preview_point) = polygon_tool.preview_point {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.05))),
+            Mesh3d(meshes.add(Sphere::new(MOUSE_RAYCAST_INTERSECTION_SPHERE_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 1., 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -772,7 +786,7 @@ pub fn update_polygon_preview(
                 let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
 
                 commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(distance, 0.025, 0.025))),
+                    Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                     MeshMaterial3d(materials.add(StandardMaterial {
                         base_color: Color::hsv(0., 1., 1.),
                         emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -802,12 +816,12 @@ pub fn update_polygon_render(
     existing_fill: Query<Entity, (With<PolygonFill>, Without<GroundGrid>)>,
     completed_polygons: Query<Entity, With<CompletedPolygon>>,
 ) {
-    // Handle bulk polygon deletion with 'X' key input.
-    if keyboard.just_pressed(KeyCode::KeyX) {
-        for entity in completed_polygons.iter() {
-            commands.entity(entity).despawn();
-        }
-    }
+    // // Handle bulk polygon deletion with 'X' key input.
+    // if keyboard.just_pressed(KeyCode::KeyX) {
+    //     for entity in completed_polygons.iter() {
+    //         commands.entity(entity).despawn();
+    //     }
+    // }
 
     // Clean up current polygon visualization when tool inactive.
     if !polygon_tool.is_active
@@ -836,7 +850,7 @@ pub fn update_polygon_render(
     // Render vertex markers for current polygon construction.
     for (_i, point) in polygon_tool.current_polygon.iter().enumerate() {
         commands.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.1))),
+            Mesh3d(meshes.add(Sphere::new(DRAW_VERTEX_SIZE))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::hsv(0., 0.5, 1.),
                 emissive: LinearRgba::new(1., 1., 1., 1.),
@@ -863,7 +877,7 @@ pub fn update_polygon_render(
         if distance > 0.1 {
             let rotation = Quat::from_rotation_arc(Vec3::X, direction.normalize());
             commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(distance, 0.045, 0.045))),
+                Mesh3d(meshes.add(Cuboid::new(distance, DRAW_LINE_WIDTH, DRAW_LINE_WIDTH))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::hsv(0., 1., 1.),
                     emissive: LinearRgba::new(1., 1., 1., 1.),

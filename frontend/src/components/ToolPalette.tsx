@@ -48,16 +48,17 @@ const ToolPalette: React.FC<ToolPaletteProps> = ({
     color: isActive
       ? theme.colors.primary.orange
       : isConnected
-        ? theme.colors.primary.blue
-        : theme.colors.gray[700],
+      ? theme.colors.primary.blue
+      : theme.colors.gray[700],
     cursor: isConnected ? "pointer" : "not-allowed",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     transition: theme.transitions.fast,
-    Position: "relative",
+    position: "relative",
     opacity: isConnected ? 1 : 0.5,
     fontFamily: theme.fonts.primary,
+    outline: "none",
   });
 
   const handleMouseEnter = (
@@ -90,12 +91,16 @@ const ToolPalette: React.FC<ToolPaletteProps> = ({
         return (
           <button
             key={tool.id}
+            type="button"
+            tabIndex={-1} 
+            onMouseDown={(e) => e.preventDefault()}
+            onFocus={(e) => e.currentTarget.blur()} 
             onClick={() => onToolSelect(tool.id)}
             disabled={!isConnected}
             style={{
               ...getToolButtonStyles(isActive, isConnected),
               marginBottom: index < tools.length - 1 ? theme.spacing[1] : "0",
-            }}
+            } as React.CSSProperties}
             onMouseEnter={(e) => handleMouseEnter(e, isActive)}
             onMouseLeave={(e) => handleMouseLeave(e, isActive)}
           >
@@ -106,8 +111,8 @@ const ToolPalette: React.FC<ToolPaletteProps> = ({
                 isActive
                   ? theme.colors.primary.orange
                   : isConnected
-                    ? theme.colors.primary.blue
-                    : theme.colors.gray[700]
+                  ? theme.colors.primary.blue
+                  : theme.colors.gray[700]
               }
             />
             {isActive && (
