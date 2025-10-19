@@ -100,6 +100,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     var final_class = original_class;
     var found_hide_op: bool = false;
+    var found_reclassify_op: bool = false;
 
     for (var i: u32 = compute_data.polygon_count; i > 0u; i = i - 1u) {
         let real_index: u32 = i - 1u;
@@ -126,13 +127,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
             // since this is technically a procedural modifer stack - we should not bother performing additional hide or reclasiffy ops to a point that has been previously hidden
             // otherwise intersecting polygons will undo hide ops when we reclassify, regardless of mask ids
-            if should_test_polygon && !found_hide_op {
+            if should_test_polygon && !found_hide_op && !found_reclassify_op {
                 // Here's where we check if the mask ids for the current polygon overlap AND it's inside the polygon
                 // effectivly this is our masking logic per polygon in the Reclassify polygon mode
                 if point_in_polygon(world_pos.xz, start_idx, point_count) {
                     // update the final class for points inside the polygon, with it's masks considered for reclassification
                     if contains_value(real_index, original_class, point_connectivity_class_id, 1u) {
                         final_class = new_class;
+                        found_reclassify_op = true;
                     }
 
                     // set the final class for points inside the polygon, with masks considered to a magic number that our fragment shader will ignore and discard 'hiding' non-destructivly

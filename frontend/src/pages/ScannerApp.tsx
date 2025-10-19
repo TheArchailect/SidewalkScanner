@@ -93,7 +93,7 @@ const ScannerApp: React.FC = () => {
     setShowMeasurePanel(newTool === "measure");
 
     // Render mode adjustment only when enabling polygon
-    if (toolId === "polygon" && !isSameTool) {
+    if ((toolId === "polygon" || toolId === "assets") && !isSameTool) {
       setRenderMode("modified");
       await handleRenderModeChange("modified");
     }

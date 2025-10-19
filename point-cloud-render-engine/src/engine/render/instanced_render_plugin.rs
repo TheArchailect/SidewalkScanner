@@ -1,5 +1,8 @@
-use crate::engine::assets::point_cloud_assets::PointCloudAssets;
+use crate::RenderModeState;
 use crate::engine::render::pipeline::point_cloud_render_pipeline::PointCloudRenderState;
+use crate::engine::{
+    assets::point_cloud_assets::PointCloudAssets, systems::render_mode::RenderMode,
+};
 use bevy::{
     core_pipeline::core_3d::Transparent3d,
     ecs::system::{SystemParamItem, lifetimeless::*},
@@ -238,7 +241,13 @@ fn queue_instanced_assets(
     material_meshes: Query<(Entity, &MainEntity), With<InstancedAssetData>>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     views: Query<(&ExtractedView, &Msaa)>,
+    render_mode: Res<RenderModeState>,
 ) {
+    // we should only render instanced assets in the modified render mode
+    if render_mode.current_mode != RenderMode::ModifiedClassification {
+        return;
+    }
+
     let draw_instanced_assets = transparent_3d_draw_functions
         .read()
         .id::<DrawInstancedAssets>();
