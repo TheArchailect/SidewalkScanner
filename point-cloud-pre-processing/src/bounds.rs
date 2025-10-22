@@ -8,6 +8,8 @@ use std::path::Path;
 /// Point cloud coordinate bounds tracking and normalisation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PointCloudBounds {
+    /// Origin offset from LAZ file (to be subtracted from all points to maintain precision)
+    pub origin: (f64, f64, f64),
     pub min_x: f64,
     pub max_x: f64,
     pub min_y: f64,
@@ -18,8 +20,9 @@ pub struct PointCloudBounds {
 
 impl PointCloudBounds {
     /// Create new bounds initialised to infinity values
-    pub fn new() -> Self {
+    pub fn new(origin: (f64, f64, f64)) -> Self {
         Self {
+            origin,
             min_x: f64::INFINITY,
             max_x: f64::NEG_INFINITY,
             min_y: f64::INFINITY,
@@ -31,27 +34,34 @@ impl PointCloudBounds {
 
     /// Update bounds with a new point
     pub fn update(&mut self, x: f64, y: f64, z: f64) {
-        self.min_x = self.min_x.min(x);
-        self.max_x = self.max_x.max(x);
-        self.min_y = self.min_y.min(y);
-        self.max_y = self.max_y.max(y);
-        self.min_z = self.min_z.min(z);
-        self.max_z = self.max_z.max(z);
+        let rel_x = x - self.origin.0;
+        let rel_y = y - self.origin.1;
+        let rel_z = z - self.origin.2;
+
+        self.min_x = self.min_x.min(rel_x);
+        self.max_x = self.max_x.max(rel_x);
+        self.min_y = self.min_y.min(rel_y);
+        self.max_y = self.max_y.max(rel_y);
+        self.min_z = self.min_z.min(rel_z);
+        self.max_z = self.max_z.max(rel_z);
     }
 
     /// Normalise X coordinate to 0-1 range
     pub fn normalize_x(&self, x: f64) -> f32 {
-        ((x - self.min_x) / (self.max_x - self.min_x)) as f32
+        let rel_x = x - self.origin.0;
+        ((rel_x - self.min_x) / (self.max_x - self.min_x)) as f32
     }
 
     /// Normalise Y coordinate to 0-1 range
     pub fn normalize_y(&self, y: f64) -> f32 {
-        ((y - self.min_y) / (self.max_y - self.min_y)) as f32
+        let rel_y = y - self.origin.1;
+        ((rel_y - self.min_y) / (self.max_y - self.min_y)) as f32
     }
 
     /// Normalise Z coordinate to 0-1 range
     pub fn normalize_z(&self, z: f64) -> f32 {
-        ((z - self.min_z) / (self.max_z - self.min_z)) as f32
+        let rel_z = z - self.origin.2;
+        ((rel_z - self.min_z) / (self.max_z - self.min_z)) as f32
     }
 }
 
@@ -60,6 +70,13 @@ impl PointCloudBounds {
 pub fn calculate_bounds(file_path: &Path) -> Result<PointCloudBounds, Box<dyn std::error::Error>> {
     let mut reader = create_reader(file_path)?;
     let total_points = reader.header().number_of_points() as usize;
+
+    // Extract LAZ offsets - these will be our origin
+    let x_offset = reader.header().transforms().x.offset;
+    let y_offset = reader.header().transforms().y.offset;
+    let z_offset = reader.header().transforms().z.offset;
+
+    let origin = transform_coordinates(x_offset, y_offset, z_offset);
 
     // Load points with progress tracking.
     let pb = ProgressBar::new(total_points as u64);
@@ -94,7 +111,7 @@ pub fn calculate_bounds(file_path: &Path) -> Result<PointCloudBounds, Box<dyn st
     let bounds = all_points
         .par_chunks(25_000)
         .map(|chunk| {
-            let mut local_bounds = PointCloudBounds::new();
+            let mut local_bounds = PointCloudBounds::new(origin);
             for point in chunk {
                 let (x, y, z) = transform_coordinates(point.x, point.y, point.z);
                 local_bounds.update(x, y, z);
@@ -112,7 +129,7 @@ pub fn calculate_bounds(file_path: &Path) -> Result<PointCloudBounds, Box<dyn st
             a.max_z = a.max_z.max(b.max_z);
             a
         })
-        .unwrap_or_else(PointCloudBounds::new);
+        .unwrap_or_else(|| PointCloudBounds::new(origin));
 
     pb.finish_with_message("Bounds calculated");
     Ok(bounds)

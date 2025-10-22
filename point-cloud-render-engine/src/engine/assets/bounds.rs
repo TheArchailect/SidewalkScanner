@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Used by both terrain and individual assets for positioning calculations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundsData {
+    pub origin: (f64, f64, f64),
     pub min_x: f64,
     pub max_x: f64,
     pub min_y: f64,
