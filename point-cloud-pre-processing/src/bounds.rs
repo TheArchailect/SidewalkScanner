@@ -67,14 +67,24 @@ impl PointCloudBounds {
 
 /// Calculate coordinate bounds from all points with parallel processing.
 /// Uses chunked parallel computation for efficient large dataset handling.
-pub fn calculate_bounds(file_path: &Path) -> Result<PointCloudBounds, Box<dyn std::error::Error>> {
+pub fn calculate_bounds(
+    file_path: &Path,
+    use_header_transform: bool,
+) -> Result<PointCloudBounds, Box<dyn std::error::Error>> {
     let mut reader = create_reader(file_path)?;
     let total_points = reader.header().number_of_points() as usize;
 
-    // Extract LAZ offsets - these will be our origin
-    let x_offset = reader.header().transforms().x.offset;
-    let y_offset = reader.header().transforms().y.offset;
-    let z_offset = reader.header().transforms().z.offset;
+    // Extract LAZ offsets - these will be our origin (placable assets are assumed to have NO header transform)
+    let (x_offset, y_offset, z_offset) = if use_header_transform {
+        let transforms = reader.header().transforms();
+        (
+            transforms.x.offset,
+            transforms.y.offset,
+            transforms.z.offset,
+        )
+    } else {
+        (0.0, 0.0, 0.0)
+    };
 
     let origin = transform_coordinates(x_offset, y_offset, z_offset);
 

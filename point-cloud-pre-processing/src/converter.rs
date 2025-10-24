@@ -122,7 +122,7 @@ impl PointCloudConverter {
         self.log_file_info(&self.main_cloud_path)?;
 
         let has_colour = self.detect_colour_data(&self.main_cloud_path)?;
-        let bounds = calculate_bounds(&self.main_cloud_path)?;
+        let bounds = calculate_bounds(&self.main_cloud_path, true)?;
         self.print_bounds(&bounds);
 
         // Generate textures and save them to disk.

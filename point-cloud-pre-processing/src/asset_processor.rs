@@ -141,7 +141,7 @@ impl AssetProcessor {
 
         // --- First pass: collect raw coordinates & compute bounds ---
         let mut raw_points = Vec::new();
-        let asset_bound = calculate_bounds(&candidate.path).unwrap();
+        let asset_bound = calculate_bounds(&candidate.path, false).unwrap();
 
         for point_result in reader.points() {
             let point = point_result?;
